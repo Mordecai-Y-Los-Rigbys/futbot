@@ -160,7 +160,7 @@ Existen independientemente de los jugadores. Tienen un nombre (único por usuari
 
 **Validación del código:**
 - El código tiene que ser validado.
-- Está prohibido tener boquetes de seguridad.
+- Está prohibido inyectar código que pueda afectar la integridad del sistema.
 
 **Deberíamos incluir:**
 - Una guía explicando cómo deberían programar el comportamiento y qué cosas son inválidas.
@@ -169,8 +169,10 @@ Existen independientemente de los jugadores. Tienen un nombre (único por usuari
 
 Para programar un comportamiento se puede usar la posición de la pelota, de los jugadores y de cualquier punto de la cancha.
 
-**Lo que NO se puede hacer:** programar un comportamiento a partir de otro.
+**Lo que NO se puede hacer:** programar un comportamiento a partir de otro. Por ejemplo
+ ```python
+  if(Jugador 2 tiene la pelota && Jugador 2 menos de mitad de cancha):
+    AvanzarHacia(Area de penales)
+    PedirPase()
+ ```
 
----
-
-*Imagen ilustrativa de cómo se vería un partido antes de arrancar (sin los jugadores localizados).*
