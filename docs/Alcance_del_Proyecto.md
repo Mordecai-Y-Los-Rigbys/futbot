@@ -60,3 +60,11 @@ Los partidos serán públicos o privados y se efectuarán entre 2 usuarios quien
 - No va a haber sistema de compra de jugadores.
 - No va a haber cosméticos para los jugadores ni estadios/canchas.
 - No va haber modo 3D ni primera persona
+
+
+## Restricciones de diseño
+
+- Servidor: El desarrollo de la API y la lógica del servidor se realizará obligatoriamente utilizando el framework FastAPI.
+- Persistencia de Datos: El modelado relacional y la interacción con la base de datos se implementará de forma estricta a través del ORM SQLAlchemy.
+- Frontend: La interfaz de usuario será una aplicación web construida exclusivamente sobre React.
+- Comunicación Cliente-Servidor: No será posible la utilización técnicas de polling para la sincronización de datos.
