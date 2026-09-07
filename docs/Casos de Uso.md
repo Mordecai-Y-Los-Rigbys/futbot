@@ -357,3 +357,267 @@
     - El sistema le muestra partidos que puede ver, pero sin opción de jugar.
 
 ---
+
+## Caso de Uso 21: Ver partido de una Liga que no necesita contraseña
+
+- Actor principal: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que:
+    - está iniciada,
+    - y es pública, o el usuario es participante, o el usuario es creador.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga válida.
+  2. El sistema muestra el menú de opciones.
+  3. El usuario elige “Partidos de Liga en Vivo”.
+  4. El sistema busca partidos en vivo y los muestra.
+  5. El usuario selecciona “Ver Partido”.
+  6. El sistema lo redirige como espectador.
+- Escenarios excepcionales:
+  - 4 b) No hay partidos en vivo.
+    - El sistema muestra lista vacía y notifica que no hay partidos en vivo.
+
+---
+
+## Caso de Uso 22: Ver partido de una Liga que necesita contraseña
+
+- Actor principal: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que:
+    - es privada,
+    - está iniciada,
+    - y el usuario no es creador ni participante.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga válida.
+  2. El sistema muestra “Partidos de Liga en Vivo”.
+  3. El usuario lo selecciona.
+  4. El sistema solicita la contraseña.
+  5. El usuario la ingresa.
+  6. El sistema valida la contraseña, busca partidos en vivo y los muestra.
+  7. El usuario elige un partido.
+  8. El sistema lo redirige en calidad de jugador.
+- Escenarios excepcionales:
+  - 6 a) La contraseña no coincide.
+    - El sistema no muestra partidos y notifica que la contraseña no corresponde.
+  - 6 b) No hay partidos en vivo.
+    - El sistema muestra lista vacía y notifica.
+
+---
+
+## Caso de Uso 23: Ver fixture de una Liga que no necesita contraseña
+
+- Actor principal: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que está iniciada,
+  - y es pública, o el usuario es participante, o el usuario es creador.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga.
+  2. El sistema muestra el menú de opciones.
+  3. El usuario elige “Ver Fixture”.
+  4. El sistema despliega el fixture.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 24: Ver fixture de una Liga que necesita contraseña
+
+- Actor principal: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que:
+    - es privada,
+    - está iniciada,
+    - el usuario no es creador,
+    - el usuario no es participante.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga.
+  2. El sistema muestra el menú de opciones.
+  3. El usuario elige “Ver Fixture”.
+  4. El sistema solicita la contraseña.
+  5. El usuario la envía.
+  6. El sistema valida la contraseña y despliega el fixture.
+- Escenarios excepcionales:
+  - 6 a) La contraseña no coincide.
+    - El sistema no muestra el fixture y notifica que la contraseña no corresponde.
+
+---
+
+## Caso de Uso 25: Ver ranking de una Liga que no necesita contraseña
+
+- Actor principal: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que está iniciada,
+  - y es pública, o el usuario es participante, o el usuario es creador.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga.
+  2. El sistema muestra el menú.
+  3. El usuario elige “Ver Ranking”.
+  4. El sistema despliega el ranking de la liga ordenado por puntaje y diferencia de goles.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 26: Ver ranking de una Liga que necesita contraseña
+
+- Actor principal: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que:
+    - es privada,
+    - está iniciada,
+    - el usuario no es creador,
+    - el usuario no es participante.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga.
+  2. El sistema despliega el menú.
+  3. El usuario selecciona “Ver Ranking”.
+  4. El sistema solicita la contraseña.
+  5. El usuario la envía.
+  6. El sistema valida la contraseña y muestra el ranking.
+- Escenarios excepcionales:
+  - 4 b) La contraseña no coincide.
+    - El sistema no muestra el ranking y notifica que la contraseña no corresponde.
+
+---
+
+## Caso de Uso 27: Abandonar una Liga
+
+- Actor primario: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que:
+    - no esté iniciada,
+    - el usuario participe,
+    - y no sea el creador.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga válida.
+  2. El sistema muestra el menú de opciones.
+  3. El usuario elige “Abandonar” y confirma.
+  4. El sistema lo elimina del registro de la liga y avisa al usuario.
+  5. Si el creador es el único participante, además se cancela la liga.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 28: Cancelar una Liga
+
+- Actor primario: Usuario
+- Precondición:
+  - Hay al menos una liga en la lista que:
+    - no esté iniciada,
+    - y el usuario la haya creado.
+- Alcance: Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona una liga.
+  2. El sistema muestra el menú.
+  3. El usuario elige “Cancelar Liga”.
+  4. El sistema cancela la liga y notifica éxito.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 29: Buscar un Partido Amistoso
+
+- Actor primario: Usuario
+- Precondición:
+  - El usuario está autenticado.
+  - Tiene al menos 6 jugadores.
+- Alcance: Sistema Principal
+- Escenario exitoso principal:
+  1. El usuario selecciona buscar un partido amistoso.
+  2. El sistema busca otro usuario que también esté buscando amistoso.
+  3. Los empareja y los redirige a la selección de equipo.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 30: Ver ranking general
+
+- Actor principal: Usuario
+- Precondición: El usuario está autenticado
+- Alcance: Sistema Principal
+- Escenario exitoso principal:
+  1. El usuario selecciona ver ranking general.
+  2. El sistema muestra el ranking general de los clubes ordenados por puntaje, diferencia de goles y partidos jugados.
+- Escenarios excepcionales:
+  - 2 a) Ningún usuario jugó un partido de liga.
+    - El sistema notifica que aún no hay datos para mostrar un ranking general.
+
+---
+
+## Caso de Uso 31: Pedir cambio de Jugador
+
+- Actor principal: Usuario
+- Precondición:
+  - El partido está iniciado.
+  - El usuario está en calidad de jugador.
+- Alcance: Partido en Tiempo Real
+- Escenario exitoso principal:
+  1. El usuario selecciona la opción “Cambio”.
+  2. Elige un jugador titular y un suplente.
+  3. Envía los datos al sistema.
+  4. El sistema valida que haya cambios disponibles.
+  5. En la próxima pausa, retira al jugador A como suplente y pone al jugador B como titular en su posición.
+- Escenarios excepcionales:
+  - 2 a) El jugador no tiene cambios disponibles.
+    - El sistema anuncia la situación y no realiza el cambio.
+
+---
+
+## Caso de Uso 32: Ver comportamiento de Titular
+
+- Actor principal: Usuario
+- Precondición: El partido está iniciado
+- Alcance: Partido en Tiempo Real
+- Escenario exitoso principal:
+  1. El usuario selecciona un jugador titular.
+  2. El sistema le despliega su comportamiento actual con su código.
+- Escenarios excepcionales:
+  - 2 a) El usuario no es jugador del partido.
+    - El sistema no le despliega el comportamiento.
+  - 2 b) El usuario es jugador del partido pero el titular es del equipo rival.
+    - El sistema no le despliega el comportamiento.
+
+---
+
+## Caso de Uso 33: Reasignar comportamiento de Titular
+
+- Actor principal: Usuario
+- Precondición:
+  - El partido está iniciado.
+  - El usuario es jugador del partido.
+- Alcance: Partido en Tiempo Real
+- Escenario exitoso principal:
+  1. El usuario selecciona un jugador titular.
+  2. Elige reasignar su comportamiento.
+  3. Selecciona un comportamiento y confirma.
+  4. El sistema usará el nuevo comportamiento a partir del siguiente tick para determinar la lógica del jugador.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 34: Seleccionar Equipo para Partido Amistoso
+
+- Actor principal: Usuario
+- Precondición: Ninguna
+- Alcance: Selección de Equipo
+- Escenario exitoso principal:
+  1. El usuario selecciona seis integrantes con sus roles y comportamientos.
+  2. El sistema espera a que ambos usuarios formen su equipo.
+  3. Cuando ocurre, redirige a ambos al partido en tiempo real.
+- Escenarios excepcionales: Ninguno
+
+---
+
+## Caso de Uso 35: Acceder al Sistema Principal
+
+- Actor principal: Usuario
+- Precondición: Ninguna
+- Alcance: Sistema de Jugadores, Sistema de Comportamiento, Sistema de Ligas
+- Escenario exitoso principal:
+  1. El usuario selecciona la opción de acceso al sistema principal.
+  2. El sistema lo redirige al sistema principal.
+- Escenarios excepcionales: Ninguno
