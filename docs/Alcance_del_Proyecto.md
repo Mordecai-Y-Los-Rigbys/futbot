@@ -72,3 +72,61 @@ Para jugar un partido amistoso, se usará un sistema de matchmaking aleatorio: u
 ### Ranking Global
 
 Cualquier usuario podrá ver un ranking global de clubes, en donde se ordenan a todos los clubes por puntaje, diferencia de goles y partidos jugados, de todas las ligas públicas. En este ranking no entran clubes que no hayan jugado ningún partido de liga.
+
+## Detalles fuera del alcance del proyecto
+
+- No habrá una UI ni app para celulares, ni para ningún dispositivo que no sea una computadora de escritorio.
+- No habrá una UI responsive.
+- No van a haber partidos de más de dos usuarios ni de más de 3 jugadores en cancha, ni equipos de más de 6 jugadores.
+- No va a haber sistema de amigos, por ende no van a haber partidos amistosos privados ni mensajes. Además, ningún usuario que no sea jugador de un partido amistoso va a poder verlo.
+- No va a haber sistema de ELO ni de partidas clasificatorias.
+- No va a haber ningún sistema de compraventa de ningún tipo.
+- No va a haber cosméticos para los jugadores, diferentes canchas ni pelotas.
+- No habrá modo 3D ni primera persona.
+- No habrá un sistema de modificación de datos de usuario ni de modificación de datos de liga (más allá de iniciar o cancelar liga).
+- No va a haber un chat de liga.
+- No va a haber ninguna otra característica que no se haya mencionado explícitamente (o no se pueda inferir de manera obvia) en este documento.
+
+## Requisitos Funcionales
+
+Están cubiertos en detalle en los casos de uso. En esta sección de alcance nombraremos las funciones que el sistema debe proveer al usuario (divididas por sistema), junto con sus casos de uso (CUs) correspondientes en donde se explica al detalle qué se requiere para cada función:
+
+1. **Sistema de Registro y Autenticación de Usuarios:**
+   1. Registro de usuarios: CU 1
+   2. Inicio de Sesión: CU 2
+2. **Sistema Principal:**
+   1. Cierre de Sesión: CU 3
+   2. Acceso al sistema de Comportamientos: CU 4
+   3. Acceso al sistema de Jugadores: CU 10
+   4. Acceso al sistema de Ligas: CU 14
+   5. Búsqueda de Partido Amistoso: CU 29
+   6. Ver Ranking Global: CU 30
+3. **Sistema de Comportamientos:**
+   1. Creación de Comportamiento: CU 5
+   2. Búsqueda de Comportamientos (propios): CU 6
+   3. Ver código de un Comportamiento (propio): CU 7
+   4. Modificación de Comportamientos (propios): CU 8
+   5. Eliminación de Comportamiento (propio): CU 9
+   6. Acceso al Sistema Principal: CU 35
+4. **Sistema de Jugadores:**
+   1. Creación de Jugador: CU 11
+   2. Búsqueda de Jugadores (propios): CU 12
+   3. Eliminación de Jugador (propio): CU 13
+   4. Acceso al Sistema Principal: CU 35
+5. **Sistema de Ligas:**
+   1. Creación de Liga: CU 15
+   2. Búsqueda de Liga: CU 16
+   3. Unirse a Ligas: CUs 17 y 18
+   4. Iniciación de Liga: CU 19
+   5. Entrar a Jugar Partido de Liga: CU 20
+   6. Ver Partido de Liga: CUs 21 y 22
+   7. Ver Fixture de Liga: CUs 23 y 24
+   8. Ver Ranking de Liga: CUs 25 y 26
+   9. Abandonar Liga: CU 27
+   10. Cancelación de Liga: CU 28
+   11. Acceso al Sistema Principal: CU 35
+6. **Partido en tiempo real:**
+   1. Pedir Cambio de Jugador: CU 31
+   2. Ver Comportamiento de Titular: CU 32
+   3. Reasignar Comportamiento de Titular: CU 33
+   4. Seleccionar Equipo para Partido Amistoso: CU 34
