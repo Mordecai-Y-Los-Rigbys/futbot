@@ -1,94 +1,74 @@
 # FUTBOT: Alcance del proyecto
 
-## ¿Qué es Futbot?
+*Mordecai y los Rigbys — Alcance*
 
-Futbot es un juego y simulador de partidos de fútbol web de dos dimensiones, donde dos Usuarios o más podrán competir en ligas mediante partidos de 3 contra 3.
+Futbot es un juego y simulador web de partidos de fútbol 2D con vista cenital en donde, al momento de controlar a los jugadores en cancha, solamente se podrán utilizar bloques de código, llamados comportamientos – los usuarios deben programar a sus jugadores.
 
-Lo que hace particularmente especial a este sistema es que al momento de controlar a los jugadores en cancha solamente se podrán utilizar set de código que los usuarios deberán diseñar con antelación.
-
-## PARTES PRINCIPALES DEL SISTEMA
+## Características Principales
 
 ### Usuarios y Clubes
 
-- Todos los jugadores registrados tendrán su propio Club con nombre y avatar.
-- El Usuario podrá administrar jugadores, diseñar comportamientos y jugar contra otros clubes.
+Los usuarios se deben registrar con nombre, mail y contraseña. Al registrarse, crean su club con nombre de club y avatar. Los usuarios pueden:
 
-### Futbolistas y Atributos
+- Administrar sus jugadores.
+- Administrar sus comportamientos.
+- Crear, administrar y participar en ligas.
+- Jugar partidos amistosos y de ligas.
+- Ver partidos y rankings de ligas.
+- Ver el ranking global.
 
-Cada Usuario deberá crear sus propios jugadores. Cada futbolista será definido con 5 atributos que una vez guardados, no podrán ser modificados.
+### Jugadores y Atributos
 
-- **Power**: Fuerza con la que patea el jugador.
-- **Agility**: Cooldown en la que patea el jugador.
-- **Control**: Distancia desde la que puede tocar la pelota.
-- **Strength**: Cuanto se impone en el choque contra otros jugadores.
-- **Speed**: Velocidad a la cual el jugador se moverá.
+Cada Usuario deberá crear sus propios jugadores. Cada jugador será definido con un nombre y 5 atributos:
 
-Como regla obligatoria cada atributo debe estar en un valor entre 20 y 100 puntos de tal manera que la suma de los 5 sea exactamente igual a 300.
+- **Power:** Fuerza con la que patea el jugador.
+- **Agility:** Cooldown en la que patea el jugador.
+- **Control:** Distancia desde la que puede tocar la pelota.
+- **Strength:** Cuanto se impone en el choque contra otros jugadores.
+- **Speed:** Velocidad a la cual el jugador se moverá.
+
+Cada uno de estos atributos tendrá entre 20 y 100 puntos. El jugador debe tener estrictamente 300 puntos de atributos totales, es decir, los atributos deben sumar 300 entre todos.
 
 ### Comportamientos
 
-Cada Usuario deberá crear sus propios comportamientos. Cada comportamiento será definido con un nombre y código atributos que están abiertos a modificaciones.
+Los comportamientos son bloques de código que definen el actuar de los jugadores durante un partido. Cada comportamiento tiene un nombre único y un código. El código debe estar escrito en Python y debe cumplir con el contrato de API de comportamientos.
 
-- Nombre para identificar cada comportamiento (no repetible).
-- Código deberá definir las acciones a hacer por el jugador descrito en python.
+Los comportamientos se administran (i.e. pueden ser creados, modificados y eliminados) independientemente de los jugadores y muchos jugadores pueden usar el mismo comportamiento en un partido.
 
 ### Ligas
 
-Cada Usuario podrá crear, administrar y participar en Ligas. Una liga es una competencia entre distintos clubes de distintos usuarios que se enfrentarán en un sistema de todos contra todos.
+Una liga es una competencia entre distintos clubes que se enfrentarán en una modalidad de todos contra todos. Cada usuario podrá crear, administrar y participar en Ligas.
 
-- Cada liga deberá contar con nombre, minimo de ligas, maximo de ligas y privacidad.
-- Para que una liga pueda comenzar deberá tener un mínimo de 3 equipos participantes.
-- Una vez iniciada la liga no podrá ser detenida ni reiniciada.
+Para crear una liga, el usuario deberá ingresar: nombre, mínimo (mayor o igual a 3) y máximo de participantes, privacidad (pública o privada con contraseña), duración de partidos y un equipo para jugar en ella. Una vez creada, se encuentra en estado de preparación. En este estado, el usuario creador puede cancelarla o iniciarla.
+
+También en el estado de preparación, otros clubes pueden unirse a la liga mientras la cantidad de participantes no haya llegado al máximo. Para unirse, un club debe formar un equipo con seis integrantes y, si la liga es privada, ingresar correctamente la contraseña de la liga.
+
+Los seis integrantes del equipo tienen un rol: tres son suplentes, uno es titular defensa, uno es titular mediocampo y uno es titular delantero. Una vez formado el equipo, el plantel queda fijo: no pueden usarse más jugadores en ningún partido que los seis elegidos (aunque se pueden reasignar sus comportamientos), y el club comienza a ser participante de la liga. Mientras la liga siga en estado de preparación, el club participante puede abandonarla. El creador no puede abandonar la liga.
+
+Una vez se hayan unido al menos el mínimo de participantes, el creador puede iniciar la liga. Al iniciar, automáticamente se programan los partidos con su fecha y hora. Una vez la liga inició, no puede ser cancelada y los clubes no pueden unirse ni abandonarla.
+
+Una liga iniciada tiene un fixture - una grilla con las fichas de partido; cada ficha de partido tiene su fecha, rivales, estado (sin iniciar, en juego o finalizado) y resultado. La liga iniciada también tiene una pestaña de partidos en vivo, que muestra los partidos que se están jugando, y un ranking: los clubes participantes ordenados por puntaje y diferencia de goles. Para el puntaje de un participante, los partidos ganados suman 3, los empatados suman 1 y los perdidos suman 0. La liga finaliza al haberse jugado todos los partidos - su estado pasa a finalizada.
+
+El creador, los participantes y los usuarios ajenos a la liga podrán ver el fixture, el ranking y los partidos; pero, si la liga es privada, los usuarios ajenos deberán ingresar la contraseña de la liga para acceder a cualquiera de ellos.
 
 ### Partidos
 
-Los partidos serán públicos o privados y se efectuarán entre 2 usuarios quienes participaran con 6 jugadores c/u con la siguiente dinámica:
+Los partidos se juegan entre dos equipos de seis jugadores. Pueden ser amistosos o partidos de liga, y se componen de cuatro tiempos de igual duración, separados por 3 pausas (dos de hidratación y un entretiempo). Durante todo el partido, el usuario jugador puede ver y reasignar el comportamiento de cualquiera de sus titulares y pedir un cambio de jugador. Los cambios de jugador pedidos se efectúan en una pausa. Hay solo una ventana por pausa y solo se permite un cambio de jugador por ventana, por lo que en total se pueden hacer hasta tres cambios.
 
-1. Se jugaran 4 tiempos de igual duración, separados por 3 pausas (dos pausas de hidratación y un entretiempo)
-2. Antes del primer tiempo se dará un tiempo de gracia para que los usuarios modifiquen sus estrategias (cambios en el equipo).
-3. Cada usuario podrá hacer un cambio en cada pausa, los cuales no son acumulables pero permiten sacar y meter al mismo jugador.
-4. La pelota no será frenada en ningún momento aparte de las pausas, es decir no hay laterales, corners, penales ni tiros libres.
-5. Pueden haber partidos en ligas asi como partidos amistosos
-6. Será transmitido en directo para la vista de los Usuarios en juego, como para aquellos que sean parte de la Liga.
-7. La victoria (en Ligas) otorga 3 puntos, empate 1 punto y la derrota no reparte puntos.
+Al principio de cada tiempo, aparecen los jugadores en sus posiciones iniciales en la cancha. El tiempo se desarrolla por ticks: en cada tick, se calcula lo que hará el jugador en base a su comportamiento. El partido se detiene únicamente en caso de que termine el tiempo o en caso de un gol. Si ocurre un gol, los jugadores y la pelota vuelven a sus posiciones iniciales y el partido se reanuda. No hay laterales, corners, faltas, penales ni tiros libres - si la pelota toca el borde de la cancha, ésta rebotará.
 
-## ¿Qué cosas están fuera del alcance del proyecto?
+Los partidos, una vez iniciados, se jugarán y terminarán independientemente de que el usuario esté conectado - los jugadores se van a manejar con sus comportamientos asignados durante todo el partido. Los partidos de liga, en particular, inician automáticamente en su fecha y hora establecidos.
 
-- No va a ser compatible con environments mas allá de pc.
-- No va a tener partidos de mas ni menos jugadores que 3.
-- No va a haber sistema de amigos, por ende no van a haber partidos amistosos privados.
-- No va a haber sistema de compra de jugadores.
-- No va a haber cosméticos para los jugadores ni estadios/canchas.
-- No va haber modo 3D ni primera persona
+Tanto los espectadores como los usuarios jugadores podrán ver:
 
-## Requisitos funcionales
+- La cancha con las líneas de campo, los arcos, los jugadores en cancha y la pelota.
+- El marcador que muestra el nombre y avatar de los clubes con sus goles y el tiempo transcurrido.
+- Los nombres y PACSS de todos los jugadores de ambos equipos.
 
-### RF-01: Registro de usuario
+### Búsqueda de Partidos Amistosos
 
-- **Descripción de Entradas:** el sistema requerirá un nombre de usuario, contraseña, correo electrónico, nombre de club y avatar.
+Para jugar un partido amistoso, se usará un sistema de matchmaking aleatorio: un usuario busca un partido y espera a que otro usuario esté buscando un partido amistoso. Una vez hayan dos en espera, se los empareja y se los envía a un menú de selección de equipo. Una vez ambos hayan seleccionado sus equipos, el partido amistoso inicia.
 
-- **Fuente y rango válido:** datos ingresados por el actor externo y validados estrictamente en el backend (API).
-  - **Nombre de usuario:** alfanumérico, entre 4 y 15 caracteres.
-  - **Nombre de club:** alfanumérico (permite espacios), entre 4 y 20 caracteres.
-  - **Correo electrónico:** debe contener el símbolo `@` y un dominio válido. Debe ser único.
-  - **Contraseña:** longitud mínima de 8 caracteres.
-  - **Avatar:** debe ser un ID (número entero) que corresponda a un preset existente en el servidor.
-  - **Restricción general:** ningún campo puede estar vacío o ser nulo.
+### Ranking Global
 
-- **Salidas esperadas:** el sistema generará el nuevo registro, emitirá un mensaje de confirmación y devolverá un token de autenticación para ingresar al usuario a la aplicación web ya autenticado.
-
-- **Operaciones lógicas:** el sistema validará la completitud, formatos, longitudes y la unicidad de los campos consultando la base de datos. Tras pasar las validaciones, aplicará una función de hash a la contraseña y almacenará persistentemente los datos del nuevo usuario y su club.
-
-- **Comportamiento en situaciones anormales (Errores en formato o longitud):** si la contraseña es corta, el email no tiene un formato válido, el ID del avatar no existe o hay campos en blanco, el sistema abortará la operación y retornará un error indicando exactamente qué campo falló.
-
-- **Comportamiento en situaciones anormales (Datos duplicados):** si el correo electrónico ya existe en la base de datos, el sistema detendrá el registro e informará al usuario qué dato específico está en uso.
-
-- **Comportamiento en situaciones anormales (Error en Backend):** en caso de no poder guardar persistentemente la información por pérdida de conexión a la base de datos o error interno, el sistema abortará el proceso y mostrará el mensaje: "Error interno: Intente nuevamente".
-
-
-## Restricciones de diseño
-
-- Servidor: El desarrollo de la API y la lógica del servidor se realizará obligatoriamente utilizando el framework FastAPI.
-- Persistencia de Datos: El modelado relacional y la interacción con la base de datos se implementará de forma estricta a través del ORM SQLAlchemy.
-- Frontend: La interfaz de usuario será una aplicación web construida exclusivamente sobre React.
-- Comunicación Cliente-Servidor: No será posible la utilización técnicas de polling para la sincronización de datos.
+Cualquier usuario podrá ver un ranking global de clubes, en donde se ordenan a todos los clubes por puntaje, diferencia de goles y partidos jugados, de todas las ligas públicas. En este ranking no entran clubes que no hayan jugado ningún partido de liga.
