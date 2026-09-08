@@ -197,7 +197,212 @@ Direcciones:
       - '409' Conflicto:  
         - Descripción: El comportamiento está asignado a un jugador titular en un partido en curso.
 
+##  LIGAS  
+  
+Direcciones:
 
+### `/ligas`  
+  - **GET:**  
+    - Resumen: Buscar/listar ligas por nombre (Casos de Uso 15 y 17\)  
+    - Parámetros:  
+      - Nombre: nombre  
+       Origen: Query  
+      - Obligatorio: no  
+      - Descripción: Si se provee, filtra ligas cuyo nombre contenga este texto. Devuelve hasta 50 resultados.  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción:   Lista de hasta 50 ligas con su información resumida (nombre, creador, estado, cantidad de participantes, máximo de clubes, privacidad), accesible sin necesitar contraseña incluso si son privadas, ya que esta info no se considera sensible según el alcance. Si la lista da vacía, el frontend es responsable de mostrar el mensaje correspondiente según haya o no query de búsqueda (CU17 \- 2a / 2c).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.
+
+  - **POST:**  
+    - Resumen: Crear una liga (Caso de Uso 16, adaptado)  
+    - Cuerpo\_de\_request:  
+      - Obligatorio: sí  
+      - Contenido: dict(nombre: String, min\_participantes: Int, max\_participantes: Int, duracion\_partido: Int, privado: Bool, contraseña: String | Null)  
+    - Respuesta:  
+      - '201' Creado:  
+        - Descripción: Liga creada con éxito, en estado "preparación".   
+      - '400' Petición errónea:  
+        - Descripción: Formulario incompleto (CU16 \- 4a), mínimo de clubes menor a 3 (CU16 \- 4b), máximo menor al mínimo (CU16 \- 4c), o nombre demasiado largo (CU16 \- 4d).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.
+
+### `/ligas/{liga_id}`  
+  - **GET:**  
+    - Resumen: Muestra la información resumida de una liga puntual.  
+    - Parámetros:  
+      - Nombre: liga\_id  
+        Origen: Path  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Información resumida de la liga (nombre, creador, estado, participantes, máximo, privacidad).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.
+
+### `/ligas/{liga_id}/unirse`  
+  - **POST:**  
+    - Resumen: Unirse a una liga, pública o privada (Casos de Uso 18 y 19\)  
+    - Cuerpo\_de\_request:  
+      - Obligatorio: sí  
+      - Contenido: dict(contraseña: String | Null, integrantes: List\[dict(jugador\_id: Int, titularidad: Enum\[suplente,  delantero, mediocampo, defensa\], comportamiento\_id: Int)\])  
+      - Descripción: "contraseña" solo es necesario si la liga es privada (CU19); se ignora si es pública (CU18).  
+      "integrantes" debe tener exactamente 6 elementos con jugador\_id distintos, uno por cada valor de "titularidad" (titular\_1, titular\_2, titular\_3 y suplente exactamente una vez cada uno... salvo "suplente", que se repite en los 3 restantes). No se envía una posición en cancha (coordenadas): la posición inicial de cada titular la calcula el sistema a partir de si es titular\_1, titular\_2 o titular\_3, según el Diccionario de Datos del DFD (Posición \= Posición X \+ Posición Y es un dato de Integrante, no algo que el usuario declare al formar el equipo).  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Equipo registrado, el club queda como participante de la liga.  
+      - '400' Petición errónea:  
+        - Descripción: El equipo formado no está completo o es inválido (CU18 \- 6a, CU19 \- 8a).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '403' Prohibido:  
+        - Descripción:  La contraseña ingresada no coincide con la de la liga (CU19 \- 4b). Se devuelve 403 y no 400 porque el formulario en sí es válido, lo que falla es la autorización de acceso a la liga privada.  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: La liga está llena (CU18 \- 2a / CU19 \- 2a), el usuario no tiene 6 jugadores propios (CU18 \- 2b / CU19 \- 2b), alguno de los jugador\_id enviados no pertenece al usuario o la liga se llenó entre que el usuario empezó el flujo y el sistema obtuvo acceso al registro de participantes para confirmarlo (CU18 \- 6b / CU19 \- 8b, condición de carrera).
+
+  - **DELETE:**  
+    - Resumen: Abandonar una liga (Caso de Uso 28\)  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: El club deja de ser participante de la liga.  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: el usuario no es participante de esa liga (CU28 \- 2b) o la liga ya está iniciada, por lo que no se puede abandonar (CU28 \- 2a).
+
+### `/ligas/{liga_id}/empezar`  
+  - **POST:**  
+    - Resumen: Iniciar una liga (Caso de Uso 20\)  
+    - Cuerpo\_de\_request:  
+      - Obligatorio: no  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Liga iniciada, se genera y persiste el fixture con fecha y hora de los partidos. La liga pasa de estado "preparación" a "iniciada".  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '403' Prohibido:  
+        - Descripción: El usuario no es el creador/administrador de la liga (CU20 \- 2a).  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: No se llegó al mínimo de participantes necesarios, o la liga ya estaba iniciada o cancelada.
+
+### `/ligas/{liga_id}/cancelar`  
+  - **POST:**  
+    -  Resumen: Cancelar una liga (Caso de Uso 29\)  
+    - Cuerpo\_de\_request:  
+      - Obligatorio: no  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Liga marcada como cancelada de forma permanente. No se elimina el registro (a diferencia de un DELETE), queda visible en estado "cancelada" y no admite más inicios ni nuevos participantes.  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '403' Prohibido:  
+        - Descripción: El usuario no es el creador/administrador de la liga (CU29 \- 2b).  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: La liga ya está iniciada, por lo que no puede cancelarse (CU29 \- 2a).
+
+### `/ligas/{liga\_id}/fixture`  
+  - **GET:**  
+    - Resumen: Ver el fixture de una liga (Casos de Uso 24 y 25\)  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+      - Nombre: contraseña  
+       Origen: Query  
+      - Obligatorio: no  
+        - Descripción: Solo necesaria si la liga es privada y el usuario no es creador ni participante (CU25). Se ignora si la liga es pública o si el usuario ya tiene acceso directo por su rol.  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Grilla de partidos con fecha, rivales, estado y resultado. Accesible directamente para el creador y los participantes, y para cualquier usuario si la liga es pública. Si es privada y el usuario es ajeno, requiere pasar "contraseña" y que coincida con la contraseña real de la liga (CU25).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '403' Prohibido:  
+        - Descripción: La liga es privada, el usuario no es creador ni participante, y "contraseña" no vino o no coincide con la contraseña de la liga (CU25 \- 4a).  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: La liga todavía no está iniciada, no existe fixture aún (CU24 \- 2a, CU25 \- 2a).
+
+### `/ligas/{liga_id}/ranking`
+  - **GET:**  
+    - Resumen: Ver el ranking de participantes de una liga (Casos de Uso 26 y 27\)  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+      - Nombre: contraseña  
+       Origen: Query  
+      - Obligatorio: no  
+      - Descripción: Solo necesaria si la liga es privada y el usuario no es creador ni participante (CU27). Se ignora si la liga es pública o si el usuario ya tiene acceso directo por su rol.  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Participantes de la liga, considerando únicamente sus partidos de liga ya finalizados, ordenados de mayor a menor por puntaje (victoria=3, empate=1, derrota=0) y diferencia de goles. Mismas reglas de acceso que /fixture: directo para creador/participantes o liga pública; si es privada y el usuario es ajeno, requiere "contraseña" coincidente (CU27).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '403' Prohibido:  
+        - Descripción: Liga privada, usuario ajeno, y "contraseña" no vino o no coincide con la contraseña de la liga (CU27 \- 4b).  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: La liga todavía no está iniciada, no hay ranking que mostrar (CU26 \- 2a, CU27 \- 2a).
+
+### `/ligas/{liga\_id}/partidos`  
+  - **GET:**  
+    - Resumen: Listar los partidos en vivo de una liga (Casos de Uso 21, 22 y 23). De la lista devuelta, el sistema distingue con el campo "jugable" si al usuario le corresponde el botón "Jugar Partido" o "Ver Partido". Corresponde directamente a "Datos para ver Partido de Liga" del Diccionario de Datos del DFD.  
+    - Parámetros:  
+      - Nombre: liga\_id  
+       Origen: Path  
+      - Nombre: contraseña  
+        Origen: Query  
+      - Obligatorio: No  
+      - Descripción: Solo necesaria si la liga es privada y el usuario no es creador ni participante (CU23). Se ignora si la liga es pública o si el usuario ya tiene acceso directo por su rol.  
+    - Respuesta:  
+      - '200' OK:  
+        -  Descripción: Lista de partidos en vivo de la liga, cada uno con un flag "jugable" (true si el usuario es participante de alguno de los dos clubes de ese partido y todavía no fue jugado por él en calidad de jugador). Mismas reglas de acceso que /fixture y /ranking. Si no hay partidos en vivo, la lista da vacía y es responsabilidad del sistema avisarlo (CU21 \- 4b, CU22 \- 4b).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.  
+      - '403' Prohibido:  
+        - Descripción: Liga privada, usuario ajeno, y "contraseña" no vino o no coincide con la contraseña de la liga (CU23 \- 4a).  
+      - '404' No encontrado:  
+        - Descripción: Liga no encontrada.  
+      - '409' Conflicto:  
+        - Descripción: La liga todavía no está iniciada, el botón correspondiente no debería estar disponible (CU21 \- 2a, CU22 \- 2a, CU23 \- 2a).
+
+  
+## RANKING GLOBAL  
+  
+Direcciones:
+
+### `/ranking`  
+  -  **GET:**  
+    - Resumen: Muestra el ranking global de clubes (Caso de Uso 34\)  
+    - Respuesta:  
+      - '200' OK:  
+        - Descripción: Todos los clubes que tienen al menos un partido de liga finalizado, ordenados por puntaje, diferencia de goles y partidos jugados. Los clubes sin partidos finalizados quedan excluidos.  
+      - '204' No Contenido:  
+        - Descripción: Ningún club tiene un partido de liga finalizado todavía, no hay datos para el ranking (CU34 \- 2a).  
+      - '401' No autorizado:  
+        - Descripción: El usuario no está autenticado.
 
 
 ## PARTIDOS \- EMPAREJAMIENTO  
