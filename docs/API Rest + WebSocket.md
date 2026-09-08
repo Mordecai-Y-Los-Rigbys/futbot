@@ -107,7 +107,7 @@ Direcciones:
       - '404' No encontrado:  
         - Descripción: El jugador no existe.  
       - '409' Conflicto:  
-        - Descripción: El jugador es integrante de un equipo participante de una liga (CU14 \- 4a) o está jugando un partido en este momento (CU14 \- 4b). En ambos casos el sistema no lo elimina y desactiva la opción ‘Eliminar’ para este jugador.
+        - Descripción: El jugador es integrante de un equipo participante de una liga (CU14 \- 2a) o está jugando un partido en este momento (CU14 \- 2b). En ambos casos el sistema no lo elimina y desactiva la opción ‘Eliminar’ para este jugador.
 
 ## COMPORTAMIENTOS  
 
@@ -221,7 +221,7 @@ Direcciones:
         - Descripción: El usuario ya se encuentra en la cola de emparejamiento.
 
   - **DELETE:**  
-    - Resumen: Cancelar la búsqueda de partido amistoso antes de ser emparejado.  
+    - Resumen: Cancelar la búsqueda de partido amistoso antes de ser emparejado (CU 36).  
     - Respuesta:  
       - '200' OK:  
         - Descripción: El usuario sale de la cola de emparejamiento.  
