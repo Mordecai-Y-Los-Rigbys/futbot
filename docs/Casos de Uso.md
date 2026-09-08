@@ -533,3 +533,13 @@ NOTA: Contemplamos ‘Entrar a Jugar un Partido de Liga’ como un caso específ
 1. El usuario selecciona la opción de acceso al sistema principal.  
 2. El sistema redirige al usuario al sistema principal.  
 * **Casos excepcionales:** Ninguno.
+
+**Caso de Uso 36: Cancelar Búsqueda de un Partido Amistoso.**
+
+* **Actor primario:** Usuario.  
+* **Precondición:** El usuario está buscando un partido amistoso.  
+* **Ámbito:** Sistema Principal.  
+* **Escenario exitoso principal:**   
+1. El usuario selecciona la opción de cancelar búsqueda de un partido amistoso, enviando laa solicitud al sistema.  
+2. El sistema cancela la búsqueda del usuario.  
+* **Escenarios excepcionales**: Ninguno.
