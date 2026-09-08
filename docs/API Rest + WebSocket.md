@@ -216,7 +216,7 @@ Direcciones:
         - Descripción: El usuario no está autenticado.
 
   - **POST:**  
-    - Resumen: Crear una liga (Caso de Uso 16, adaptado)  
+    - Resumen: Crear una liga (Caso de Uso 16)  
     - Cuerpo\_de\_request:  
       - Obligatorio: sí  
       - Contenido: dict(nombre: String, min\_participantes: Int, max\_participantes: Int, duracion\_partido: Int, privado: Bool, contraseña: String | Null)  
@@ -257,7 +257,7 @@ Direcciones:
       - '200' OK:  
         - Descripción: Equipo registrado, el club queda como participante de la liga.  
       - '400' Petición errónea:  
-        - Descripción: El equipo formado no está completo o es inválido (CU18 \- 6a, CU19 \- 8a).  
+        - Descripción: El equipo formado no está completo o es inválido (CU18 \- 4a, CU19 \- 6a).  
       - '401' No autorizado:  
         - Descripción: El usuario no está autenticado.  
       - '403' Prohibido:  
@@ -265,7 +265,7 @@ Direcciones:
       - '404' No encontrado:  
         - Descripción: Liga no encontrada.  
       - '409' Conflicto:  
-        - Descripción: La liga está llena (CU18 \- 2a / CU19 \- 2a), el usuario no tiene 6 jugadores propios (CU18 \- 2b / CU19 \- 2b), alguno de los jugador\_id enviados no pertenece al usuario o la liga se llenó entre que el usuario empezó el flujo y el sistema obtuvo acceso al registro de participantes para confirmarlo (CU18 \- 6b / CU19 \- 8b, condición de carrera).
+        - Descripción: La liga está llena (CU18 \- 2a / CU19 \- 2a), el usuario no tiene 6 jugadores propios (CU18 \- 2b / CU19 \- 2b), alguno de los jugador\_id enviados no pertenece al usuario o la liga se llenó entre que el usuario empezó el flujo y el sistema obtuvo acceso al registro de participantes para confirmarlo (CU18 \- 4b / CU19 \- 6b, condición de carrera).
 
   - **DELETE:**  
     - Resumen: Abandonar una liga (Caso de Uso 28\)  
@@ -282,7 +282,7 @@ Direcciones:
       - '409' Conflicto:  
         - Descripción: el usuario no es participante de esa liga (CU28 \- 2b) o la liga ya está iniciada, por lo que no se puede abandonar (CU28 \- 2a).
 
-### `/ligas/{liga_id}/empezar`  
+### `/ligas/{liga_id}/iniciar`  
   - **POST:**  
     - Resumen: Iniciar una liga (Caso de Uso 20\)  
     - Cuerpo\_de\_request:  
