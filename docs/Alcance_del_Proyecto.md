@@ -130,3 +130,69 @@ Están cubiertos en detalle en los casos de uso. En esta sección de alcance nom
    2. Ver Comportamiento de Titular: CU 32
    3. Reasignar Comportamiento de Titular: CU 33
    4. Seleccionar Equipo para Partido Amistoso: CU 34
+
+## Restricciones de diseño
+
+* **Servidor:** El desarrollo de la API y la lógica del servidor se implementará utilizando el framework FastAPI.  
+* **Persistencia de Datos:** El modelado relacional y la interacción con la base de datos se implementará a través del ORM SQLAlchemy.  
+* **Front-end:** la interfaz de usuario será una aplicación web construida utilizando React.  
+* **Comunicación Cliente-Servidor**: No será posible la utilización de técnicas de **polling** de ningún tipo para la sincronización de datos.  
+* **Entorno de Ejecución:** El back se ejecutará en una computadora servidor, el front se ejecutará en la computadora del usuario. Las modificaciones a registros y los partidos en tiempo real se ejecutarán en el servidor.  
+* **Compatibilidad con otros sistemas:** el back debe ser compatible con linux; el front debe ser compatible con los principales buscadores para computadoras de escritorio: Google Chrome, Firefox y Safari.  
+* **Limitaciones de Hardware:** ninguna ha sido requerida; el front requerirá al menos 4GB de RAM para un funcionamiento fluido.  
+* **Concurrencia:** se debe poder acceder al sistema desde múltiples buscadores al mismo tiempo (en particular, un usuario debe poder acceder a su cuenta desde múltiples dispositivos), por lo que se debe tener en cuenta cualquier condición de carrera en el acceso a datos.  
+* **Confiabilidad y tolerancia a fallos:**   
+  * Se debe usar un motor de base de datos **ACID** tal que, si el sistema se cae en el medio de un registro de información, el motor se encargue de la recuperación.  
+  * Si el sistema se cae en el medio de un partido, se recuperará utilizando checkpoints. Se debe guardar un checkpoint:  
+    * En cada pausa.  
+    * En cada reasignación de comportamiento (con un límite de un checkpoint cada 5 segundos).  
+    * En cada gol.  
+* **Seguridad:**   
+  * **Control de acceso:** el usuario solo puede acceder sin autenticarse al sistema de registro y autenticación de usuarios, pudiendo únicamente registrarse e iniciar sesión. Cualquier otra acción requiere que se autentique previamente. 
+
+    La autenticación se realiza al registrarse o al iniciar sesión (en cualquiera de los dos casos, ingresando una contraseña). La autenticación se maneja como una cookie de sesión.
+
+    Las acciones que los usuarios pueden realizar que no conllevan niveles de acceso (más allá de la autenticación) son:
+
+    * gestionar jugadores y comportamientos propios.  
+    * buscar partidos amistosos.  
+    * ver el ranking global.  
+    * buscar y ver información resumida de ligas (nombre, creador, estado, cantidad de participantes, máximo de clubes, privacidad).
+
+    Para las ligas, hay tres niveles de acceso:
+
+    * Creador: puede iniciar o cancelarla. Puede unirse como participante, ver partidos, fixture y ranking sin contraseña, independientemente de la privacidad de la liga.  
+    * Participante: no puede iniciar o cancelarla. Puede abandonarla, dejando de ser participante. Puede ver partidos, fixture y ranking sin contraseña, independientemente de la privacidad de la liga.   
+    * Ajeno: no puede iniciar ni cancelar una liga.  
+      * Si la liga es pública, puede unirse, ver partidos, fixture y/o ranking sin contraseña.  
+      * Si la liga es privada, puede unirse, ver partidos, fixture y/o ranking ingresando la contraseña de la liga. Si no la ingresa correctamente, no puede realizar ninguna de las acciones anteriores.
+
+    En un partido, un usuario tiene dos niveles de acceso:
+
+    * Espectador: puede ver:  
+      * La cancha con las líneas de campo, los arcos, los jugadores en cancha y la pelota.  
+      * El marcador en la esquina superior izquierda.  
+      * Los nombres y PACSS de todos los jugadores de ambos equipos.  
+    * Jugador: puede ver lo mismo que el espectador y también puede:  
+      * Ver y reasignar comportamientos sobre sus jugadores titulares.  
+      * Pedir un cambio de jugador.
+
+    Un usuario nunca puede:
+
+    * Gestionar jugadores y comportamientos de otros usuarios.  
+    * Unir o echar clubes participantes de ligas (en particular, el creador tampoco puede unir o echar participantes).  
+    * De un equipo que no es suyo, durante un partido:  
+      * Ver y reasignar comportamientos sobre jugadores titulares.  
+      * Pedir un cambio de jugador.  
+    * Ver el mail y contraseña de usuarios (en particular, tampoco puede ver su mail ni contraseña).  
+    * Ver la contraseña de ligas (en particular, el creador de una liga tampoco puede ver su contraseña).  
+  * **Control contra IDOR (Insecure Direct Object Reference):** Cada solicitud que acceda a recursos internos se validará en el backend, comprobando el rol del usuario y la pertenencia del recurso, sin confiar nunca en el identificador enviado por el usuario. Estas solicitudes maliciosas no son contempladas como casos de uso, pero sí están contempladas en el contrato de la API.  
+  * **Manejo de contraseñas:** se usará una librería de manejo de contraseñas (con métodos de encriptación y comparación) – estas nunca se guardarán como texto plano en el sistema, siempre se guardarán encriptadas, y se hará la comprobación de contraseñas usando una función de comparación provista por la librería – el sistema no trabajará con ellas sin usar la librería.  
+  * **Prevención de Inyección (SQLi):** Toda interacción con la base de datos se realiza exclusivamente a través del ORM SQLAlchemy, que genera consultas parametrizadas (prepared statements) en lugar de concatenar strings directamente en el texto de la query. Esto garantiza que cualquier dato ingresado por el usuario (por ejemplo, el email al iniciar sesión o el nombre de un jugador) se trate siempre como un valor literal y nunca como parte ejecutable del SQL. No se permite el uso de SQL crudo (raw SQL) ni de la función `text()` de SQLAlchemy con interpolación manual de strings; si en algún caso puntual fuera necesario, deberá hacerse exclusivamente mediante bind parameters (`:parametro`) provistos por el propio framework.
+
+## **Comportamiento del sistema** 
+
+* **Rendimiento y tiempos de respuesta:** El servidor procesa los partidos en tiempo real a razón de 20 ticks por segundo. El cálculo de cada tick y su emisión a los clientes conectados vía WebSocket no debe superar una cantidad de 100 ms bajo condiciones normales de carga; se toleran hasta 200 ms de respuesta bajo carga pico.  
+* **Aislamiento de comportamientos de usuario:** El código enviado por un usuario como comportamiento pasa por dos capas de control antes y durante su ejecución. La primera es un parseo estricto al momento de crear o modificar el comportamiento, que rechaza cualquier código que no cumpla con los requisitos de validez (ver API de comportamientos); la segunda capa es un límite de tiempo y recursos por tick durante la ejecución en partido: si la evaluación del comportamiento de un integrante excede el tiempo asignado dentro del tick, el sistema la interrumpe y continúa con el cálculo del resto de los jugadores, evitando que un comportamiento muy pesado afecte el rendimiento.  
+* **Seguridad:** para que el usuario pueda interactuar con cualquier funcionalidad del sistema, debe estar previamente autenticado, ya sea habiéndose registrado por primera vez o iniciando sesión. Además, varias funciones del sistema conllevan niveles de acceso; ver el apartado de seguridad en restricciones de diseño.
+
