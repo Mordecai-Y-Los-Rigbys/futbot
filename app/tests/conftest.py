@@ -20,6 +20,9 @@ from app.services.session_service import SessionService
 # NUNCA la de desarrollo: el drop_all borra las tablas). Si no, SQLite en memoria.
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
+if TEST_DATABASE_URL and not TEST_DATABASE_URL.rsplit("/", 1)[-1].endswith("_test"):
+    raise RuntimeError("TEST_DATABASE_URL debe apuntar a una base *_test")
+
 
 @pytest.fixture()
 def db_session():
