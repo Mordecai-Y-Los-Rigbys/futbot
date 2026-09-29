@@ -18,7 +18,10 @@ from app.services.session_service import SessionService
 
 # Si está definida, los tests corren contra Postgres (una base de tests aparte,
 # NUNCA la de desarrollo: el drop_all borra las tablas). Si no, SQLite en memoria.
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg2://futbot_user:futbot_pass@db:5432/futbot_test",
+)
 
 
 @pytest.fixture()
@@ -70,6 +73,13 @@ def ensure_user(db_session, user_id: int) -> User:
         db_session.add(user)
         db_session.commit()
     return user
+
+def pytest_collection_modifyitems(config, items):
+    if not os.environ.get("TEST_DATABASE_URL"):
+        skip = pytest.mark.skip(reason="requiere TEST_DATABASE_URL")
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip)
 
 
 @pytest.fixture()
