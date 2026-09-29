@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.database import engine, Base
+from app.errors import ApiError, api_error_handler
+
 
 load_dotenv()
 
@@ -10,6 +12,7 @@ load_dotenv()
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Futbot API")
+
 
 # Task 0.2: Configuración de CORS
 origins = [
@@ -23,6 +26,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_exception_handler(ApiError, api_error_handler)
 
 
 # Task 0.1: Endpoint de prueba
