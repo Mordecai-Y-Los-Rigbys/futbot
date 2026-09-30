@@ -1,21 +1,22 @@
-import re
-
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_behavior_service, get_current_user_id
-from app.errors import ApiError
-from app.schemas.behavior import BehaviorPage, BehaviorSummary
-from app.services.behavior_service import PAGE_SIZE, BehaviorService
 from app.api.pagination import parse_page
-
+from app.schemas.behavior import BehaviorPage, BehaviorSummary
+from app.schemas.errors import Error, ListPageBadRequest
+from app.services.behavior_service import PAGE_SIZE, BehaviorService
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
 
-MAX_PAGE = 2147483647
-_INT_RE = re.compile(r"-?[0-9]+")  # solo dígitos ASCII
 
-
-@router.get("/me", response_model=BehaviorPage)
+@router.get(
+    "/me",
+    response_model=BehaviorPage,
+    responses={
+        400: {"model": ListPageBadRequest},
+        401: {"model": Error},
+    },
+)
 def list_behaviors(
     name: str | None = Query(default=None),
     page: str = Query(default="1"),
