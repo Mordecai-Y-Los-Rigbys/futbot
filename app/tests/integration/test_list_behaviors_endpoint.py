@@ -8,6 +8,32 @@ URL = "/behaviors/me"
 def names(r):
     return [i["name"] for i in r.json()["items"]]
 
+def test_debug_override(client, session_service):
+    client.get(URL, cookies={"session_id": "sid-1"})
+    print(session_service.get_user_id.call_args_list)
+    assert session_service.get_user_id.called
+    
+def test_list_without_filters_and_response_shape(client, auth_cookies, make_behaviors):
+    make_behaviors(1, ["a", "b", "c"])
+
+    r = client.get(URL, cookies=auth_cookies(1))
+
+    assert r.status_code == 200
+    assert names(r) == ["a", "b", "c"]
+    assert set(r.json()["items"][0].keys()) == {"id", "name"}
+    assert r.json()["total"] == 3
+    assert r.json()["page"] == 1
+    assert r.json()["pageSize"] == 50
+
+
+def test_page_out_of_range_keeps_real_total(client, auth_cookies, make_behaviors):
+    make_behaviors(1, ["a", "b"])
+
+    r = client.get(URL, params={"page": 5}, cookies=auth_cookies(1))
+
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+    assert r.json()["total"] == 2
 
 def test_ilike_case_insensitive_on_postgres(client, auth_cookies, make_behaviors):
     make_behaviors(1, ["Patrol Zone", "attack", "PATROL-2", "pAtRoL-3"])

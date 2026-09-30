@@ -1,152 +1,188 @@
+from unittest.mock import create_autospec
+
 import pytest
+from fastapi.testclient import TestClient
+
+from app.api.deps import get_behavior_service, get_session_service
+from app.main import app  # ajustá al módulo donde creás la app
+from app.repositories.behavior_abstract import BehaviorData
+from app.services.behavior_service import PAGE_SIZE, BehaviorService
+from app.services.session_service import SessionService
 
 URL = "/behaviors/me"
+
+
+def cookies_for(user_id):
+    return {"session_id": f"sid-{user_id}"}
+
+
+def behavior(id, name, user_id=1):
+    return BehaviorData(id=id, user_id=user_id, name=name)
 
 
 def names(r):
     return [i["name"] for i in r.json()["items"]]
 
 
+@pytest.fixture
+def session_service():
+    mock = create_autospec(SessionService, instance=True)
+    # "sid-N" -> user N; anything else -> no valid session
+    mock.get_user_id.side_effect = (
+        lambda sid: int(sid.removeprefix("sid-")) if sid.startswith("sid-") else None
+    )
+    return mock
+
+
+@pytest.fixture
+def behavior_service():
+    mock = create_autospec(BehaviorService, instance=True)
+    mock.list_behaviors.return_value = ([], 0)
+    return mock
+
+
+@pytest.fixture
+def client(session_service, behavior_service):
+    app.dependency_overrides[get_session_service] = lambda: session_service
+    app.dependency_overrides[get_behavior_service] = lambda: behavior_service
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
 # ---------- autenticación ----------
 
-def test_no_cookie_returns_401(client):
+def test_no_cookie_returns_401(client, behavior_service):
     r = client.get(URL)
+
     assert r.status_code == 401
     assert r.json() == {"code": None, "message": "Sin sesión válida."}
+    behavior_service.list_behaviors.assert_not_called()
 
 
-def test_invalid_cookie_returns_401(client):
+def test_invalid_cookie_returns_401(client, behavior_service):
     r = client.get(URL, cookies={"session_id": "no-existe"})
+
     assert r.status_code == 401
     assert r.json()["code"] is None
+    behavior_service.list_behaviors.assert_not_called()
 
 
 @pytest.mark.parametrize("page", ["0", "-1", "abc", "2147483648"])
 def test_no_cookie_with_invalid_page_returns_401(client, page):
     r = client.get(URL, params={"page": page})
+
     assert r.status_code == 401
 
 
-# ---------- listado y filtro ----------
+# ---------- respuesta ----------
 
-def test_list_without_filters(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["a", "b", "c"])
-    r = client.get(URL, cookies=auth_cookies(1))
+def test_response_body_uses_service_result(client, behavior_service):
+    behavior_service.list_behaviors.return_value = (
+        [behavior(1, "a"), behavior(2, "b"), behavior(3, "c")],
+        3,
+    )
+
+    r = client.get(URL, cookies=cookies_for(1))
+
     assert r.status_code == 200
     assert names(r) == ["a", "b", "c"]
     assert r.json()["page"] == 1
-    assert r.json()["pageSize"] == 50
+    assert r.json()["pageSize"] == PAGE_SIZE
     assert r.json()["total"] == 3
 
 
-def test_items_only_have_id_and_name(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["a"])
-    r = client.get(URL, cookies=auth_cookies(1))
+def test_items_only_have_id_and_name(client, behavior_service):
+    # BehaviorData also carries user_id; the endpoint must not expose it
+    behavior_service.list_behaviors.return_value = ([behavior(1, "a")], 1)
+
+    r = client.get(URL, cookies=cookies_for(1))
+
     assert set(r.json()["items"][0].keys()) == {"id", "name"}
 
 
-def test_filter_by_name_case_insensitive(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["Patrol Zone", "attack", "PATROL-2"])
-    r = client.get(URL, params={"name": "patrol"}, cookies=auth_cookies(1))
-    assert names(r) == ["Patrol Zone", "PATROL-2"]
-    assert r.json()["total"] == 2
+def test_empty_result(client):
+    r = client.get(URL, cookies=cookies_for(1))
 
-
-def test_empty_name_equals_no_filter(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["a", "b"])
-    r = client.get(URL, params={"name": ""}, cookies=auth_cookies(1))
-    assert names(r) == ["a", "b"]
-    assert r.json()["total"] == 2
-
-
-def test_filter_without_matches(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["a", "b"])
-    r = client.get(URL, params={"name": "zzz"}, cookies=auth_cookies(1))
     assert r.status_code == 200
     assert r.json()["items"] == []
     assert r.json()["total"] == 0
 
 
-def test_wildcards_are_literal(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["100%", "abc", "a_c"])
-    cookies = auth_cookies(1)
-    assert names(client.get(URL, params={"name": "%"}, cookies=cookies)) == ["100%"]
-    assert names(client.get(URL, params={"name": "a_c"}, cookies=cookies)) == ["a_c"]
+def test_total_is_independent_of_items_returned(client, behavior_service):
+    # e.g. a page out of range: no items, but the total is preserved
+    behavior_service.list_behaviors.return_value = ([], 2)
 
+    r = client.get(URL, params={"page": 5}, cookies=cookies_for(1))
 
-def test_user_isolation(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["shared", "only-1"])
-    make_behaviors(2, ["shared", "only-2"])
-    cookies = auth_cookies(1)
-
-    r = client.get(URL, cookies=cookies)
-    assert names(r) == ["shared", "only-1"]
-    assert r.json()["total"] == 2
-
-    r = client.get(URL, params={"name": "only-2"}, cookies=cookies)
-    assert r.json()["items"] == []
-    assert r.json()["total"] == 0
-
-
-# ---------- paginación ----------
-
-def test_page_out_of_range_returns_empty_items(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["a", "b"])
-    r = client.get(URL, params={"page": 5}, cookies=auth_cookies(1))
     assert r.status_code == 200
     assert r.json()["items"] == []
-    assert r.json()["total"] == 2  # distinto de "filtro sin coincidencias"
+    assert r.json()["total"] == 2
     assert r.json()["page"] == 5
 
 
-def test_max_page_is_valid(client, auth_cookies, make_behaviors):
-    make_behaviors(1, ["a"])
-    r = client.get(URL, params={"page": 2147483647}, cookies=auth_cookies(1))
+# ---------- qué le pasa el endpoint al servicio ----------
+
+def test_service_receives_user_from_session(client, behavior_service):
+    client.get(URL, cookies=cookies_for(7))
+
+    behavior_service.list_behaviors.assert_called_once_with(
+        user_id=7, name=None, page=1
+    )
+
+
+def test_service_receives_name_and_page(client, behavior_service):
+    client.get(URL, params={"name": "patrol", "page": 3}, cookies=cookies_for(1))
+
+    behavior_service.list_behaviors.assert_called_once_with(
+        user_id=1, name="patrol", page=3
+    )
+
+
+def test_max_page_is_valid(client, behavior_service):
+    r = client.get(URL, params={"page": 2147483647}, cookies=cookies_for(1))
+
     assert r.status_code == 200
-    assert r.json()["items"] == []
+    behavior_service.list_behaviors.assert_called_once_with(
+        user_id=1, name=None, page=2147483647
+    )
 
 
 @pytest.mark.parametrize("size_param", ["pageSize", "size", "limit", "page_size"])
-def test_size_param_has_no_effect(client, auth_cookies, make_behaviors, size_param):
-    make_behaviors(1, [f"b{i:02d}" for i in range(60)])
-    r = client.get(URL, params={size_param: 10}, cookies=auth_cookies(1))
+def test_size_param_has_no_effect(client, behavior_service, size_param):
+    r = client.get(URL, params={size_param: 10}, cookies=cookies_for(1))
+
     assert r.status_code == 200
-    assert len(r.json()["items"]) == 50
-    assert r.json()["pageSize"] == 50
-
-
-def test_pagination_60_items_id_order(client, auth_cookies, make_behaviors):
-    rows = make_behaviors(1, [f"b{i:02d}" for i in range(60)])
-    ids = sorted(r.id for r in rows)
-    cookies = auth_cookies(1)
-
-    p1 = client.get(URL, params={"page": 1}, cookies=cookies).json()
-    p2 = client.get(URL, params={"page": 2}, cookies=cookies).json()
-
-    assert [i["id"] for i in p1["items"]] == ids[:50]
-    assert [i["id"] for i in p2["items"]] == ids[50:]
-    assert p1["total"] == p2["total"] == 60
+    assert r.json()["pageSize"] == PAGE_SIZE
+    behavior_service.list_behaviors.assert_called_once_with(
+        user_id=1, name=None, page=1
+    )
 
 
 # ---------- validación de page (400) ----------
 
 @pytest.mark.parametrize("page", ["abc", "1.5", "", " ", "1e3", "+2", "١٢"])
-def test_page_not_an_integer(client, auth_cookies, page):
-    r = client.get(URL, params={"page": page}, cookies=auth_cookies(1))
+def test_page_not_an_integer(client, behavior_service, page):
+    r = client.get(URL, params={"page": page}, cookies=cookies_for(1))
+
     assert r.status_code == 400
     assert r.json()["code"] == "pageNotAnInteger"
     assert set(r.json().keys()) == {"code", "message"}
+    behavior_service.list_behaviors.assert_not_called()
 
 
 @pytest.mark.parametrize("page", ["0", "-1", "-999"])
-def test_page_below_minimum(client, auth_cookies, page):
-    r = client.get(URL, params={"page": page}, cookies=auth_cookies(1))
+def test_page_below_minimum(client, behavior_service, page):
+    r = client.get(URL, params={"page": page}, cookies=cookies_for(1))
+
     assert r.status_code == 400
     assert r.json()["code"] == "pageBelowMinimum"
+    behavior_service.list_behaviors.assert_not_called()
 
 
 @pytest.mark.parametrize("page", ["2147483648", "9" * 30, "9" * 5000])
-def test_page_too_large(client, auth_cookies, page):
-    r = client.get(URL, params={"page": page}, cookies=auth_cookies(1))
+def test_page_too_large(client, behavior_service, page):
+    r = client.get(URL, params={"page": page}, cookies=cookies_for(1))
+
     assert r.status_code == 400
     assert r.json()["code"] == "pageTooLarge"
+    behavior_service.list_behaviors.assert_not_called()
