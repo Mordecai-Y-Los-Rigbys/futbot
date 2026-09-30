@@ -2,6 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.behavior import Behavior
+from app.errors import ApiError
 
 PAGE_SIZE = 50
 
@@ -39,3 +40,12 @@ class BehaviorService:
         )
 
         return list(items), total or 0
+
+    def get_owned_behavior(self, user_id: int, behavior_id: int) -> Behavior:
+        behavior = self.db.get(Behavior, behavior_id)
+        if behavior is None:
+            raise ApiError(404, None, "Comportamiento no encontrado.")
+        if behavior.user_id != user_id:
+            raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
+        return behavior
+

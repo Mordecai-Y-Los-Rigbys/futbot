@@ -4,7 +4,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.errors import ApiError
 from app.services.session_service import SessionService
+from app.services.behavior_service import BehaviorService
 
+def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
+    return BehaviorService(db)
 
 def get_current_user_id(
     session_id: str | None = Cookie(default=None),

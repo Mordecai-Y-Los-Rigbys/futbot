@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.database import engine, Base
 from app.errors import ApiError, api_error_handler
-
+from app.api import behaviors  # ajustá la ruta real
 
 load_dotenv()
 
@@ -28,6 +28,8 @@ app.add_middleware(
 )
 
 app.add_exception_handler(ApiError, api_error_handler)
+
+app.include_router(behaviors.router)
 
 
 # Task 0.1: Endpoint de prueba

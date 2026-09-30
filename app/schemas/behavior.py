@@ -15,4 +15,11 @@ class BehaviorPage(BaseModel):
     page: int
     pageSize: int
     total: int
-    
+
+
+class BehaviorDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)  # pydantic v1: orm_mode = True
+
+    id: int
+    name: str
+    code: str
