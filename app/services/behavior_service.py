@@ -19,7 +19,8 @@ class BehaviorService:
         """
         filters = [Behavior.user_id == user_id]
         if name:
-            filters.append(Behavior.name.ilike(f"%{name}%"))
+            escaped = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            filters.append(Behavior.name.ilike(f"%{escaped}%", escape="\\"))
 
         total = self.db.scalar(
             select(func.count()).select_from(Behavior).where(*filters)
