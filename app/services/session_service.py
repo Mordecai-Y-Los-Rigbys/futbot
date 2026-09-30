@@ -3,7 +3,6 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-# Ajustá el nombre de la clase si en app/models/session.py se llama distinto.
 from app.models.session import UserSession
 
 SESSION_TTL = timedelta(days=7)
@@ -32,7 +31,7 @@ class SessionService:
         return session
 
     def get_user_id(self, session_id: str) -> int | None:
-        """Devuelve el user_id si la sesión existe y no expiró; si no, None."""
+        """Devuelve el user_id si la sesión existe si no expiró; si no, None."""
         record = self.db.get(UserSession, session_id)
         if record is None:
             return None
