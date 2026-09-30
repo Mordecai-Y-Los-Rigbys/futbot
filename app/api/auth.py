@@ -7,6 +7,7 @@ from app.schemas.auth import RegisterUserRequest, UserResponse
 from app.services.security_service import hash_password
 from app.services.session_service import SessionService
 from app.repositories.user_repository import UserRepository
+from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -38,7 +39,9 @@ def register_user(
         avatar=request.avatar
     )
 
-    session_service = SessionService(db)
+    # Creamos el repositorio de sesión y se lo inyectamos al servicio
+    session_repo = SqlAlchemySessionRepository(db)
+    session_service = SessionService(session_repo)
     user_session = session_service.create(user_id=new_user.id)
 
     response.set_cookie(
