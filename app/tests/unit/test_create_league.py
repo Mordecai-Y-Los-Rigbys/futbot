@@ -23,7 +23,7 @@ def payload(**over):
     }
     for k, v in over.items():
         if v is MISSING:
-            p.pop(k)
+            p.pop(k, None)  # si la clave no estaba en el base, ya "falta"
         else:
             p[k] = v
     return p
