@@ -16,6 +16,7 @@ from app.main import app
 from app.models.user import User
 from app.models.behavior import Behavior
 from app.services.session_service import SessionService
+from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 
 # Si está definida, los tests corren contra Postgres (una base de tests aparte,
 # NUNCA la de desarrollo: el drop_all borra las tablas). Si no, SQLite en memoria.
@@ -67,9 +68,9 @@ def client(db_session):
 
 
 def ensure_user(db_session, user_id: int) -> User:
-    """
+    """behav
     Crea el usuario si no existe. SQLite no hace cumplir las FK, pero Postgres sí:
-    sin esto, crear un behavior o una sesión para un user_id inexistente falla.
+    Util para tests varios.
     """
     user = db_session.get(User, user_id)
     if user is None:
@@ -94,26 +95,31 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture()
-def auth_cookies(db_session):
-    """Uso: auth_cookies(user_id=1) -> {"session_id": "<token>"}"""
-
+def auth_cookies(db_session, session_service):
     def _make(user_id: int) -> dict:
         ensure_user(db_session, user_id)
-        session = SessionService(db_session).create(user_id)
+        session = session_service.create(user_id)
         return {"session_id": session.id}
 
     return _make
-
+  
+@pytest.fixture
+def session_service(db_session):
+    return SessionService(SqlAlchemySessionRepository(db_session))
 
 @pytest.fixture()
 def make_behaviors(db_session):
-    """Uso: make_behaviors(user_id=1, names=["a", "b"]) -> lista de Behavior"""
+    """make_behaviors(user_id, names) -> list[Behavior], en orden de creación."""
 
-    def _make(user_id: int, names: list[str]) -> list[Behavior]:
+    def _make(user_id: int, names, code: str = "def behave(): pass") -> list[Behavior]:
         ensure_user(db_session, user_id)
-        rows = [Behavior(user_id=user_id, name=n, code="") for n in names]
-        db_session.add_all(rows)
-        db_session.commit()
-        return rows
+        created = []
+        for name in names:
+            b = Behavior(user_id=user_id, name=name, code=code)
+            db_session.add(b)
+            db_session.commit()  # uno a uno: ids crecientes en el orden dado
+            db_session.refresh(b)
+            created.append(b)
+        return created
 
     return _make

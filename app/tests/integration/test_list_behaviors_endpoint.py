@@ -8,11 +8,6 @@ URL = "/behaviors/me"
 def names(r):
     return [i["name"] for i in r.json()["items"]]
 
-def test_debug_override(client, session_service):
-    client.get(URL, cookies={"session_id": "sid-1"})
-    print(session_service.get_user_id.call_args_list)
-    assert session_service.get_user_id.called
-    
 def test_list_without_filters_and_response_shape(client, auth_cookies, make_behaviors):
     make_behaviors(1, ["a", "b", "c"])
 
