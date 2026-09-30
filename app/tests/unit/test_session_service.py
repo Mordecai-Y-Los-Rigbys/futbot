@@ -1,136 +1,162 @@
-# tests/unit/test_session_service.py
 from datetime import datetime, timedelta, timezone
+from unittest.mock import create_autospec
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from app.database import Base  # adjust to the module where your Base lives
-from app.models.session import UserSession
+from app.repositories.session_abstract import (
+    AbstractSessionRepository,
+    CreateSessionData,
+    SessionData,
+)
 from app.services import session_service
-from app.services.session_service import SessionService, SESSION_TTL
+from app.services.session_service import SESSION_TTL, SessionService
+
+NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def frozen_now(monkeypatch):
+    monkeypatch.setattr(session_service, "_utcnow", lambda: NOW)
 
 
 @pytest.fixture
-def db():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    yield session
-    session.close()
-    engine.dispose()
+def repo():
+    mock = create_autospec(AbstractSessionRepository, instance=True)
+    # By default, create() echoes back what it receives (like a real repo would)
+    mock.create.side_effect = lambda data: SessionData(**data.model_dump())
+    return mock
 
 
 @pytest.fixture
-def service(db):
-    return SessionService(db)
+def service(repo):
+    return SessionService(repo)
+
+
+def stored_session(expires_at, user_id=1, session_id="sid"):
+    return SessionData(
+        id=session_id,
+        user_id=user_id,
+        created_at=NOW - timedelta(days=1),
+        expires_at=expires_at,
+    )
 
 
 # ---------- create ----------
 
-def test_create_persists_the_session(service, db):
-    s = service.create(user_id=1)
-    assert db.get(UserSession, s.id) is not None
+def test_create_calls_repository_once_with_create_data(service, repo):
+    service.create(user_id=42)
+
+    repo.create.assert_called_once()
+    data = repo.create.call_args.args[0]
+    assert isinstance(data, CreateSessionData)
+    assert data.user_id == 42
 
 
-def test_create_assigns_user_id(service):
-    s = service.create(user_id=42)
-    assert s.user_id == 42
+def test_create_returns_what_the_repository_returns(service, repo):
+    expected = stored_session(NOW + timedelta(days=7), user_id=9, session_id="from-repo")
+    repo.create.side_effect = None
+    repo.create.return_value = expected
+
+    assert service.create(user_id=9) is expected
 
 
-def test_create_generates_distinct_ids(service):
-    ids = {service.create(user_id=1).id for _ in range(20)}
+def test_create_generates_distinct_ids(service, repo):
+    for _ in range(20):
+        service.create(user_id=1)
+
+    ids = {call.args[0].id for call in repo.create.call_args_list}
     assert len(ids) == 20
 
 
-def test_create_id_fits_in_string_64(service):
-    s = service.create(user_id=1)
-    assert 0 < len(s.id) <= 64
+def test_create_id_fits_in_string_64(service, repo):
+    service.create(user_id=1)
+
+    assert 0 < len(repo.create.call_args.args[0].id) <= 64
 
 
-def test_create_uses_default_ttl(service):
-    s = service.create(user_id=1)
-    expires = s.expires_at
-    created = s.created_at
-    assert expires - created == SESSION_TTL
+def test_create_uses_default_ttl(service, repo):
+    service.create(user_id=1)
+
+    data = repo.create.call_args.args[0]
+    assert data.created_at == NOW
+    assert data.expires_at - data.created_at == SESSION_TTL
 
 
-def test_create_respects_custom_ttl(service):
-    s = service.create(user_id=1, ttl=timedelta(minutes=5))
-    assert s.expires_at - s.created_at == timedelta(minutes=5)
+def test_create_respects_custom_ttl(service, repo):
+    service.create(user_id=1, ttl=timedelta(minutes=5))
+
+    data = repo.create.call_args.args[0]
+    assert data.expires_at - data.created_at == timedelta(minutes=5)
 
 
 # ---------- get_user_id ----------
 
-def test_get_user_id_valid_session(service):
-    s = service.create(user_id=7)
-    assert service.get_user_id(s.id) == 7
+def test_get_user_id_queries_the_repository_by_id(service, repo):
+    repo.get_by_id.return_value = None
+
+    service.get_user_id("abc")
+
+    repo.get_by_id.assert_called_once_with("abc")
 
 
-def test_get_user_id_nonexistent_session(service):
+def test_get_user_id_valid_session(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW + timedelta(hours=1), user_id=7)
+
+    assert service.get_user_id("sid") == 7
+
+
+def test_get_user_id_valid_session_is_not_deleted(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW + timedelta(hours=1))
+
+    service.get_user_id("sid")
+
+    repo.delete.assert_not_called()
+
+
+def test_get_user_id_nonexistent_session(service, repo):
+    repo.get_by_id.return_value = None
+
     assert service.get_user_id("does-not-exist") is None
+    repo.delete.assert_not_called()
 
 
-def test_get_user_id_expired_session_returns_none(service):
-    s = service.create(user_id=1, ttl=timedelta(seconds=-1))
-    assert service.get_user_id(s.id) is None
+def test_get_user_id_expired_session_returns_none(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW - timedelta(seconds=1))
+
+    assert service.get_user_id("sid") is None
 
 
-def test_get_user_id_expired_session_is_deleted(service, db):
-    s = service.create(user_id=1, ttl=timedelta(seconds=-1))
-    sid = s.id
-    service.get_user_id(sid)
-    db.expire_all()
-    assert db.get(UserSession, sid) is None
+def test_get_user_id_expired_session_is_deleted(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW - timedelta(seconds=1))
+
+    service.get_user_id("sid")
+
+    repo.delete.assert_called_once_with("sid")
 
 
-def test_get_user_id_valid_session_is_not_deleted(service, db):
-    s = service.create(user_id=1)
-    service.get_user_id(s.id)
-    assert db.get(UserSession, s.id) is not None
+def test_get_user_id_exactly_at_the_limit_is_expired(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW)  # the code uses <=
+
+    assert service.get_user_id("sid") is None
+    repo.delete.assert_called_once_with("sid")
 
 
-def test_get_user_id_handles_naive_expires_at(service, db):
-    """SQLite returns DateTime without tz; the service must treat it as UTC."""
-    s = service.create(user_id=3, ttl=timedelta(hours=1))
-    sid = s.id
-    db.expire_all()  # force a reload from the DB (naive)
-    assert service.get_user_id(sid) == 3
+def test_get_user_id_one_second_before_the_limit_is_valid(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW + timedelta(seconds=1), user_id=5)
 
-
-def test_get_user_id_uses_utcnow_to_expire(service, monkeypatch):
-    s = service.create(user_id=1, ttl=timedelta(hours=1))
-    future = datetime.now(timezone.utc) + timedelta(hours=2)
-    monkeypatch.setattr(session_service, "_utcnow", lambda: future)
-    assert service.get_user_id(s.id) is None
-
-
-def test_get_user_id_exactly_at_the_limit_is_expired(service, db, monkeypatch):
-    s = service.create(user_id=1, ttl=timedelta(hours=1))
-    limit = s.expires_at
-    if limit.tzinfo is None:
-        limit = limit.replace(tzinfo=timezone.utc)
-    monkeypatch.setattr(session_service, "_utcnow", lambda: limit)
-    assert service.get_user_id(s.id) is None  # the code uses <=
+    assert service.get_user_id("sid") == 5
 
 
 # ---------- delete ----------
 
-def test_delete_removes_the_session(service, db):
-    s = service.create(user_id=1)
-    sid = s.id
-    service.delete(sid)
-    assert db.get(UserSession, sid) is None
-    assert service.get_user_id(sid) is None
+def test_delete_delegates_to_the_repository(service, repo):
+    service.delete("sid")
+
+    repo.delete.assert_called_once_with("sid")
 
 
-def test_delete_nonexistent_does_not_fail(service):
-    service.delete("does-not-exist")  # must not raise
+def test_delete_does_not_read_or_create(service, repo):
+    service.delete("sid")
 
-
-def test_delete_does_not_affect_other_sessions(service):
-    a = service.create(user_id=1)
-    b = service.create(user_id=2)
-    service.delete(a.id)
-    assert service.get_user_id(b.id) == 2
+    repo.get_by_id.assert_not_called()
+    repo.create.assert_not_called()

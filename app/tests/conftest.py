@@ -15,6 +15,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.user import User
 from app.services.session_service import SessionService
+from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 
 # Si está definida, los tests corren contra Postgres (una base de tests aparte,
 # NUNCA la de desarrollo: el drop_all borra las tablas). Si no, SQLite en memoria.
@@ -102,3 +103,7 @@ def auth_cookies(db_session):
         return {"session_id": session.id}
 
     return _make
+
+@pytest.fixture
+def session_service(db_session):
+    return SessionService(SqlAlchemySessionRepository(db_session))
