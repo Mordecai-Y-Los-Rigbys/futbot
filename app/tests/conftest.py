@@ -14,11 +14,16 @@ from app import models  # noqa: F401  (registra todos los modelos en Base.metada
 from app.database import Base, get_db
 from app.main import app
 from app.models.user import User
+from app.models.behavior import Behavior
 from app.services.session_service import SessionService
 
 # Si está definida, los tests corren contra Postgres (una base de tests aparte,
 # NUNCA la de desarrollo: el drop_all borra las tablas). Si no, SQLite en memoria.
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+# TEST_DATABASE_URL = os.environ.get(
+#    "TEST_DATABASE_URL",
+#    "postgresql+psycopg2://futbot_user:futbot_pass@db:5432/futbot_test",
+# )
 
 if TEST_DATABASE_URL and not TEST_DATABASE_URL.rsplit("/", 1)[-1].endswith("_test"):
     raise RuntimeError("TEST_DATABASE_URL debe apuntar a una base *_test")
@@ -44,6 +49,12 @@ def db_session():
         Base.metadata.drop_all(engine)
         engine.dispose()
 
+# conftest.py
+@pytest.fixture()
+def make_user(db_session):
+    def _make(user_id: int) -> User:
+        return ensure_user(db_session, user_id)
+    return _make
 
 @pytest.fixture()
 def client(db_session):
@@ -74,6 +85,13 @@ def ensure_user(db_session, user_id: int) -> User:
         db_session.commit()
     return user
 
+def pytest_collection_modifyitems(config, items):
+    if not os.environ.get("TEST_DATABASE_URL"):
+        skip = pytest.mark.skip(reason="requiere TEST_DATABASE_URL")
+        for item in items:
+            if "integration" in item.keywords:
+                item.add_marker(skip)
+
 
 @pytest.fixture()
 def auth_cookies(db_session):
@@ -83,5 +101,19 @@ def auth_cookies(db_session):
         ensure_user(db_session, user_id)
         session = SessionService(db_session).create(user_id)
         return {"session_id": session.id}
+
+    return _make
+
+
+@pytest.fixture()
+def make_behaviors(db_session):
+    """Uso: make_behaviors(user_id=1, names=["a", "b"]) -> lista de Behavior"""
+
+    def _make(user_id: int, names: list[str]) -> list[Behavior]:
+        ensure_user(db_session, user_id)
+        rows = [Behavior(user_id=user_id, name=n, code="") for n in names]
+        db_session.add_all(rows)
+        db_session.commit()
+        return rows
 
     return _make

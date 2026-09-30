@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.database import engine, Base
 from app.errors import ApiError, api_error_handler
-
+from app import models  # noqa: F401  (registra los modelos en Base.metadata)
+from app.api.behaviors import router as behaviors_router
 
 load_dotenv()
 
@@ -12,7 +13,6 @@ load_dotenv()
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Futbot API")
-
 
 # Task 0.2: Configuración de CORS
 origins = [
@@ -28,6 +28,7 @@ app.add_middleware(
 )
 
 app.add_exception_handler(ApiError, api_error_handler)
+app.include_router(behaviors_router)
 
 
 # Task 0.1: Endpoint de prueba

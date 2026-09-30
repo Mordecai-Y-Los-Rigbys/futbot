@@ -1,0 +1,46 @@
+import re
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user_id
+from app.database import get_db
+from app.errors import ApiError
+from app.schemas.behavior import BehaviorPage, BehaviorSummary
+from app.services.behavior_service import PAGE_SIZE, BehaviorService
+
+router = APIRouter(prefix="/behaviors", tags=["behaviors"])
+
+MAX_PAGE = 2147483647
+_INT_RE = re.compile(r"-?[0-9]+")  # solo dígitos ASCII
+
+
+def parse_page(raw: str) -> int:
+    if not _INT_RE.fullmatch(raw):
+        raise ApiError(400, "pageNotAnInteger", "`page` debe ser un entero.")
+    try:
+        value = int(raw)
+    except ValueError:  # cadenas de miles de dígitos (límite de int() en Python)
+        raise ApiError(400, "pageTooLarge", f"`page` no puede superar {MAX_PAGE}.")
+    if value < 1:
+        raise ApiError(400, "pageBelowMinimum", "`page` debe ser al menos 1.")
+    if value > MAX_PAGE:
+        raise ApiError(400, "pageTooLarge", f"`page` no puede superar {MAX_PAGE}.")
+    return value
+
+
+@router.get("/me", response_model=BehaviorPage)
+def list_behaviors(
+    name: str | None = Query(default=None),
+    page: str = Query(default="1"),
+    user_id: int = Depends(get_current_user_id),  # se resuelve antes: 401 gana sobre 400
+    db: Session = Depends(get_db),
+):
+    page_number = parse_page(page)
+    items, total = BehaviorService(db).list_behaviors(user_id, name, page_number)
+    return BehaviorPage(
+        items=[BehaviorSummary.model_validate(i) for i in items],
+        page=page_number,
+        pageSize=PAGE_SIZE,
+        total=total,
+    )
