@@ -18,10 +18,14 @@ from app.services.session_service import SessionService
 
 # Si está definida, los tests corren contra Postgres (una base de tests aparte,
 # NUNCA la de desarrollo: el drop_all borra las tablas). Si no, SQLite en memoria.
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+psycopg2://futbot_user:futbot_pass@db:5432/futbot_test",
-)
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+# TEST_DATABASE_URL = os.environ.get(
+#    "TEST_DATABASE_URL",
+#    "postgresql+psycopg2://futbot_user:futbot_pass@db:5432/futbot_test",
+# )
+
+if TEST_DATABASE_URL and not TEST_DATABASE_URL.rsplit("/", 1)[-1].endswith("_test"):
+    raise RuntimeError("TEST_DATABASE_URL debe apuntar a una base *_test")
 
 
 @pytest.fixture()
@@ -44,6 +48,12 @@ def db_session():
         Base.metadata.drop_all(engine)
         engine.dispose()
 
+# conftest.py
+@pytest.fixture()
+def make_user(db_session):
+    def _make(user_id: int) -> User:
+        return ensure_user(db_session, user_id)
+    return _make
 
 @pytest.fixture()
 def client(db_session):
@@ -56,9 +66,9 @@ def client(db_session):
 
 
 def ensure_user(db_session, user_id: int) -> User:
-    """
+    """behav
     Crea el usuario si no existe. SQLite no hace cumplir las FK, pero Postgres sí:
-    sin esto, crear un behavior o una sesión para un user_id inexistente falla.
+    Util para tests varios.
     """
     user = db_session.get(User, user_id)
     if user is None:

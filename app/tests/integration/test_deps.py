@@ -8,7 +8,8 @@ from app.models.session import UserSession
 from app.services.session_service import SessionService
 
 
-def test_valid_session_returns_user_id(db_session):
+def test_valid_session_returns_user_id(db_session, make_user):
+    make_user(7)
     session = SessionService(db_session).create(user_id=7)
 
     assert get_current_user_id(session_id=session.id, db=db_session) == 7
@@ -30,7 +31,8 @@ def test_unknown_session_raises_401(db_session):
     assert exc.value.code is None
 
 
-def test_expired_session_raises_401(db_session):
+def test_expired_session_raises_401(db_session, make_user):
+    make_user(7)
     now = datetime.now(timezone.utc)
     db_session.add(
         UserSession(
@@ -48,7 +50,8 @@ def test_expired_session_raises_401(db_session):
     assert exc.value.status_code == 401
 
 
-def test_deleted_session_raises_401(db_session):
+def test_deleted_session_raises_401(db_session, make_user):
+    make_user(7)
     service = SessionService(db_session)
     session = service.create(user_id=7)
     service.delete(session.id)
