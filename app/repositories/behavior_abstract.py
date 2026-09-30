@@ -7,7 +7,7 @@ class BehaviorData(BaseModel):
     id: int
     user_id: int
     name: str
-    # agregá acá el resto de las columnas de Behavior que use tu API
+    code: str
 
     model_config = {"from_attributes": True}
 

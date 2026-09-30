@@ -4,4 +4,4 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 pytest
-httpx
+httpx2

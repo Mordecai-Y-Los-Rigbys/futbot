@@ -16,9 +16,8 @@ def cookies_for(user_id):
     return {"session_id": f"sid-{user_id}"}
 
 
-def behavior(id, name, user_id=1):
-    return BehaviorData(id=id, user_id=user_id, name=name)
-
+def behavior(id, name, user_id=1, code="def behave(): pass"):
+    return BehaviorData(id=id, user_id=user_id, name=name, code=code)
 
 def names(r):
     return [i["name"] for i in r.json()["items"]]
