@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.database import engine, Base
 from app.errors import ApiError, api_error_handler
+from app.api.leagues import router as leagues_router
 
 
 load_dotenv()
@@ -13,6 +14,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Futbot API")
 
+app.include_router(leagues_router)
 
 # Task 0.2: Configuración de CORS
 origins = [
