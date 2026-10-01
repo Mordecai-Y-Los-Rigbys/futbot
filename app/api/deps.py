@@ -1,10 +1,14 @@
-from fastapi import Cookie, Depends
+import json
+from typing import Any
+
+from fastapi import Cookie, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.errors import ApiError
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.services.league_validation import INVALID_JSON
 from app.services.session_service import SessionService
 from app.services.league_service import LeagueService
 from app.services.behavior_service import BehaviorService
@@ -38,3 +42,21 @@ def get_current_user_id(
         raise ApiError(401, None, "Sin sesión válida.")
 
     return user_id
+
+
+async def get_json_body(
+    request: Request,
+    _user_id: int = Depends(get_current_user_id),  # 401 antes de tocar el body
+) -> Any:
+    """
+    Devuelve el body JSON crudo (sin validar). None si viene vacío,
+    INVALID_JSON si no se pudo parsear. Las validaciones y sus códigos
+    viven en el service (convención 6 de la API Rest).
+    """
+    raw = await request.body()
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return INVALID_JSON
