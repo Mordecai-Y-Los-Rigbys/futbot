@@ -3,7 +3,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-
+from app.database import engine, Base
+from app.errors import ApiError, api_error_handler, register_validation_exception_handler
+from app import models  # noqa: F401  (registra los modelos en Base.metadata)
+from app.api.behaviors import router as behaviors_router
 from app.api import auth
 from app.database import Base, engine
 from app.errors import (
@@ -42,6 +45,7 @@ app.add_middleware(
 )
 
 app.add_exception_handler(ApiError, api_error_handler)
+app.include_router(behaviors_router)
 
 
 # Task 0.1: Endpoint de prueba
