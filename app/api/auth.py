@@ -71,7 +71,11 @@ def user_login(
     
     user = user_repo.get_by_email(request.email)
 
-    if not user or not verify_password(request.password, user.password_hash):
+    if (
+        len(request.password) > 72
+        or not user 
+        or not verify_password(request.password, user.password_hash)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales inválidas"
