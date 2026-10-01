@@ -1,4 +1,7 @@
-from fastapi import Cookie, Depends
+import json
+from typing import Any
+
+from fastapi import Cookie, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -7,6 +10,7 @@ from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.services.player_service import PlayerService
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.services.league_validation import INVALID_JSON
 from app.services.session_service import SessionService
 from app.services.league_service import LeagueService
 from app.services.behavior_service import BehaviorService
@@ -22,6 +26,8 @@ def get_session_service(db: Session = Depends(get_db)) -> SessionService:
 def get_league_service(db: Session = Depends(get_db)) -> LeagueService:
     return LeagueService(SqlAlchemyLeagueRepository(db))
 
+def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
+    return PlayerService(SqlAlchemyPlayerRepository(db))
 
 def get_current_user_id(
     session_id: str | None = Cookie(default=None),
@@ -41,5 +47,20 @@ def get_current_user_id(
 
     return user_id
 
-def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
-    return PlayerService(SqlAlchemyPlayerRepository(db))
+
+async def get_json_body(
+    request: Request,
+    _user_id: int = Depends(get_current_user_id),  # 401 antes de tocar el body
+) -> Any:
+    """
+    Devuelve el body JSON crudo (sin validar). None si viene vacío,
+    INVALID_JSON si no se pudo parsear. Las validaciones y sus códigos
+    viven en el service (convención 6 de la API Rest).
+    """
+    raw = await request.body()
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return INVALID_JSON

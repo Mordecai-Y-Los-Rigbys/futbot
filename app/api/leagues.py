@@ -1,9 +1,16 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_current_user_id, get_league_service
+from app.api.deps import get_current_user_id, get_json_body, get_league_service
 from app.api.pagination import parse_page
-from app.schemas.errors import Error, ListPageBadRequest
-from app.schemas.league import LeaguePage
+from app.schemas.errors import (
+    CreateLeagueBadRequest,
+    CreateLeagueConflict,
+    Error,
+    ListPageBadRequest,
+)
+from app.schemas.league import LeaguePage, LeagueSummary
 from app.services.league_service import LeagueService
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
@@ -26,3 +33,23 @@ def list_leagues(
     service: LeagueService = Depends(get_league_service),
 ) -> LeaguePage:
     return service.list_leagues(name=name, page=parse_page(page))
+
+
+@router.post(
+    "",
+    response_model=LeagueSummary,
+    status_code=201,
+    operation_id="createLeague",
+    summary="Crear una liga",
+    responses={
+        400: {"model": CreateLeagueBadRequest},
+        401: {"model": Error},
+        409: {"model": CreateLeagueConflict},
+    },
+)
+def create_league(
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),
+    service: LeagueService = Depends(get_league_service),
+) -> LeagueSummary:
+    return service.create_league(creator_id=user_id, body=body)

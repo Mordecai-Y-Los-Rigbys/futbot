@@ -7,6 +7,7 @@ from app.api.deps import get_league_service, get_session_service
 from app.main import app
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
+    CreateLeagueData,
     LeagueCreatorData,
     LeagueListItemData,
     LeaguePageData,
@@ -20,10 +21,33 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def __init__(self):
         self.calls = []
         self.page = LeaguePageData(items=[], total=0)
+        self.owns_all = True  # False: ningún jugador/behavior es del usuario
+        self.created: list[CreateLeagueData] = []
 
     def list_page(self, name, offset, limit):
         self.calls.append({"name": name, "offset": offset, "limit": limit})
         return self.page
+
+    def owned_player_ids(self, user_id, ids):
+        return set(ids) if self.owns_all else set()
+
+    def owned_behavior_ids(self, user_id, ids):
+        return set(ids) if self.owns_all else set()
+
+    def create(self, data):
+        self.created.append(data)
+        return LeagueListItemData(
+            id=1,
+            name=data.name,
+            creator=LeagueCreatorData(
+                id=7, username="mgonzalez", club_name="Boca Juniors FC"
+            ),
+            status="preparation",
+            participants_count=1,
+            max_participants=data.max_participants,
+            private=data.private,
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
 
 
 class FakeSessionService:
