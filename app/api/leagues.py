@@ -1,7 +1,10 @@
-from app.schemas.league import LeaguePage
-from app.schemas.errors import ListPageBadRequest, Error
-from app.services.league_service import LeagueService
+from fastapi import APIRouter, Depends, Query
+
+from app.api.deps import get_current_user_id, get_league_service
 from app.api.pagination import parse_page
+from app.schemas.errors import Error, ListPageBadRequest
+from app.schemas.league import LeaguePage
+from app.services.league_service import LeagueService
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
 
