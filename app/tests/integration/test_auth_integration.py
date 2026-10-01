@@ -109,3 +109,47 @@ def test_register_duplicate_email_conflict_409():
     data = res2.json()
     assert data["code"] is None
     assert data["message"] is not None
+    
+# --- TESTS PARA POST /auth/log-in ---
+
+def test_login_missing_and_empty_fields():
+    """Valida que la ausencia de campos o campos vacíos devuelva 400 con incompleteForm."""
+    payloads = [
+        {},  # Faltan ambos
+        {"email": "test@test.com"},  # Falta password
+        {"password": "password123"},  # Falta email
+        {"email": "", "password": "password123"},  # Email vacío
+        {"email": "test@test.com", "password": ""},  # Password vacía
+        {"email": "", "password": ""}  # Ambos vacíos
+    ]
+    
+    for payload in payloads:
+        response = client.post("/auth/log-in", json=payload)
+        assert response.status_code == 400
+        data = response.json()
+        assert data["code"] == "incompleteForm"
+        assert data["message"] == "Completá el email y la contraseña."
+
+def test_login_invalid_email_format():
+    """Valida el rechazo de emails mal formados en la validación inicial con invalidEmail."""
+    invalid_emails = ["sin-arroba", "test@", "@dominio.com", "espacio @gmail.com"]
+    
+    for email in invalid_emails:
+        response = client.post("/auth/log-in", json={"email": email, "password": "password123"})
+        assert response.status_code == 400
+        data = response.json()
+        assert data["code"] == "invalidEmail"
+
+def test_login_invalid_field_types():
+    """Valida que tipos incorrectos (ej. enteros en vez de strings) devuelvan invalidFieldType."""
+    payloads = [
+        {"email": 12345, "password": "password123"},
+        {"email": "test@test.com", "password": 12345},
+        {"email": True, "password": ["array"]}
+    ]
+    
+    for payload in payloads:
+        response = client.post("/auth/log-in", json=payload)
+        assert response.status_code == 400
+        data = response.json()
+        assert data["code"] == "invalidFieldType"

@@ -1,6 +1,6 @@
 import pytest
 from app.models.user import User
-from app.models.session import UserSession  # Ajustá la ruta si está en otro archivo
+from app.models.session import UserSession
 
 def get_valid_payload():
     return {
@@ -156,3 +156,110 @@ def test_register_multiple_errors_simultaneously(client, db_session):
     assert {"field": "password", "reason": "required"} in errors
 
     assert db_session.query(User).count() == 0
+    
+# --- TESTS PARA POST /auth/log-in ---
+
+def test_login_success(client, db_session):
+    """Valida el inicio de sesión exitoso, el retorno de datos sin hash y la creación de sesión."""
+    # 1. Setup: Crear un usuario válido mediante el endpoint de registro
+    register_payload = get_valid_payload()
+    client.post("/auth/register", json=register_payload)
+    
+    # 2. Ejecutar el login
+    login_payload = {
+        "email": register_payload["email"],
+        "password": register_payload["password"]
+    }
+    response = client.post("/auth/log-in", json=login_payload)
+    
+    # 3. Validar código y contrato de respuesta (200 OK)
+    assert response.status_code == 200
+    data = response.json()
+    assert "id" in data
+    assert data["username"] == register_payload["username"]
+    assert data["clubName"] == register_payload["clubName"]
+    assert "password" not in data
+    assert "password_hash" not in data
+
+    # 4. Validar creación de sesión y cookie
+    assert "set-cookie" in response.headers
+    assert "session_id=" in response.headers["set-cookie"]
+    
+    # Extraer el ID de la cookie para verificar en DB
+    cookie_str = response.headers["set-cookie"]
+    session_id = cookie_str.split("session_id=")[1].split(";")[0]
+    
+    session_in_db = db_session.query(UserSession).filter(UserSession.id == session_id).first()
+    assert session_in_db is not None
+
+def test_login_invalid_credentials_401(client, db_session):
+    """Valida que un email no registrado o contraseña incorrecta devuelvan el mismo 401."""
+    # 1. Setup: Registrar un usuario
+    register_payload = get_valid_payload()
+    client.post("/auth/register", json=register_payload)
+    
+    # 2. Casos de credenciales inválidas
+    invalid_cases = [
+        {"email": "noexiste@dominio.com", "password": register_payload["password"]}, # Email no existe
+        {"email": register_payload["email"], "password": "PasswordIncorrecta!"}      # Pass incorrecta
+    ]
+    
+    for payload in invalid_cases:
+        response = client.post("/auth/log-in", json=payload)
+        
+        assert response.status_code == 401
+        data = response.json()
+        assert data["code"] is None
+        assert data["message"] == "Email o contraseña incorrectos."
+        
+        # Verificar que no se setea la cookie ni se crea una sesión
+        assert "set-cookie" not in response.headers
+
+def test_login_password_length_limits(client, db_session):
+    """Valida que una pass de 72 chars funcione, y una de 73 chars sea rechazada con 401."""
+    pass_72 = "a" * 72
+    payload_72 = get_valid_payload()
+    payload_72["email"] = "limite72@dominio.com"
+    payload_72["password"] = pass_72
+    
+    # Registrar usuario con pass de 72 chars
+    client.post("/auth/register", json=payload_72)
+    
+    # Intentar login con 73 caracteres (excede el límite, debe dar 401 genérico)
+    response_73 = client.post(
+        "/auth/log-in", 
+        json={"email": payload_72["email"], "password": pass_72 + "a"}
+    )
+    assert response_73.status_code == 401
+    assert response_73.json()["message"] == "Email o contraseña incorrectos."
+    
+    # Intentar login con los 72 caracteres exactos (debe dar 200)
+    response_72 = client.post(
+        "/auth/log-in", 
+        json={"email": payload_72["email"], "password": pass_72}
+    )
+    assert response_72.status_code == 200
+    assert "set-cookie" in response_72.headers
+
+def test_login_password_with_spaces_not_trimmed(client, db_session):
+    """Valida que las contraseñas con espacios no se recorten antes de verificar."""
+    pass_with_spaces = "  password  "
+    payload = get_valid_payload()
+    payload["email"] = "espacios@dominio.com"
+    payload["password"] = pass_with_spaces
+    
+    client.post("/auth/register", json=payload)
+    
+    # Login con espacios recortados (debe fallar)
+    response_trimmed = client.post(
+        "/auth/log-in", 
+        json={"email": payload["email"], "password": "password"}
+    )
+    assert response_trimmed.status_code == 401
+    
+    # Login con espacios originales (debe pasar)
+    response_exact = client.post(
+        "/auth/log-in", 
+        json={"email": payload["email"], "password": pass_with_spaces}
+    )
+    assert response_exact.status_code == 200

@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.errors import ApiError
-from app.schemas.auth import RegisterUserRequest, UserResponse
-from app.services.security_service import hash_password
+from app.schemas.auth import RegisterUserRequest, UserResponse, LogInRequest
+from app.services.security_service import hash_password, verify_password
 from app.services.session_service import SessionService
 from app.repositories.user_repository import UserRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
@@ -76,9 +76,10 @@ def user_login(
         or not user 
         or not verify_password(request.password, user.password_hash)
     ):
-        raise HTTPException(
+        raise ApiError(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales inválidas"
+            code=None,
+            message="Email o contraseña incorrectos.",
         )
 
     # Creamos el repositorio de sesión y se lo inyectamos al servicio
