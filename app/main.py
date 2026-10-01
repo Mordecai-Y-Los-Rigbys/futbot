@@ -3,8 +3,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-
+from app import models  # noqa: F401  (registra los modelos en Base.metadata)
 from app.api import auth
+from app.api.leagues import router as leagues_router
+from app.api.behaviors import router as behaviors_router
 from app.database import Base, engine
 from app.errors import (
     ApiError,
@@ -21,6 +23,7 @@ app = FastAPI(title="Futbot API")
 
 # Routeamos auth
 app.include_router(auth.router)
+app.include_router(leagues_router)
 app.add_exception_handler(
     RequestValidationError, register_validation_exception_handler
 )
@@ -39,6 +42,7 @@ app.add_middleware(
 )
 
 app.add_exception_handler(ApiError, api_error_handler)
+app.include_router(behaviors_router)
 
 
 # Task 0.1: Endpoint de prueba
