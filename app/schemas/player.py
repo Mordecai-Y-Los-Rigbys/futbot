@@ -1,9 +1,7 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
+from app.schemas.base import CamelModel
 
-
-class PlayerResponse(BaseModel):
-    id: int
-    name: str
+class PlayerStats(CamelModel):
     power: int
     agility: int
     control: int
@@ -11,3 +9,16 @@ class PlayerResponse(BaseModel):
     speed: int
 
     model_config = ConfigDict(from_attributes=True)
+    
+class PlayerResponse(CamelModel):
+    id: int
+    name: str
+    stats: PlayerStats
+    deletable: bool
+
+
+class PlayerPage(CamelModel):
+    items: list[PlayerResponse]
+    page: int
+    page_size: int 
+    total: int

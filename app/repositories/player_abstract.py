@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class PlayerData(BaseModel):
@@ -13,11 +12,13 @@ class PlayerData(BaseModel):
     strength: int
     speed: int
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = {"from_attributes": True}
 
 
 class AbstractPlayerRepository(ABC):
     @abstractmethod
-    def list_by_user_id(self, user_id: int) -> list[PlayerData]:
+    def list_by_user(
+        self, user_id: int, name: str | None, offset: int, limit: int
+    ) -> tuple[list[PlayerData], int]:
         """Devuelve la plantilla de jugadores pertenecientes al usuario."""
         pass
