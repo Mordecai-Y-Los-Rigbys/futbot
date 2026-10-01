@@ -1,14 +1,31 @@
+import re
+
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_behavior_service, get_current_user_id
 from app.api.pagination import parse_page
-from app.schemas.behavior import BehaviorPage, BehaviorSummary
+from app.errors import ApiError
+from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
 from app.schemas.errors import Error, ListPageBadRequest
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
 
+MAX_ID = 2147483647
+_ID_RE = re.compile(r"[0-9]{1,10}")  # solo dígitos ASCII, largo acotado
 
+
+def parse_path_id(raw: str) -> int:
+    """Un id que no puede identificar ningún recurso es un recurso inexistente (404)."""
+    if not _ID_RE.fullmatch(raw):
+        raise ApiError(404, None, "Comportamiento no encontrado.")
+    value = int(raw)
+    if value < 1 or value > MAX_ID:
+        raise ApiError(404, None, "Comportamiento no encontrado.")
+    return value
+
+
+# /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.
 @router.get(
     "/me",
     response_model=BehaviorPage,
@@ -28,6 +45,25 @@ def list_behaviors(
     return BehaviorPage(
         items=[BehaviorSummary.model_validate(i) for i in items],
         page=page_number,
-        pageSize=PAGE_SIZE,
+        page_size=PAGE_SIZE,
         total=total,
     )
+
+
+@router.get(
+    "/{behavior_id}",
+    response_model=BehaviorDetail,
+    operation_id="getBehavior",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def get_behavior(
+    behavior_id: str,  # str y no int: un "abc" daría 422 antes de llegar acá
+    user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    service: BehaviorService = Depends(get_behavior_service),
+):
+    behavior = service.get_owned_behavior(user_id, parse_path_id(behavior_id))
+    return BehaviorDetail.model_validate(behavior)
