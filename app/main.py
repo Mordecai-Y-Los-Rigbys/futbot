@@ -11,6 +11,7 @@ from app.errors import (
     api_error_handler,
     register_validation_exception_handler,
 )
+from app.api.players import router as players_router
 
 load_dotenv()
 
@@ -24,6 +25,8 @@ app.include_router(auth.router)
 app.add_exception_handler(
     RequestValidationError, register_validation_exception_handler
 )
+
+app.include_router(players_router)
 
 # Task 0.2: Configuración de CORS
 origins = [
