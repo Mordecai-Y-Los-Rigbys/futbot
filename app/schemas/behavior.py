@@ -1,4 +1,3 @@
-from pydantic import BaseModel, ConfigDict
 from app.schemas.base import CamelModel
 
 
@@ -12,18 +11,11 @@ class BehaviorSummary(CamelModel):
 class BehaviorPage(CamelModel):
     items: list[BehaviorSummary]
     page: int
-<<<<<<< HEAD
-    pageSize: int
+    page_size: int
     total: int
 
 
-class BehaviorDetail(BaseModel):
-    model_config = ConfigDict(from_attributes=True)  # pydantic v1: orm_mode = True
-
+class BehaviorDetail(CamelModel):
     id: int
     name: str
     code: str
-=======
-    page_size: int
-    total: int
->>>>>>> aaff84b04eb8edecc4312480874a064b22e72e26
