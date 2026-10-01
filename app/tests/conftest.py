@@ -50,7 +50,23 @@ def db_session():
         Base.metadata.drop_all(engine)
         engine.dispose()
 
-# conftest.py
+@pytest.fixture()
+def make_behaviors(db_session):
+    """make_behaviors(user_id, names) -> list[Behavior], en orden de creación."""
+
+    def _make(user_id: int, names, code: str = "def behave(): pass") -> list[Behavior]:
+        ensure_user(db_session, user_id)
+        created = []
+        for name in names:
+            b = Behavior(user_id=user_id, name=name, code=code)
+            db_session.add(b)
+            db_session.commit()  # uno a uno: ids crecientes en el orden dado
+            db_session.refresh(b)
+            created.append(b)
+        return created
+
+    return _make
+
 @pytest.fixture()
 def make_user(db_session):
     def _make(user_id: int) -> User:
@@ -66,6 +82,17 @@ def client(db_session):
     yield TestClient(app)
     app.dependency_overrides.clear()
 
+
+@pytest.fixture()
+def login(client, auth_cookies):
+    """login(user_id) -> client con la cookie seteada en el cliente (no por request)."""
+
+    def _login(user_id: int):
+        client.cookies.clear()
+        client.cookies.set("session_id", auth_cookies(user_id)["session_id"])
+        return client
+
+    return _login
 
 def ensure_user(db_session, user_id: int) -> User:
     """
@@ -95,10 +122,13 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture()
-def auth_cookies(db_session, session_service):
+def auth_cookies(db_session):
+    """Uso: auth_cookies(user_id=1) -> {"session_id": "<token>"}"""
+
     def _make(user_id: int) -> dict:
         ensure_user(db_session, user_id)
-        session = session_service.create(user_id)
+        repo = SqlAlchemySessionRepository(db_session)
+        session = SessionService(repo).create(user_id)
         return {"session_id": session.id}
 
     return _make
@@ -106,20 +136,3 @@ def auth_cookies(db_session, session_service):
 @pytest.fixture
 def session_service(db_session):
     return SessionService(SqlAlchemySessionRepository(db_session))
-
-@pytest.fixture()
-def make_behaviors(db_session):
-    """make_behaviors(user_id, names) -> list[Behavior], en orden de creación."""
-
-    def _make(user_id: int, names, code: str = "def behave(): pass") -> list[Behavior]:
-        ensure_user(db_session, user_id)
-        created = []
-        for name in names:
-            b = Behavior(user_id=user_id, name=name, code=code)
-            db_session.add(b)
-            db_session.commit()  # uno a uno: ids crecientes en el orden dado
-            db_session.refresh(b)
-            created.append(b)
-        return created
-
-    return _make
