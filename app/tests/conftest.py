@@ -68,7 +68,7 @@ def client(db_session):
 
 
 def ensure_user(db_session, user_id: int) -> User:
-    """behav
+    """
     Crea el usuario si no existe. SQLite no hace cumplir las FK, pero Postgres sí:
     Util para tests varios.
     """

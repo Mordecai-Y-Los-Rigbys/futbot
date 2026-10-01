@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.database import engine, Base
-from app.errors import ApiError, api_error_handler
+from app.errors import ApiError, api_error_handler, register_validation_exception_handler
 from app import models  # noqa: F401  (registra los modelos en Base.metadata)
 from app.api.behaviors import router as behaviors_router
 from app.api import auth
