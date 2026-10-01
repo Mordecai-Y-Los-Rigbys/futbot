@@ -30,7 +30,9 @@ def test_get_my_players_empty_list(make_user, auth_cookies, client):
     user = make_user(1)
     cookies = auth_cookies(user.id)
 
-    resp = client.get("/players/me", cookies=cookies)
+    client.cookies.update(cookies)  
+
+    resp = client.get("/players/me")
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -47,7 +49,8 @@ def test_get_my_players_returns_only_owned_players(
 
     cookies = auth_cookies(user1.id)
 
-    resp = client.get("/players/me", cookies=cookies)
+    client.cookies.update(cookies)  
+    resp = client.get("/players/me")
 
     assert resp.status_code == 200
     data = resp.json()
