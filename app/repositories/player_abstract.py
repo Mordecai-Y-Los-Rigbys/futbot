@@ -1,0 +1,26 @@
+from abc import ABC, abstractmethod
+from pydantic import BaseModel
+
+
+class PlayerData(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    power: int
+    agility: int
+    control: int
+    strength: int
+    speed: int
+    
+    deletable: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class AbstractPlayerRepository(ABC):
+    @abstractmethod
+    def list_by_user(
+        self, user_id: int, name: str | None, offset: int, limit: int
+    ) -> tuple[list[PlayerData], int]:
+        """Devuelve la plantilla de jugadores pertenecientes al usuario."""
+        pass

@@ -5,8 +5,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (registra los modelos en Base.metadata)
 from app.api import auth
-from app.api.leagues import router as leagues_router
 from app.api.behaviors import router as behaviors_router
+from app.api.leagues import router as leagues_router
+from app.api.players import router as players_router
 from app.database import Base, engine
 from app.errors import (
     ApiError,
@@ -28,6 +29,8 @@ app.include_router(behaviors_router)
 app.add_exception_handler(
     RequestValidationError, register_validation_exception_handler
 )
+
+app.include_router(players_router)
 
 # Task 0.2: Configuración de CORS
 origins = [

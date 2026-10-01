@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.errors import ApiError
+from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
+from app.services.player_service import PlayerService
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
@@ -26,6 +28,8 @@ def get_session_service(db: Session = Depends(get_db)) -> SessionService:
 def get_league_service(db: Session = Depends(get_db)) -> LeagueService:
     return LeagueService(SqlAlchemyLeagueRepository(db))
 
+def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
+    return PlayerService(SqlAlchemyPlayerRepository(db))
 
 def get_current_user_id(
     session_id: str | None = Cookie(default=None),
