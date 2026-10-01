@@ -98,8 +98,7 @@ def pytest_collection_modifyitems(config, items):
 def auth_cookies(db_session, session_service):
     def _make(user_id: int) -> dict:
         ensure_user(db_session, user_id)
-        repo = SqlAlchemySessionRepository(db_session)
-        session = SessionService(repo).create(user_id)
+        session = session_service.create(user_id)
         return {"session_id": session.id}
 
     return _make
