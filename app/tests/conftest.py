@@ -79,7 +79,7 @@ def ensure_user(db_session, user_id: int) -> User:
             email=f"user{user_id}@test.com",
             password_hash="x",
             club_name=f"club{user_id}",
-            avatar="x",
+            avatar=1,
         )
         db_session.add(user)
         db_session.commit()
@@ -99,7 +99,8 @@ def auth_cookies(db_session, session_service):
 
     def _make(user_id: int) -> dict:
         ensure_user(db_session, user_id)
-        session = session_service.create(user_id)
+        repo = SqlAlchemySessionRepository(db_session)
+        session = SessionService(repo).create(user_id)
         return {"session_id": session.id}
 
     return _make

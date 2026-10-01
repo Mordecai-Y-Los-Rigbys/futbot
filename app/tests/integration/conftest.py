@@ -22,7 +22,7 @@ def create_user(db_session):
             email=f"{username}@test.com",
             password_hash="x",
             club_name=club_name or f"club-{username}",
-            avatar="x",
+            avatar=1,
         )
         db_session.add(user)
         db_session.commit()
