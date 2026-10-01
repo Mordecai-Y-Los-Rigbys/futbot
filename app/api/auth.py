@@ -52,3 +52,41 @@ def register_user(
     )
 
     return UserResponse.model_validate(new_user)
+
+
+@router.post(
+    "/log-in",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    response_model_by_alias=True,
+)
+def user_login(
+    request: LogInRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Autentica al usuario y establece una sesión"""  
+      
+    user_repo = UserRepository(db)
+    
+    user = user_repo.get_by_email(request.email)
+
+    if not user or not verify_password(request.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas"
+        )
+
+    # Creamos el repositorio de sesión y se lo inyectamos al servicio
+    session_repo = SqlAlchemySessionRepository(db)
+    session_service = SessionService(session_repo)
+    user_session = session_service.create(user_id=user.id)
+
+    response.set_cookie(
+        key="session_id",
+        value=user_session.id,
+        httponly=True,
+        samesite="lax",
+    )
+
+    return UserResponse.model_validate(user)
