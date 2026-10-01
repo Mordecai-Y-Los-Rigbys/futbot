@@ -14,6 +14,7 @@ from app import models  # noqa: F401  (registra todos los modelos en Base.metada
 from app.database import Base, get_db
 from app.main import app
 from app.models.user import User
+from app.models.behavior import Behavior
 from app.services.session_service import SessionService
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 
@@ -67,7 +68,7 @@ def client(db_session):
 
 
 def ensure_user(db_session, user_id: int) -> User:
-    """behav
+    """
     Crea el usuario si no existe. SQLite no hace cumplir las FK, pero Postgres sí:
     Util para tests varios.
     """
@@ -95,13 +96,9 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture()
 def auth_cookies(db_session, session_service):
-    """Uso: auth_cookies(user_id=1) -> {"session_id": "<token>"}"""
-
     def _make(user_id: int) -> dict:
         ensure_user(db_session, user_id)
         session = session_service.create(user_id)
-        repo = SqlAlchemySessionRepository(db_session)
-        session = SessionService(repo).create(user_id)
         return {"session_id": session.id}
 
     return _make
@@ -109,3 +106,20 @@ def auth_cookies(db_session, session_service):
 @pytest.fixture
 def session_service(db_session):
     return SessionService(SqlAlchemySessionRepository(db_session))
+
+@pytest.fixture()
+def make_behaviors(db_session):
+    """make_behaviors(user_id, names) -> list[Behavior], en orden de creación."""
+
+    def _make(user_id: int, names, code: str = "def behave(): pass") -> list[Behavior]:
+        ensure_user(db_session, user_id)
+        created = []
+        for name in names:
+            b = Behavior(user_id=user_id, name=name, code=code)
+            db_session.add(b)
+            db_session.commit()  # uno a uno: ids crecientes en el orden dado
+            db_session.refresh(b)
+            created.append(b)
+        return created
+
+    return _make
