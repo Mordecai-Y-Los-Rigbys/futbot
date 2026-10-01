@@ -1,4 +1,3 @@
-from pydantic import BaseModel, ConfigDict
 from app.schemas.base import CamelModel
 
 
@@ -14,3 +13,9 @@ class BehaviorPage(CamelModel):
     page: int
     page_size: int
     total: int
+
+
+class BehaviorDetail(CamelModel):
+    id: int
+    name: str
+    code: str

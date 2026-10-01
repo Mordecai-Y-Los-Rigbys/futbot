@@ -37,3 +37,7 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
         )
 
         return [BehaviorData.model_validate(r) for r in rows], total or 0
+    
+    def get_by_id(self, behavior_id: int) -> BehaviorData | None:
+        record = self.db.get(Behavior, behavior_id)
+        return BehaviorData.model_validate(record) if record is not None else None

@@ -1,3 +1,4 @@
+from app.errors import ApiError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
@@ -21,3 +22,12 @@ class BehaviorService:
         return self.repository.list_by_user(
             user_id=user_id, name=name, offset=offset, limit=PAGE_SIZE
         )
+
+    def get_owned_behavior(self, user_id: int, behavior_id: int) -> BehaviorData:
+        """404 si no existe, 403 si es de otro usuario. Solo lectura."""
+        behavior = self.repository.get_by_id(behavior_id)
+        if behavior is None:
+            raise ApiError(404, None, "Comportamiento no encontrado.")
+        if behavior.user_id != user_id:
+            raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
+        return behavior

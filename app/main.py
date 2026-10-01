@@ -24,6 +24,7 @@ app = FastAPI(title="Futbot API")
 # Routeamos auth
 app.include_router(auth.router)
 app.include_router(leagues_router)
+app.include_router(behaviors_router)
 app.add_exception_handler(
     RequestValidationError, register_validation_exception_handler
 )
@@ -42,7 +43,6 @@ app.add_middleware(
 )
 
 app.add_exception_handler(ApiError, api_error_handler)
-app.include_router(behaviors_router)
 
 
 # Task 0.1: Endpoint de prueba
