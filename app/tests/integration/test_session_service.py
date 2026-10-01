@@ -19,7 +19,7 @@ def user(db_session):
         email="pg@test.com",
         password_hash="x",
         club_name="club",
-        avatar="a",
+        avatar=1,
     )
     db_session.add(u)
     db_session.commit()
