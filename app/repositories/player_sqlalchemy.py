@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, select, literal
 from sqlalchemy.orm import Session
 
 from app.models.player import Player
@@ -25,12 +25,24 @@ class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
             select(func.count()).select_from(Player).where(*filters)
         ) or 0
         
-        rows = self.db.scalars(
-            select(Player)
+        # --- ESQUELETO DE DELETABLE ---
+        # TODO: Reemplazar literal(True) por subconsultas EXISTS cuando
+        # existan los modelos de Ligas y Partidos, chequear si esta en un partido en juego, 
+        # o si esta en una liga no finalizada.
+        is_deletable = literal(True).label("deletable")
+        
+        rows = self.db.execute(
+            select(Player, is_deletable)
             .where(*filters)
             .order_by(Player.id.asc())
             .offset(offset)
             .limit(limit)
         ).all()
+        
+        result = []
+        for player_obj, deletable_flag in rows:
+            data = PlayerData.model_validate(player_obj)
+            data.deletable = deletable_flag
+            result.append(data)
     
-        return [PlayerData.model_validate(p) for p in rows], total
+        return result, total

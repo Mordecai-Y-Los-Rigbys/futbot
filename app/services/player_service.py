@@ -27,7 +27,7 @@ class PlayerService:
                 id=p.id,
                 name=p.name,
                 stats=stats,
-                deletable=True  
+                deletable=p.deletable  
             ))
             
         return items, total

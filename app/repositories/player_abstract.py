@@ -11,6 +11,8 @@ class PlayerData(BaseModel):
     control: int
     strength: int
     speed: int
+    
+    deletable: bool = False
 
     model_config = {"from_attributes": True}
 
