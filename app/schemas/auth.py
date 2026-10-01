@@ -37,3 +37,8 @@ class ErrorResponse(BaseModel):
 
     code: str | None
     message: str
+    
+class LogInRequest(BaseModel):
+    
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=72)
