@@ -1,11 +1,23 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, 
+    func, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.user import User
+
+class League(Base):
+    __tablename__ = "leagues"
+    # ...columnas...
+
+    __table_args__ = (
+        CheckConstraint(
+            "NOT private OR password IS NOT NULL",
+            name="check_private_league_has_password",
+        ),
+    )
 
 
 class LeagueStatus(str, enum.Enum):
