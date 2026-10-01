@@ -94,7 +94,7 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture()
-def auth_cookies(db_session, session_service):
+def auth_cookies(db_session):
     """Uso: auth_cookies(user_id=1) -> {"session_id": "<token>"}"""
 
     def _make(user_id: int) -> dict:
