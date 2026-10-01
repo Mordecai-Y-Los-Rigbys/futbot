@@ -1,17 +1,35 @@
-from fastapi import Cookie, Depends
+import json
+from typing import Any
+
+from fastapi import Cookie, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.errors import ApiError
-from app.services.session_service import SessionService
+from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
+from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.services.behavior_service import BehaviorService
+from app.services.league_service import LeagueService
+from app.services.league_validation import INVALID_JSON
+from app.services.session_service import SessionService
+
 
 def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
-    return BehaviorService(db)
+    return BehaviorService(SqlAlchemyBehaviorRepository(db))
+
+
+def get_session_service(db: Session = Depends(get_db)) -> SessionService:
+    return SessionService(SqlAlchemySessionRepository(db))
+
+
+def get_league_service(db: Session = Depends(get_db)) -> LeagueService:
+    return LeagueService(SqlAlchemyLeagueRepository(db))
+
 
 def get_current_user_id(
     session_id: str | None = Cookie(default=None),
-    db: Session = Depends(get_db),
+    service: SessionService = Depends(get_session_service),
 ) -> int:
     """
     Devuelve el user_id de la sesión actual. Lanza 401 (code: null) si no hay
@@ -21,8 +39,26 @@ def get_current_user_id(
     if not session_id:
         raise ApiError(401, None, "Sin sesión válida.")
 
-    user_id = SessionService(db).get_user_id(session_id)
+    user_id = service.get_user_id(session_id)
     if user_id is None:
         raise ApiError(401, None, "Sin sesión válida.")
 
     return user_id
+
+
+async def get_json_body(
+    request: Request,
+    _user_id: int = Depends(get_current_user_id),  # 401 antes de tocar el body
+) -> Any:
+    """
+    Devuelve el body JSON crudo (sin validar). None si viene vacío,
+    INVALID_JSON si no se pudo parsear. Las validaciones y sus códigos
+    viven en el service (convención 6 de la API Rest).
+    """
+    raw = await request.body()
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return INVALID_JSON

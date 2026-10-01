@@ -3,6 +3,8 @@ import pytest
 
 from app.models.behavior import Behavior
 
+pytestmark = pytest.mark.integration
+
 INVALID_IDS = ["abc", "1.5", "0", "-1", "2147483648", "99999999999999999999", "1_0", "+1", "9" * 5000]
 
 
@@ -67,10 +69,7 @@ def test_returns_empty_code(client, db_session, auth_cookies):
     assert r.status_code == 200
     assert r.json()["code"] == ""
 
-@pytest.mark.xfail(
-    reason="GET /behaviors/me se implementa en la EPIC de listado; hasta entonces da 404",
-    strict=True,
-)
+
 def test_me_route_is_not_shadowed_by_id_route(client, auth_cookies):
     cookies = auth_cookies(1)
     r = client.get("/behaviors/me", cookies=cookies)

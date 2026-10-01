@@ -1,12 +1,21 @@
-from sqlalchemy import ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from app.schemas.base import CamelModel
 
-from app.database import Base
 
-class Behavior(Base):
-    __tablename__ = "behaviors"
+class BehaviorSummary(CamelModel):
+    """Solo id y nombre. El código no se expone acá (ver GET /behaviors/{id})."""
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    name: Mapped[str] = mapped_column(String(255))
-    code: Mapped[str] = mapped_column(Text, default="")
+    id: int
+    name: str
+
+
+class BehaviorPage(CamelModel):
+    items: list[BehaviorSummary]
+    page: int
+    page_size: int
+    total: int
+
+
+class BehaviorDetail(CamelModel):
+    id: int
+    name: str
+    code: str

@@ -1,18 +1,18 @@
 from pydantic import BaseModel, ConfigDict
+from app.schemas.base import CamelModel
 
 
-class BehaviorSummary(BaseModel):
+class BehaviorSummary(CamelModel):
     """Solo id y nombre. El código no se expone acá (ver GET /behaviors/{id})."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
 
 
-class BehaviorPage(BaseModel):
+class BehaviorPage(CamelModel):
     items: list[BehaviorSummary]
     page: int
+<<<<<<< HEAD
     pageSize: int
     total: int
 
@@ -23,3 +23,7 @@ class BehaviorDetail(BaseModel):
     id: int
     name: str
     code: str
+=======
+    page_size: int
+    total: int
+>>>>>>> aaff84b04eb8edecc4312480874a064b22e72e26
