@@ -1,5 +1,8 @@
 import os
 from dotenv import load_dotenv
+from app.database import engine, Base
+from app.errors import ApiError, api_error_handler, register_validation_exception_handler
+from app.api.leagues import router as leagues_router
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +19,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Futbot API")
 
+app.include_router(leagues_router)
 # Routeamos auth
 app.include_router(auth.router)
 app.add_exception_handler(
