@@ -21,3 +21,7 @@ class AbstractBehaviorRepository(ABC):
         Devuelve (items de la ventana offset/limit, total que matchea el filtro).
         Siempre filtra por user_id; name es un contains case-insensitive opcional.
         """
+
+    @abstractmethod
+    def get_by_id(self, behavior_id: int) -> BehaviorData | None:
+        """Devuelve el behavior con ese id (de cualquier usuario) o None si no existe."""

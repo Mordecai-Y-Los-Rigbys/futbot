@@ -3,7 +3,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
-
 class Behavior(Base):
     __tablename__ = "behaviors"
 
