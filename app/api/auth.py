@@ -1,13 +1,8 @@
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.errors import ApiError
-from app.schemas.auth import RegisterUserRequest, UserResponse
-from app.services.security_service import hash_password
-from app.services.session_service import SessionService
-from app.repositories.user_repository import UserRepository
-from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
+from app.api.deps import get_auth_service
+from app.schemas.auth import LogInRequest, RegisterUserRequest, UserResponse
+from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -21,34 +16,43 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 def register_user(
     request: RegisterUserRequest,
     response: Response,
-    db: Session = Depends(get_db),
+    auth_service: AuthService = Depends(get_auth_service),
 ) -> UserResponse:
-    """Registra un nuevo usuario, hashea la contraseña y establece una sesión"""
-    
-    user_repo = UserRepository(db)
-
-    if user_repo.get_by_email(request.email) is not None:
-        raise ApiError(status_code=409, code=None, message="El email ya está asociado a otro usuario.")
-
-    password_hash = hash_password(request.password)
-    new_user = user_repo.create(
-        username=request.username,
-        email=request.email,
-        password_hash=password_hash,
-        club_name=request.club_name,
-        avatar=request.avatar
-    )
-
-    # Creamos el repositorio de sesión y se lo inyectamos al servicio
-    session_repo = SqlAlchemySessionRepository(db)
-    session_service = SessionService(session_repo)
-    user_session = session_service.create(user_id=new_user.id)
+    """Registra un nuevo usuario delegando la creación y sesión a AuthService."""
+    new_user, session_id = auth_service.register(request)
 
     response.set_cookie(
         key="session_id",
-        value=user_session.id,
+        value=session_id,
         httponly=True,
         samesite="lax",
     )
 
     return UserResponse.model_validate(new_user)
+
+
+@router.post(
+    "/log-in",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    response_model_by_alias=True,
+)
+def user_login(
+    request: LogInRequest,
+    response: Response,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> UserResponse:
+    """Autentica al usuario delegando la verificación y sesión a AuthService."""
+    user, session_id = auth_service.login(
+        email=request.email,
+        password=request.password,
+    )
+
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        httponly=True,
+        samesite="lax",
+    )
+
+    return UserResponse.model_validate(user)

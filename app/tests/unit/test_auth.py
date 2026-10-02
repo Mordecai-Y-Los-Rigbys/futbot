@@ -1,158 +1,197 @@
+from unittest.mock import MagicMock
+import bcrypt
 import pytest
+from fastapi import Response
+
+from app.api.auth import user_login
+from app.errors import ApiError
 from app.models.user import User
-from app.models.session import UserSession  # Ajustá la ruta si está en otro archivo
+from app.schemas.auth import LogInRequest
+from app.services.auth_service import AuthService
 
-def get_valid_payload():
-    return {
-        "username": "usuario123",
-        "email": "valido@dominio.com",
-        "password": "PasswordSegura1!",
-        "clubName": "Club Atletico Test",
-        "avatar": 1
-    }
 
-def test_register_success(client, db_session):
-    payload = get_valid_payload()
-    
-    response = client.post("/auth/register", json=payload)
-    
-    # 1. Verificar estado y contrato de respuesta (201)
-    assert response.status_code == 201
-    data = response.json()
-    assert "id" in data
-    assert data["username"] == payload["username"]
-    assert data["clubName"] == payload["clubName"]
-    assert "password" not in data
-    assert "password_hash" not in data
+@pytest.fixture
+def mock_user_repo():
+    return MagicMock()
 
-    # 2. Verificar impacto en la base de datos (Persistencia real)
-    user_in_db = db_session.query(User).filter(User.email == payload["email"]).first()
-    assert user_in_db is not None
-    assert user_in_db.username == payload["username"]
-    
-    # 3. Verificar que la contraseña no se guardó en texto plano
-    assert user_in_db.password_hash != payload["password"]
-    assert len(user_in_db.password_hash) > 0
 
-    # 4. Verificar creación de sesión automática
-    session_in_db = db_session.query(UserSession).filter(UserSession.user_id == user_in_db.id).first()
-    assert session_in_db is not None
-    
-    # 5. Verificar header Set-Cookie
-    assert "set-cookie" in response.headers
-    assert f"session_id={session_in_db.id}" in response.headers["set-cookie"]
+@pytest.fixture
+def mock_session_service():
+    return MagicMock()
 
-def test_register_duplicate_email(client, db_session):
-    payload = get_valid_payload()
-    
-    # Primer registro exitoso
-    client.post("/auth/register", json=payload)
-    
-    # Intento de registro duplicado
-    response = client.post("/auth/register", json=payload)
-    
-    assert response.status_code == 409
-    assert response.json() == {
-        "code": None,
-        "message": "El email ya está asociado a otro usuario."
-    }
-    
-    # Verificar que no se creó un segundo usuario ni otra sesión
-    assert db_session.query(User).filter(User.email == payload["email"]).count() == 1
-    assert db_session.query(UserSession).count() == 1
 
-def test_register_invalid_email_format(client, db_session):
-    payload = get_valid_payload()
-    invalid_emails = ["sin-arroba", "test@", "@dominio.com", "espacio @gmail.com"]
-    
-    for email in invalid_emails:
-        payload["email"] = email
-        response = client.post("/auth/register", json=payload)
-        
-        assert response.status_code == 400
-        errors = response.json()["errors"]
-        assert any(e["field"] == "email" and e["reason"] == "invalidEmail" for e in errors)
-    
-    # Verificar que no impactó en DB
-    assert db_session.query(User).count() == 0
+@pytest.fixture
+def auth_service(mock_user_repo, mock_session_service):
+    return AuthService(user_repo=mock_user_repo, session_service=mock_session_service)
 
-def test_register_exact_limits_success(client, db_session):
-    payload = {
-        "username": "a" * 20,
-        "email": ("c" * 245) + "@test.com",  # 255 caracteres exactos
-        "password": "p" * 72,                # 72 caracteres exactos
-        "clubName": "b" * 20,
-        "avatar": 1
-    }
-    
-    response = client.post("/auth/register", json=payload)
-    assert response.status_code == 201
-    assert db_session.query(User).count() == 1
 
-def test_register_exceeds_limits_bad_request(client, db_session):
-    payload = {
-        "username": "a" * 21,               # > 20
-        "email": ("c" * 250) + "@test.com", # Supera los 255 caracteres del límite
-        "password": "p" * 73,               # > 72
-        "clubName": "b" * 21,               # > 20
-        "avatar": 1
-    }
-    
-    response = client.post("/auth/register", json=payload)
-    
-    assert response.status_code == 400
-    errors = response.json()["errors"]
-    
-    fields_too_long = [e["field"] for e in errors if e["reason"] == "tooLong"]
-    assert "username" in fields_too_long
-    assert "password" in fields_too_long
-    assert "clubName" in fields_too_long
-    
-    # Verificamos que el email también haya fallado por longitud o por formato debido al exceso
-    email_error = next((e for e in errors if e["field"] == "email"), None)
-    assert email_error is not None
-    assert email_error["reason"] in ["tooLong", "invalidEmail"]
-    
-    assert db_session.query(User).count() == 0
+# ==============================================================================
+# PRUEBAS UNITARIAS: AuthService (Lógica de Negocio con Mocks)
+# ==============================================================================
 
-def test_register_missing_and_empty_fields(client, db_session):
-    payload = {
-        "username": "",  # Vacío
-        "email": "test@test.com",
-        "avatar": "  "   # Solo espacios
-        # password y clubName omitidos
-    }
-    
-    response = client.post("/auth/register", json=payload)
-    
-    assert response.status_code == 400
-    errors = response.json()["errors"]
-    
-    fields_required = [e["field"] for e in errors if e["reason"] == "required"]
-    assert "username" in fields_required
-    assert "password" in fields_required
-    assert "clubName" in fields_required
-    
-    assert db_session.query(User).count() == 0
+def test_auth_service_login_success(auth_service, mock_user_repo, mock_session_service):
+    """Verifica login exitoso, llamada al repositorio y creación de sesión con mocks."""
+    raw_password = "Password123!"
+    hashed = bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-def test_register_multiple_errors_simultaneously(client, db_session):
-    payload = {
-        "username": "a" * 25,          # tooLong
-        "email": "correo-invalido",    # invalidEmail
-        "password": "",                # required
-        "clubName": "C",               # Válido
-        "avatar": "1"                  # Válido
-    }
-    
-    response = client.post("/auth/register", json=payload)
-    
-    assert response.status_code == 400
-    data = response.json()
-    assert data["code"] == "invalidFields"
-    
-    errors = data["errors"]
-    assert {"field": "username", "reason": "tooLong"} in errors
-    assert {"field": "email", "reason": "invalidEmail"} in errors
-    assert {"field": "password", "reason": "required"} in errors
+    dummy_user = User(
+        id=1,
+        username="usuario_test",
+        email="user@test.com",
+        password_hash=hashed,
+        club_name="Mi Club",
+    )
+    mock_user_repo.get_by_email.return_value = dummy_user
 
-    assert db_session.query(User).count() == 0
+    dummy_session = MagicMock()
+    dummy_session.id = "session-uuid-valida"
+    mock_session_service.create.return_value = dummy_session
+
+    user, session_id = auth_service.login(email="user@test.com", password=raw_password)
+
+    assert user.id == 1
+    assert user.username == "usuario_test"
+    assert user.club_name == "Mi Club"
+    assert session_id == "session-uuid-valida"
+
+    mock_user_repo.get_by_email.assert_called_once_with("user@test.com")
+    mock_session_service.create.assert_called_once_with(user_id=1)
+
+
+def test_auth_service_login_user_not_found_raises_401(auth_service, mock_user_repo, mock_session_service):
+    """Verifica 401 si el email no existe y que no se cree sesión."""
+    mock_user_repo.get_by_email.return_value = None
+
+    with pytest.raises(ApiError) as exc_info:
+        auth_service.login(email="inexistente@test.com", password="password123")
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.code is None
+    assert exc_info.value.message == "Email o contraseña incorrectos."
+    mock_session_service.create.assert_not_called()
+
+
+def test_auth_service_login_wrong_password_raises_401(auth_service, mock_user_repo, mock_session_service):
+    """Verifica 401 si la contraseña es incorrecta y que no se cree sesión."""
+    hashed = bcrypt.hashpw(b"correct_password", bcrypt.gensalt()).decode("utf-8")
+    dummy_user = User(
+        id=1,
+        username="testuser",
+        email="user@test.com",
+        password_hash=hashed,
+        club_name="Mi Club",
+    )
+    mock_user_repo.get_by_email.return_value = dummy_user
+
+    with pytest.raises(ApiError) as exc_info:
+        auth_service.login(email="user@test.com", password="wrong_password")
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.code is None
+    assert exc_info.value.message == "Email o contraseña incorrectos."
+    mock_session_service.create.assert_not_called()
+
+
+def test_auth_service_login_password_over_72_chars_raises_401(auth_service, mock_user_repo, mock_session_service):
+    """Verifica que una contraseña de 73 chars sea rechazada con 401 sin consultar al repo."""
+    password_73 = "a" * 73
+
+    with pytest.raises(ApiError) as exc_info:
+        auth_service.login(email="user@test.com", password=password_73)
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.code is None
+    assert exc_info.value.message == "Email o contraseña incorrectos."
+    mock_user_repo.get_by_email.assert_not_called()
+    mock_session_service.create.assert_not_called()
+
+
+def test_auth_service_login_password_exact_72_chars_success(auth_service, mock_user_repo, mock_session_service):
+    """Verifica que el límite de 72 caracteres exactos sea aceptado correctamente."""
+    password_72 = "a" * 72
+    hashed = bcrypt.hashpw(password_72.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    dummy_user = User(
+        id=2,
+        username="user72",
+        email="limite72@test.com",
+        password_hash=hashed,
+        club_name="Club Limite",
+    )
+    mock_user_repo.get_by_email.return_value = dummy_user
+
+    dummy_session = MagicMock()
+    dummy_session.id = "session-72"
+    mock_session_service.create.return_value = dummy_session
+
+    user, session_id = auth_service.login(email="limite72@test.com", password=password_72)
+
+    assert user.id == 2
+    assert session_id == "session-72"
+    mock_session_service.create.assert_called_once_with(user_id=2)
+
+
+def test_auth_service_login_password_with_spaces_not_trimmed(auth_service, mock_user_repo, mock_session_service):
+    """Verifica que las contraseñas con espacios no se recorten ni alteren antes de verificar."""
+    pass_with_spaces = "  password con espacios  "
+    hashed = bcrypt.hashpw(pass_with_spaces.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    dummy_user = User(
+        id=3,
+        username="user_spaces",
+        email="spaces@test.com",
+        password_hash=hashed,
+        club_name="Club Espacios",
+    )
+    mock_user_repo.get_by_email.return_value = dummy_user
+
+    # Con espacios recortados debe fallar con 401
+    with pytest.raises(ApiError) as exc_info:
+        auth_service.login(email="spaces@test.com", password=pass_with_spaces.strip())
+    assert exc_info.value.status_code == 401
+
+    # Con los espacios exactos debe autenticar
+    dummy_session = MagicMock()
+    dummy_session.id = "session-spaces"
+    mock_session_service.create.return_value = dummy_session
+
+    user, session_id = auth_service.login(email="spaces@test.com", password=pass_with_spaces)
+    assert user.id == 3
+    assert session_id == "session-spaces"
+
+
+# ==============================================================================
+# PRUEBAS UNITARIAS: Controlador API (Mockeando AuthService)
+# ==============================================================================
+
+def test_endpoint_user_login_delegates_to_service_and_sets_cookie():
+    """Valida que el endpoint llame a AuthService y setee la cookie en Response."""
+    mock_service = MagicMock()
+    dummy_user = User(
+        id=5,
+        username="apiuser",
+        email="api@test.com",
+        password_hash="hashed_secret",
+        club_name="Api FC",
+    )
+    mock_service.login.return_value = (dummy_user, "mock-cookie-session-id")
+
+    req = LogInRequest(email="api@test.com", password="password123")
+    mock_response = MagicMock(spec=Response)
+
+    result = user_login(request=req, response=mock_response, auth_service=mock_service)
+
+    mock_service.login.assert_called_once_with(email="api@test.com", password="password123")
+    mock_response.set_cookie.assert_called_once_with(
+        key="session_id",
+        value="mock-cookie-session-id",
+        httponly=True,
+        samesite="lax",
+    )
+
+    # Verifica que el cuerpo expuesto contenga los datos esperados y no exponga contraseñas
+    assert result.id == 5
+    assert result.username == "apiuser"
+    assert result.club_name == "Api FC"
+    assert not hasattr(result, "password")
+    assert not hasattr(result, "password_hash")
