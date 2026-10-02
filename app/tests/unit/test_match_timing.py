@@ -5,7 +5,7 @@ import pytest
 
 from app.services.match_timing import (
     MAX_FRIENDLY_WAIT,
-    MAX_MATCH_DURATION,
+    MAX_DURATION_TIMEDELTA,
     WS_TOKEN_MARGIN,
     WS_TOKEN_TTL,
 )
@@ -13,7 +13,7 @@ from app.startup_checks import ensure_single_worker
 
 
 def test_ws_token_ttl_covers_wait_match_and_margin():
-    assert WS_TOKEN_TTL >= MAX_FRIENDLY_WAIT + MAX_MATCH_DURATION + WS_TOKEN_MARGIN
+    assert WS_TOKEN_TTL >= MAX_FRIENDLY_WAIT + MAX_DURATION_TIMEDELTA + WS_TOKEN_MARGIN
 
 
 @pytest.mark.parametrize("value", ["2", "10"])
