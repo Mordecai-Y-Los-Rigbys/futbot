@@ -6,11 +6,30 @@ from app.repositories.player_abstract import (
     AbstractPlayerRepository, 
     PlayerData
 )
-
+from app.services.player_validation import CreatePlayerInput
 
 class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
     def __init__(self, db: Session):
         self.db = db
+        
+    def create(self, user_id: int, data: CreatePlayerInput) -> PlayerData:
+        player = Player(
+            user_id=user_id,
+            name=data.name,       
+            power=data.power,
+            agility=data.agility,
+            control=data.control,
+            strength=data.strength,
+            speed=data.speed
+        )
+        self.db.add(player)
+        self.db.flush()
+        self.db.commit()
+        self.db.refresh(player)
+        
+        result = PlayerData.model_validate(player)
+        result.deletable = True 
+        return result
 
     def list_by_user(
         self, user_id: int, name: str | None, offset: int, limit: int

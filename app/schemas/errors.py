@@ -30,3 +30,13 @@ class CreateLeagueBadRequest(BaseModel):
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
+    
+class CreatePlayerBadRequest(BaseModel):
+    code: Literal[
+        "invalidFieldType",
+        "incompleteForm",
+        "nameTooLong",
+        "statOutOfRange",
+        "statSumMismatch",
+    ]
+    message: str

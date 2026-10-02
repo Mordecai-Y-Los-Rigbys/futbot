@@ -1,11 +1,26 @@
 from app.repositories.player_abstract import AbstractPlayerRepository, PlayerData
 from app.services.player_service import PlayerService
-
+from app.services.player_validation import CreatePlayerInput
 
 class FakePlayerRepository(AbstractPlayerRepository):
     def __init__(self, players: list[PlayerData] | None = None):
         self.players = players or []
 
+    def create(self, player: CreatePlayerInput, user_id: int) -> PlayerData:
+        new_id = len(self.players) + 1
+        new_player = PlayerData(
+            id=new_id,
+            user_id=user_id,
+            name=player.name,
+            power=player.power,
+            agility=player.agility,
+            control=player.control,
+            strength=player.strength,
+            speed=player.speed
+        )
+        self.players.append(new_player)
+        return new_player
+    
     def list_by_user(
         self, user_id: int, name: str | None, offset: int, limit: int
     ) -> tuple[list[PlayerData], int]:
