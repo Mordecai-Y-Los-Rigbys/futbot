@@ -1,5 +1,5 @@
 import time
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -12,8 +12,11 @@ from app.api.ws_deps import get_connection_manager
 from app.main import app
 from app.models.match import Match, MatchStatus
 from app.models.match_ws_token import MatchWsToken
+from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_timing import WS_TOKEN_TTL
+from app.services.friendly_expiry import FriendlyExpiryService
+
 
 pytestmark = pytest.mark.integration
 
@@ -183,4 +186,33 @@ def test_open_connection_survives_token_expiry(client, make_match, make_token, m
 def test_cancelled_match_is_4409_even_with_a_valid_token(client, make_match, make_token):
     match = make_match(status=MatchStatus.cancelled)
     make_token("tok", 7, match)
+    assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")
+
+def test_expiry_cancels_the_match_and_closes_the_open_connection(
+    client, db_session, make_match, make_token, manager
+):
+    match = make_match()  # amistoso sin rival
+    make_token("tok", 7, match)
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+
+    @contextmanager
+    def scope():
+        with factory() as db:
+            yield SqlAlchemyMatchExpiryRepository(db)
+
+    expiry = FriendlyExpiryService(scope, manager.close_match, wait=timedelta(seconds=1))
+
+    with client.websocket_connect(path(match, "tok")) as ws:
+        for _ in range(100):  # espera a que quede suscripto
+            if manager.subscribers(match.id):
+                break
+            time.sleep(0.01)
+        ws.portal.call(lambda: expiry.schedule(match.id))
+
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_text()
+        assert (exc.value.code, exc.value.reason) == (1000, "waitExpired")
+
+    db_session.refresh(match)
+    assert match.status == MatchStatus.cancelled
     assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")

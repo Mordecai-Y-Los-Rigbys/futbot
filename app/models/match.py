@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -103,3 +103,6 @@ class Match(Base):
     league: Mapped[League | None] = relationship(League)
     user_1: Mapped[User] = relationship(User, foreign_keys=[user_1_id])
     user_2: Mapped[User | None] = relationship(User, foreign_keys=[user_2_id])
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

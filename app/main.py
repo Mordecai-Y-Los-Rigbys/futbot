@@ -1,15 +1,17 @@
 import os
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+
 from app import models  # noqa: F401  (registra los modelos en Base.metadata)
 from app.api.auth import router as auth_router
 from app.api.behaviors import router as behaviors_router
 from app.api.leagues import router as leagues_router
 from app.api.players import router as players_router
 from app.api.ws_matches import router as ws_matches_router
-
+from app.api.ws_deps import get_friendly_expiry
 
 from app.database import Base, engine
 from app.errors import (
@@ -25,7 +27,14 @@ ensure_single_worker()
 # Crea las tablas en la BD (para desarrollo temprano, luego usarás Alembic)
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Futbot API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    expiry = get_friendly_expiry()
+    await expiry.recover()
+    yield
+    expiry.shutdown()
+
+app = FastAPI(title="Futbot API", lifespan=lifespan)
 
 # Routeamos auth
 app.include_router(auth_router)

@@ -4,8 +4,11 @@ from typing import Callable, ContextManager, Iterator
 from app.database import SessionLocal
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.repositories.match_ws_token_sqlalchemy import SqlAlchemyMatchWsTokenRepository
+from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_handshake_service import MatchHandshakeService
+from app.services.friendly_expiry import FriendlyExpiryService
+
 
 # Único registro de conexiones del proceso.
 _connection_manager = MatchConnectionManager()
@@ -34,3 +37,16 @@ def get_handshake_service_scope() -> Callable[
     [], ContextManager[MatchHandshakeService]
 ]:
     return _handshake_service_scope
+
+
+@contextmanager
+def _expiry_repo_scope():
+    with SessionLocal() as db:
+        yield SqlAlchemyMatchExpiryRepository(db)
+
+_friendly_expiry = FriendlyExpiryService(
+    _expiry_repo_scope, _connection_manager.close_match
+)
+
+def get_friendly_expiry() -> FriendlyExpiryService:
+    return _friendly_expiry
