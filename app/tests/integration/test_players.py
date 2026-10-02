@@ -1,4 +1,5 @@
 import pytest
+from app.models.player import Player
 
 def valid_payload():
     return {
@@ -40,7 +41,7 @@ def test_create_player_validation_error_format(client, auth_cookies):
     assert response.status_code == 400
     data = response.json()
     
-    assert data["code"] == "invalidStatSum"
+    assert data["code"] == "statSumMismatch"
     assert "message" in data
 
 def test_create_player_malformed_json(client, auth_cookies):
@@ -54,3 +55,11 @@ def test_create_player_malformed_json(client, auth_cookies):
     
     assert response.status_code == 400
     assert response.json()["code"] == "invalidFieldType"
+    
+def test_create_player_is_persisted(client, auth_cookies, db_session):
+    client.cookies = auth_cookies(1)
+    response = client.post("/players", json=valid_payload())
+    assert response.status_code == 201
+
+    db_session.rollback()
+    assert db_session.get(Player, response.json()["id"]) is not None

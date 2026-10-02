@@ -33,11 +33,28 @@ def test_parse_create_player_invalid_json(invalid_body):
     assert exc.value.code == "invalidFieldType"
 
 @pytest.mark.parametrize("field,bad_value", [
+    ("name", 123),
+    ("name", None),          
+    ("power", "sesenta"),
+    ("power", None),         
+    ("agility", True),
+    ("control", 10.5),
+])
+def test_parse_create_player_invalid_field_type(field, bad_value):
+    payload = valid_payload()
+    payload[field] = bad_value
+    
+    with pytest.raises(ApiError) as exc:
+        parse_create_player(payload)
+    assert exc.value.code == "invalidFieldType"
+    
+@pytest.mark.parametrize("field,bad_value", [
     ("name", 123),         
     ("power", "sesenta"),  
     ("agility", True),     
     ("control", 10.5),     
 ])
+
 def test_parse_create_player_invalid_field_type(field, bad_value):
     payload = valid_payload()
     payload[field] = bad_value
@@ -93,4 +110,39 @@ def test_parse_create_player_invalid_stat_sum():
     
     with pytest.raises(ApiError) as exc:
         parse_create_player(payload)
-    assert exc.value.code == "invalidStatSum"
+    assert exc.value.code == "statSumMismatch"
+    
+def test_parse_create_player_rule_precedence():
+    # Tipo inválido + falta campo -> invalidFieldType
+    payload_type_and_missing = {"power": "sesenta"}
+    with pytest.raises(ApiError) as exc:
+        parse_create_player(payload_type_and_missing)
+    assert exc.value.code == "invalidFieldType"
+
+    # Falta campo + stat fuera de rango -> incompleteForm
+    payload_missing_and_range = {
+        "name": "Messi",
+        "power": 150,
+        "agility": 60,
+        "control": 60,
+        "strength": 60,
+        # falta speed
+    }
+    with pytest.raises(ApiError) as exc:
+        parse_create_player(payload_missing_and_range)
+    assert exc.value.code == "incompleteForm"
+
+    # Nombre muy largo + stat fuera de rango -> nameTooLong
+    payload_name_and_range = valid_payload()
+    payload_name_and_range["name"] = "A" * 25
+    payload_name_and_range["power"] = 150
+    with pytest.raises(ApiError) as exc:
+        parse_create_player(payload_name_and_range)
+    assert exc.value.code == "nameTooLong"
+
+    # Stat fuera de rango + suma inválida -> statOutOfRange
+    payload_range_and_sum = valid_payload()
+    payload_range_and_sum["power"] = 150  
+    with pytest.raises(ApiError) as exc:
+        parse_create_player(payload_range_and_sum)
+    assert exc.value.code == "statOutOfRange"

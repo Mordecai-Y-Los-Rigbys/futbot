@@ -66,7 +66,7 @@ def parse_create_player(body: Any) -> CreatePlayerInput:
     # Suma de stats
     total_sum = sum(body[stat] for stat in STATS)
     if total_sum != EXPECTED_SUM:
-        raise _bad("invalidStatSum", f"La suma de las estadísticas debe ser exactamente {EXPECTED_SUM}.")
+        raise _bad("statSumMismatch", f"La suma de las estadísticas debe ser exactamente {EXPECTED_SUM}.")
 
     return CreatePlayerInput(
         name=name,

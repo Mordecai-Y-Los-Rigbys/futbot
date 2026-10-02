@@ -37,6 +37,6 @@ class CreatePlayerBadRequest(BaseModel):
         "incompleteForm",
         "nameTooLong",
         "statOutOfRange",
-        "invalidStatSum",
+        "statSumMismatch",
     ]
     message: str

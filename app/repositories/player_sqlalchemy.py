@@ -23,7 +23,8 @@ class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
             speed=data.speed
         )
         self.db.add(player)
-        self.db.flush() 
+        self.db.flush()
+        self.db.commit()
         self.db.refresh(player)
         
         result = PlayerData.model_validate(player)
