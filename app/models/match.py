@@ -21,12 +21,12 @@ class Match(Base):
     """Un partido, de liga o amistoso.
 
     - Partido de liga: `league_id` apunta a la liga y `scheduled_at` es la fecha
-      del fixture. Local y visitante se conocen desde que se genera el fixture.
+      del fixture. Los dos usuarios se conocen desde que se genera el fixture.
     - Partido amistoso: `league_id` es NULL. Se crea junto con el amistoso, con
-      el creador como local y sin visitante (`away_user_id` NULL) hasta que un
+      el creador como usuario 1 y sin usuario 2 (`user_2_id` NULL) hasta que un
       rival se une. No tiene fecha programada.
 
-    El resultado (`home_score`/`away_score`) se persiste recién al terminar el
+    El resultado (`score_1`/`score_2`) se persiste recién al terminar el
     partido: mientras se juega, el marcador vive en la simulación (campos
     `homeScore`/`awayScore` de cada `tick`).
 
@@ -39,27 +39,27 @@ class Match(Base):
     __table_args__ = (
         # Un usuario no puede jugar contra sí mismo.
         CheckConstraint(
-            "away_user_id IS NULL OR home_user_id <> away_user_id",
+            "user_2_id IS NULL OR user_1_id <> user_2_id",
             name="ck_matches_distinct_clubs",
         ),
         # No puede arrancar ni terminar sin rival.
         CheckConstraint(
-            "status = 'scheduled' OR away_user_id IS NOT NULL",
+            "status = 'scheduled' OR user_2_id IS NOT NULL",
             name="ck_matches_started_has_rival",
         ),
         # El resultado se guarda completo o no se guarda.
         CheckConstraint(
-            "(home_score IS NULL) = (away_score IS NULL)",
+            "(score_1 IS NULL) = (score_2 IS NULL)",
             name="ck_matches_scores_both_or_none",
         ),
         # Hay resultado si y solo si el partido terminó (`result: null` si
         # status != finished, según el OpenAPI).
         CheckConstraint(
-            "(status = 'finished') = (home_score IS NOT NULL)",
+            "(status = 'finished') = (score_1 IS NOT NULL)",
             name="ck_matches_result_iff_finished",
         ),
         CheckConstraint(
-            "home_score >= 0 AND away_score >= 0",
+            "score_1 >= 0 AND score_2 >= 0",
             name="ck_matches_scores_non_negative",
         ),
         # Todo partido de liga tiene fecha en el fixture (`date` requerida).
@@ -73,10 +73,10 @@ class Match(Base):
     league_id: Mapped[int | None] = mapped_column(
         ForeignKey("leagues.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    home_user_id: Mapped[int] = mapped_column(
+    user_1_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True
     )
-    away_user_id: Mapped[int | None] = mapped_column(
+    user_2_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True
     )
     status: Mapped[MatchStatus] = mapped_column(
@@ -91,9 +91,9 @@ class Match(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    home_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    away_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     league: Mapped[League | None] = relationship(League)
-    home_user: Mapped[User] = relationship(User, foreign_keys=[home_user_id])
-    away_user: Mapped[User | None] = relationship(User, foreign_keys=[away_user_id])
+    user_1: Mapped[User] = relationship(User, foreign_keys=[user_1_id])
+    user_2: Mapped[User | None] = relationship(User, foreign_keys=[user_2_id])

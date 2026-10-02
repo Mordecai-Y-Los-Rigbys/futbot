@@ -14,12 +14,15 @@ class ApiError(Exception):
         self.code = code
         self.message = message
 
+    def to_response(self) -> JSONResponse:
+        return JSONResponse(
+            status_code=self.status_code,
+            content={"code": self.code, "message": self.message},
+        )
+
 
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"code": exc.code, "message": exc.message},
-    )
+    return exc.to_response()
 
 
 def determine_rejection_reason(error_detail: Dict[str, Any]) -> str:

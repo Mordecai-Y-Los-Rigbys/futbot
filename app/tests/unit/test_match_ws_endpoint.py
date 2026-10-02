@@ -6,6 +6,7 @@ from contextlib import ExitStack, contextmanager
 import pytest
 from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketDenialResponse
+from anyio import EndOfStream
 
 from app.api.ws_deps import get_connection_manager, get_handshake_service_scope
 from app.main import app
@@ -76,7 +77,14 @@ def denied(client, path) -> WebSocketDenialResponse:
 def stays_silent(ws, seconds=0.5) -> bool:
     """True si no llega ningún mensaje (ni cierre) durante `seconds`."""
     received = []
-    t = threading.Thread(target=lambda: received.append(ws.receive()), daemon=True)
+
+    def _receive():
+        try:
+            received.append(ws.receive())
+        except EndOfStream:
+            pass  # la conexión se cerró al terminar el test: no es un mensaje
+
+    t = threading.Thread(target=_receive, daemon=True)
     t.start()
     t.join(seconds)
     return not received

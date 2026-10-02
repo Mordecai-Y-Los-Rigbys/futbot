@@ -41,28 +41,28 @@ def insert(db_session, **fields):
 # --- combinaciones válidas ------------------------------------------------------------
 
 def test_friendly_waiting_for_a_rival(db_session, users):
-    insert(db_session, home_user_id=users[0].id)  # sin visitante, sin fecha, sin liga
+    insert(db_session, user_1_id=users[0].id)  # sin usuario 2, sin fecha, sin liga
     match = db_session.query(Match).one()
     assert match.status == MatchStatus.scheduled  # default
-    assert match.away_user_id is None
+    assert match.user_2_id is None
 
 
 def test_friendly_with_rival_in_every_status(db_session, users):
-    insert(db_session, home_user_id=1, away_user_id=2, status=S)
-    insert(db_session, home_user_id=1, away_user_id=2, status=ST)
-    insert(db_session, home_user_id=1, away_user_id=2, status=F, home_score=2, away_score=2)
+    insert(db_session, user_1_id=1, user_2_id=2, status=S)
+    insert(db_session, user_1_id=1, user_2_id=2, status=ST)
+    insert(db_session, user_1_id=1, user_2_id=2, status=F, score_1=2, score_2=2)
 
 
 def test_league_match_with_date(db_session, users, league):
-    insert(db_session, league_id=league.id, home_user_id=1, away_user_id=2, scheduled_at=DATE)
+    insert(db_session, league_id=league.id, user_1_id=1, user_2_id=2, scheduled_at=DATE)
 
 
 def test_zero_zero_is_a_valid_result(db_session, users):
-    insert(db_session, home_user_id=1, away_user_id=2, status=F, home_score=0, away_score=0)
+    insert(db_session, user_1_id=1, user_2_id=2, status=F, score_1=0, score_2=0)
 
 
 def test_deleting_the_league_deletes_its_matches(db_session, users, league):
-    insert(db_session, league_id=league.id, home_user_id=1, away_user_id=2, scheduled_at=DATE)
+    insert(db_session, league_id=league.id, user_1_id=1, user_2_id=2, scheduled_at=DATE)
     db_session.delete(league)
     db_session.commit()
     assert db_session.query(Match).count() == 0
@@ -71,16 +71,15 @@ def test_deleting_the_league_deletes_its_matches(db_session, users, league):
 # --- combinaciones inválidas ---------------------------------------------------------------
 
 INVALID = [
-    pytest.param(dict(home_user_id=1, away_user_id=1), id="juega contra sí mismo"),
-    pytest.param(dict(home_user_id=1, status=ST), id="started sin rival"),
-    pytest.param(dict(home_user_id=1, status=F, home_score=1, away_score=0), id="finished sin rival"),
-    pytest.param(dict(home_user_id=1, away_user_id=2, status=F), id="finished sin resultado"),
-    pytest.param(dict(home_user_id=1, away_user_id=2, status=F, home_score=1), id="finished con un solo score"),
-    pytest.param(dict(home_user_id=1, away_user_id=2, status=ST, home_score=1, away_score=0), id="resultado en un partido que no terminó"),
-    pytest.param(dict(home_user_id=1, away_user_id=2, status=S, home_score=1), id="un solo score"),
-    pytest.param(dict(home_user_id=1, away_user_id=2, status=F, home_score=-1, away_score=0), id="score negativo"),
+    pytest.param(dict(user_1_id=1, user_2_id=1), id="juega contra sí mismo"),
+    pytest.param(dict(user_1_id=1, status=ST), id="started sin rival"),
+    pytest.param(dict(user_1_id=1, status=F, score_1=1, score_2=0), id="finished sin rival"),
+    pytest.param(dict(user_1_id=1, user_2_id=2, status=F), id="finished sin resultado"),
+    pytest.param(dict(user_1_id=1, user_2_id=2, status=F, score_1=1), id="finished con un solo score"),
+    pytest.param(dict(user_1_id=1, user_2_id=2, status=ST, score_1=1, score_2=0), id="resultado en un partido que no terminó"),
+    pytest.param(dict(user_1_id=1, user_2_id=2, status=S, score_1=1), id="un solo score"),
+    pytest.param(dict(user_1_id=1, user_2_id=2, status=F, score_1=-1, score_2=0), id="score negativo"),
 ]
-
 
 @pytest.mark.parametrize("fields", INVALID)
 def test_invalid_combinations_are_rejected(db_session, users, fields):
@@ -91,14 +90,14 @@ def test_invalid_combinations_are_rejected(db_session, users, fields):
 
 
 def test_league_match_without_date_is_rejected(db_session, users, league):
-    db_session.add(Match(league_id=league.id, home_user_id=1, away_user_id=2))
+    db_session.add(Match(league_id=league.id, user_1_id=1, user_2_id=2))
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
 
 
-def test_home_user_is_required(db_session, users):
-    db_session.add(Match(away_user_id=2))
+def test_user_1_is_required(db_session, users):
+    db_session.add(Match(user_2_id=2))
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()

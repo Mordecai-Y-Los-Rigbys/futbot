@@ -40,14 +40,14 @@ def make_match(db_session, make_user):
     o terminó necesita rival, y uno terminado necesita resultado."""
 
     def _make(status=MatchStatus.scheduled) -> Match:
-        home = make_user(900)
-        away = make_user(901) if status != MatchStatus.scheduled else None
+        user_1 = make_user(900)
+        user_2 = make_user(901) if status != MatchStatus.scheduled else None
         match = Match(
-            home_user_id=home.id,
-            away_user_id=away.id if away else None,
+            user_1_id=user_1.id,
+            user_2_id=user_2.id if user_2 else None,
             status=status,
-            home_score=1 if status == MatchStatus.finished else None,
-            away_score=0 if status == MatchStatus.finished else None,
+            score_1=1 if status == MatchStatus.finished else None,
+            score_2=0 if status == MatchStatus.finished else None,
         )
         db_session.add(match)
         db_session.commit()
