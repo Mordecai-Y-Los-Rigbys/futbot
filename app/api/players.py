@@ -1,13 +1,31 @@
-from fastapi import APIRouter, Depends, Query
+from typing import Any
+from fastapi import APIRouter, Body, Depends, Query
 
-from app.api.deps import get_current_user_id, get_player_service
+from app.api.deps import get_current_user_id, get_player_service, get_json_body
 from app.api.pagination import parse_page
-from app.schemas.errors import Error, ListPageBadRequest
+from app.schemas.errors import Error, ListPageBadRequest, CreatePlayerBadRequest
 from app.schemas.player import PlayerPage, PlayerResponse
 from app.services.player_service import PAGE_SIZE, PlayerService
 
 router = APIRouter(prefix="/players", tags=["players"])
 
+@router.post(
+    "",
+    response_model=PlayerResponse,
+    status_code=201,
+    operation_id="createPlayer",
+    summary="Crear un jugador",
+    responses={
+        400: {"model": CreatePlayerBadRequest},
+        401: {"model": Error},
+    },
+)
+def create_player(
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),
+    service: PlayerService = Depends(get_player_service),
+) -> PlayerResponse:
+    return service.create_player(user_id=user_id, body=body)
 
 @router.get(
     "/me",
