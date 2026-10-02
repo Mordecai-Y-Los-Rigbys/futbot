@@ -52,6 +52,9 @@ def test_friendly_with_rival_in_every_status(db_session, users):
     insert(db_session, user_1_id=1, user_2_id=2, status=ST)
     insert(db_session, user_1_id=1, user_2_id=2, status=F, score_1=2, score_2=2)
 
+def test_cancelled_friendly_without_rival_is_valid(db_session, users):
+    insert(db_session, user_1_id=1, status=MatchStatus.cancelled)
+
 
 def test_league_match_with_date(db_session, users, league):
     insert(db_session, league_id=league.id, user_1_id=1, user_2_id=2, scheduled_at=DATE)
@@ -98,6 +101,12 @@ def test_league_match_without_date_is_rejected(db_session, users, league):
 
 def test_user_1_is_required(db_session, users):
     db_session.add(Match(user_2_id=2))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+def test_league_match_without_rival_is_rejected(db_session, users, league):
+    db_session.add(Match(league_id=league.id, user_1_id=1, scheduled_at=DATE))
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()

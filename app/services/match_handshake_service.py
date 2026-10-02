@@ -39,23 +39,23 @@ class MatchHandshakeService:
     def authorize(self, token: str | None, raw_match_id: str) -> HandshakeGrant:
         # 401: falta, es inválido o expiró
         if not token or len(token) > MAX_TOKEN_LEN:
-            raise ApiError(401, None, "Token inválido.")
+            raise ApiError(401, "tokenInvalid", "Token inválido.")
+
         record = self.tokens.get_by_token(token)
         if record is None:
-            raise ApiError(401, None, "Token inválido.")
+            raise ApiError(401, "tokenInvalid", "Token inválido.")
         if record.expires_at <= _utcnow():
-            raise ApiError(401, None, "El token expiró.")
+            raise ApiError(401, "tokenExpired", "El token expiró.")
 
-        # 403: el token es de otro partido. Un id que no es un entero
-        # tampoco puede coincidir con el del token.
         if not _ID_RE.fullmatch(raw_match_id) or int(raw_match_id) != record.match_id:
-            raise ApiError(403, None, "El token no corresponde a este partido.")
+            raise ApiError(403, "tokenMatchMismatch", "El token no corresponde a este partido.")
 
-        # 404 / 409
         match = self.matches.get_state(record.match_id)
         if match is None:
-            raise ApiError(404, None, "Partido no encontrado.")
-        if match.finished:
+            raise ApiError(404, "matchNotFound", "Partido no encontrado.")
+        if match.status == "finished":
             raise ApiError(409, "matchFinished", "El partido ya terminó.")
+        if match.status == "cancelled":
+            raise ApiError(409, "matchCancelled", "El partido fue cancelado.")
 
         return HandshakeGrant(user_id=record.user_id, match_id=record.match_id)

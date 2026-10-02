@@ -1,10 +1,11 @@
 import time
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
-from starlette.testclient import WebSocketDenialResponse
+from starlette.websockets import WebSocketDisconnect
 
 from app.api import ws_deps
 from app.api.ws_deps import get_connection_manager
@@ -43,7 +44,7 @@ def make_match(db_session, make_user):
 
     def _make(status=MatchStatus.scheduled) -> Match:
         user_1 = make_user(900)
-        user_2 = make_user(901) if status != MatchStatus.scheduled else None
+        user_2 = make_user(901) if status in (MatchStatus.started, MatchStatus.finished) else None
         match = Match(
             user_1_id=user_1.id,
             user_2_id=user_2.id if user_2 else None,
@@ -82,11 +83,15 @@ def path(match, token):
     return f"/ws/matches/{match.id}?token={token}"
 
 
-def denied(client, p) -> WebSocketDenialResponse:
-    with pytest.raises(WebSocketDenialResponse) as exc:
-        with client.websocket_connect(p):
-            pass
-    return exc.value
+def rejection(client, path) -> tuple[int, str]:
+    """(close code, reason) con el que el server cierra el handshake."""
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with client.websocket_connect(path) as ws:
+            ws.receive_text()
+    return exc.value.code, exc.value.reason
+
+
+# --- handshake aceptado ---------------------------------------------------------
 
 
 def test_valid_token_opens_the_connection(client, make_match, make_token, manager):
@@ -105,49 +110,50 @@ def test_same_token_reconnects(client, make_match, make_token):
             pass
 
 
-def test_unknown_token_is_401(client, make_match):
+# --- handshake rechazado --------------------------------------------------------
+
+
+def test_unknown_token_is_4401(client, make_match):
     match = make_match()
-    resp = denied(client, path(match, "no-existe"))
-    assert resp.status_code == 401
-    assert resp.json()["code"] is None
+    assert rejection(client, path(match, "no-existe")) == (4401, "tokenInvalid")
 
 
-def test_missing_token_is_401(client, make_match):
+def test_missing_token_is_4401(client, make_match):
     match = make_match()
-    assert denied(client, f"/ws/matches/{match.id}").status_code == 401
+    assert rejection(client, f"/ws/matches/{match.id}") == (4401, "tokenInvalid")
 
 
-def test_expired_token_is_401(client, make_match, make_token):
+def test_expired_token_is_4401(client, make_match, make_token):
     match = make_match()
     make_token("viejo", 7, match, expires_in=timedelta(seconds=-1))
-    assert denied(client, path(match, "viejo")).status_code == 401
+    assert rejection(client, path(match, "viejo")) == (4401, "tokenExpired")
 
 
-def test_token_of_another_match_is_403(client, make_match, make_token):
+def test_token_of_another_match_is_4403(client, make_match, make_token):
     mine, other = make_match(), make_match()
     make_token("tok", 7, mine)
-    resp = denied(client, path(other, "tok"))
-    assert resp.status_code == 403
-    assert resp.json()["code"] is None
+    assert rejection(client, path(other, "tok")) == (4403, "tokenMatchMismatch")
 
 
-def test_finished_match_is_409_even_with_a_valid_token(client, make_match, make_token):
+def test_finished_match_is_4409_even_with_a_valid_token(client, make_match, make_token):
     match = make_match(status=MatchStatus.finished)
     make_token("tok", 7, match)
-    resp = denied(client, path(match, "tok"))
-    assert resp.status_code == 409
-    assert resp.json()["code"] == "matchFinished"
+    assert rejection(client, path(match, "tok")) == (4409, "matchFinished")
 
 
-def test_sixth_connection_of_the_same_user_is_429(client, make_match, make_token):
-    from contextlib import ExitStack
-
+def test_sixth_connection_of_the_same_user_is_4429(
+    client, make_match, make_token, manager
+):
     match = make_match()
     make_token("tok", 7, match)
     with ExitStack() as stack:
         for _ in range(5):
             stack.enter_context(client.websocket_connect(path(match, "tok")))
-        assert denied(client, path(match, "tok")).status_code == 429
+        assert rejection(client, path(match, "tok")) == (4429, "tooManyConnections")
+        assert manager.count(match.id, 7) == 5
+
+
+# --- el partido no se modifica --------------------------------------------------
 
 
 @pytest.mark.parametrize("status", [MatchStatus.scheduled, MatchStatus.started])
@@ -170,6 +176,11 @@ def test_open_connection_survives_token_expiry(client, make_match, make_token, m
     with client.websocket_connect(path(match, "corto")):
         time.sleep(2.5)  # el token ya venció
         assert manager.count(match.id, 7) == 1
-        assert denied(client, path(match, "corto")).status_code == 401
+        assert rejection(client, path(match, "corto")) == (4401, "tokenExpired")
 
     assert manager.count(match.id, 7) == 0
+
+def test_cancelled_match_is_4409_even_with_a_valid_token(client, make_match, make_token):
+    match = make_match(status=MatchStatus.cancelled)
+    make_token("tok", 7, match)
+    assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")

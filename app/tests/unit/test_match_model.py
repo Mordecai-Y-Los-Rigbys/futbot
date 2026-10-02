@@ -15,7 +15,7 @@ TABLE = Match.__table__
 def test_status_values_match_the_openapi_contract():
     enum_type = TABLE.c.status.type
     assert enum_type.name == "match_status"
-    assert list(enum_type.enums) == ["scheduled", "started", "finished"]
+    assert list(enum_type.enums) == ["scheduled", "started", "finished", "cancelled"]
 
 
 def test_mappers_configure_without_ambiguity():
@@ -26,11 +26,12 @@ def test_mappers_configure_without_ambiguity():
 def test_ddl_for_postgres_includes_every_check():
     expected_checks = {
         "ck_matches_distinct_clubs": "user_2_id IS NULL OR user_1_id <> user_2_id",
-        "ck_matches_started_has_rival": "status = 'scheduled' OR user_2_id IS NOT NULL",
+        "ck_matches_started_has_rival": "status IN ('scheduled', 'cancelled') OR user_2_id IS NOT NULL",
         "ck_matches_scores_both_or_none": "(score_1 IS NULL) = (score_2 IS NULL)",
         "ck_matches_result_iff_finished": "(status = 'finished') = (score_1 IS NOT NULL)",
         "ck_matches_scores_non_negative": "score_1 >= 0 AND score_2 >= 0",
         "ck_matches_league_match_has_date": "league_id IS NULL OR scheduled_at IS NOT NULL",
+        "ck_matches_league_match_has_rival": "league_id IS NULL OR user_2_id IS NOT NULL",
     }
     ddl = str(CreateTable(TABLE).compile(dialect=postgresql.dialect()))
     assert ddl.startswith("\nCREATE TABLE matches")

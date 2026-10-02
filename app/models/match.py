@@ -15,6 +15,7 @@ class MatchStatus(str, enum.Enum):
     scheduled = "scheduled"  # todavía no se jugó
     started = "started"  # se está jugando ahora
     finished = "finished"  # ya tiene resultado
+    cancelled = "cancelled"  # amistoso cuya espera venció sin rival
 
 
 class Match(Base):
@@ -42,9 +43,9 @@ class Match(Base):
             "user_2_id IS NULL OR user_1_id <> user_2_id",
             name="ck_matches_distinct_clubs",
         ),
-        # No puede arrancar ni terminar sin rival.
+        # Solo un partido sin arrancar o cancelado puede no tener rival.
         CheckConstraint(
-            "status = 'scheduled' OR user_2_id IS NOT NULL",
+            "status IN ('scheduled', 'cancelled') OR user_2_id IS NOT NULL",
             name="ck_matches_started_has_rival",
         ),
         # El resultado se guarda completo o no se guarda.
@@ -66,6 +67,11 @@ class Match(Base):
         CheckConstraint(
             "league_id IS NULL OR scheduled_at IS NOT NULL",
             name="ck_matches_league_match_has_date",
+        ),
+        # Un partido de liga siempre tiene rival: se define al generar el fixture.
+        CheckConstraint(
+            "league_id IS NULL OR user_2_id IS NOT NULL",
+            name="ck_matches_league_match_has_rival",
         ),
     )
 

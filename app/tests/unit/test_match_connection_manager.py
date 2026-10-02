@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 
 from app.errors import ApiError
 from app.services.match_connection_manager import (
@@ -27,7 +28,7 @@ def test_sixth_connection_is_429(manager):
         manager.reserve(1, 7)
     with pytest.raises(ApiError) as exc:
         manager.reserve(1, 7)
-    assert (exc.value.status_code, exc.value.code) == (429, None)
+    assert (exc.value.status_code, exc.value.code) == (429, "tooManyConnections")
     assert manager.count(1, 7) == 5  # el rechazo no consume cupo
 
 
@@ -49,7 +50,7 @@ def test_releasing_a_connection_frees_a_slot(manager):
     sockets = [object() for _ in range(5)]
     for ws in sockets:
         manager.reserve(1, 7)
-        manager.subscribe(1, ws)
+        manager.subscribe(1, 7, ws)
 
     manager.release(1, 7, sockets[0])
     manager.reserve(1, 7)  # no debe lanzar
@@ -61,21 +62,27 @@ def test_subscribers_are_listed_per_match(manager):
     a, b, c = object(), object(), object()
     for match_id, ws in [(1, a), (1, b), (2, c)]:
         manager.reserve(match_id, 7)
-        manager.subscribe(match_id, ws)
+        manager.subscribe(match_id, 7, ws)
 
-    assert set(manager.subscribers(1)) == {a, b}
-    assert manager.subscribers(2) == [c]
+    assert set(manager.subscribers(1)) == {(a, 7), (b, 7)}
+    assert manager.subscribers(2) == [(c, 7)]
+
+def test_subscribers_carry_the_user_id(manager):
+    a, b = object(), object()
+    manager.reserve(1, 7); manager.subscribe(1, 7, a)
+    manager.reserve(1, 8); manager.subscribe(1, 8, b)
+    assert dict(manager.subscribers(1)) == {a: 7, b: 8}
 
 
 def test_release_removes_the_subscriber(manager):
     a, b = object(), object()
     for ws in (a, b):
         manager.reserve(1, 7)
-        manager.subscribe(1, ws)
+        manager.subscribe(1, 7, ws)
 
     manager.release(1, 7, a)
 
-    assert manager.subscribers(1) == [b]
+    assert manager.subscribers(1) == [(b, 7)]
     assert manager.count(1, 7) == 1
 
 
@@ -90,7 +97,7 @@ def test_release_before_subscribe_still_frees_the_slot(manager):
 def test_release_leaves_no_residue(manager):
     ws = object()
     manager.reserve(1, 7)
-    manager.subscribe(1, ws)
+    manager.subscribe(1, 7, ws)
     manager.release(1, 7, ws)
 
     assert manager.subscribers(1) == []
@@ -100,7 +107,7 @@ def test_release_leaves_no_residue(manager):
 def test_double_release_does_not_go_negative(manager):
     ws = object()
     manager.reserve(1, 7)
-    manager.subscribe(1, ws)
+    manager.subscribe(1, 7, ws)
     manager.release(1, 7, ws)
     manager.release(1, 7, ws)
     manager.reserve(1, 7)
@@ -110,3 +117,28 @@ def test_double_release_does_not_go_negative(manager):
 def test_subscribers_of_unknown_match_is_empty(manager):
     # Emitir a un partido sin nadie conectado no es un error.
     assert manager.subscribers(999) == []
+
+
+class FakeWs:
+    def __init__(self, fail=False):
+        self.fail, self.closed = fail, None
+
+    async def close(self, code=1000, reason=None):
+        if self.fail:
+            raise RuntimeError("ya cerrado")
+        self.closed = (code, reason)
+
+
+def test_close_match_closes_every_subscriber_even_if_one_fails(manager):
+    broken, ok = FakeWs(fail=True), FakeWs()
+    for ws in (broken, ok):
+        manager.reserve(1, 7)
+        manager.subscribe(1, 7, ws)
+
+    asyncio.run(manager.close_match(1))
+
+    assert ok.closed == (1000, "waitExpired")
+
+
+def test_close_match_without_subscribers_is_a_noop(manager):
+    asyncio.run(manager.close_match(999))

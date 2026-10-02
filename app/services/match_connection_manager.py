@@ -3,6 +3,8 @@ from fastapi import WebSocket
 from app.errors import ApiError
 
 MAX_CONNECTIONS_PER_USER_AND_MATCH = 5
+WAIT_EXPIRED_CODE = 1000
+WAIT_EXPIRED_REASON = "waitExpired"
 
 
 class MatchConnectionManager:
@@ -24,7 +26,7 @@ class MatchConnectionManager:
 
     def __init__(self) -> None:
         self._reserved: dict[tuple[int, int], int] = {}
-        self._subscribers: dict[int, set[WebSocket]] = {}
+        self._subscribers: dict[int, dict[WebSocket, int]] = {} 
 
     def reserve(self, match_id: int, user_id: int) -> None:
         key = (match_id, user_id)
@@ -32,18 +34,18 @@ class MatchConnectionManager:
         if current >= MAX_CONNECTIONS_PER_USER_AND_MATCH:
             raise ApiError(
                 429,
-                None,
+                "tooManyConnections",
                 "Superaste el máximo de conexiones simultáneas para este partido.",
             )
         self._reserved[key] = current + 1
 
-    def subscribe(self, match_id: int, websocket: WebSocket) -> None:
-        self._subscribers.setdefault(match_id, set()).add(websocket)
+    def subscribe(self, match_id: int, user_id: int, websocket: WebSocket) -> None:
+        self._subscribers.setdefault(match_id, {})[websocket] = user_id
 
     def release(self, match_id: int, user_id: int, websocket: WebSocket) -> None:
         subs = self._subscribers.get(match_id)
         if subs is not None:
-            subs.discard(websocket)
+            subs.pop(websocket, None)
             if not subs:
                 del self._subscribers[match_id]
 
@@ -59,6 +61,24 @@ class MatchConnectionManager:
         terminando el handshake)."""
         return self._reserved.get((match_id, user_id), 0)
 
-    def subscribers(self, match_id: int) -> list[WebSocket]:
-        """Suscriptores actuales del partido. Lo usa la emisión de `tick`."""
-        return list(self._subscribers.get(match_id, ()))
+    def subscribers(self, match_id: int) -> list[tuple[WebSocket, int]]:
+        """Suscriptores actuales del partido como (websocket, user_id)."""
+        return list(self._subscribers.get(match_id, {}).items())
+    
+    async def close_match(
+        self,
+        match_id: int,
+        code: int = WAIT_EXPIRED_CODE,
+        reason: str = WAIT_EXPIRED_REASON,
+    ) -> None:
+        """Cierra todas las conexiones del partido (por defecto: espera vencida).
+
+        Itera una copia de subscribers(). Cada socket se cierra por separado:
+        si uno ya cayó, no impide cerrar a los demás. El release() lo hace el
+        endpoint cuando recibe el disconnect, no este método.
+        """
+        for websocket, _user_id in self.subscribers(match_id):
+            try:
+                await websocket.close(code=code, reason=reason)
+            except Exception:
+                pass  # ya estaba cerrado

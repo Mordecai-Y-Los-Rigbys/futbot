@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from app.models.match import MatchStatus
 from app.repositories.match_abstract import AbstractMatchRepository, MatchStateData
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
@@ -31,8 +32,10 @@ class FakeMatchRepo(AbstractMatchRepository):
     def __init__(self):
         self.states: dict[int, MatchStateData] = {}
 
-    def add(self, match_id=1, finished=False):
-        self.states[match_id] = MatchStateData(id=match_id, finished=finished)
+    def add(self, match_id=1, status=MatchStatus.scheduled):
+        self.states[match_id] = MatchStateData(
+            id=match_id, status=MatchStatus(status).value
+        )
 
     def get_state(self, match_id):
         return self.states.get(match_id)
