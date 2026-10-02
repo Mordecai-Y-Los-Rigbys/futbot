@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -11,6 +12,7 @@ from app.main import app
 from app.models.match import Match, MatchStatus
 from app.models.match_ws_token import MatchWsToken
 from app.services.match_connection_manager import MatchConnectionManager
+from app.services.match_timing import WS_TOKEN_TTL
 
 pytestmark = pytest.mark.integration
 
@@ -58,7 +60,7 @@ def make_match(db_session, make_user):
 
 @pytest.fixture()
 def make_token(db_session, make_user):
-    def _make(token, user_id, match, expires_in=timedelta(hours=2)) -> str:
+    def _make(token, user_id, match, expires_in=WS_TOKEN_TTL) -> str:
         make_user(user_id)
         now = datetime.now(timezone.utc)
         db_session.add(
@@ -160,3 +162,14 @@ def test_connecting_and_disconnecting_does_not_change_the_match(
 
     db_session.refresh(match)
     assert match.status == status
+
+def test_open_connection_survives_token_expiry(client, make_match, make_token, manager):
+    match = make_match()
+    make_token("corto", 7, match, expires_in=timedelta(seconds=2))
+
+    with client.websocket_connect(path(match, "corto")):
+        time.sleep(2.5)  # el token ya venció
+        assert manager.count(match.id, 7) == 1
+        assert denied(client, path(match, "corto")).status_code == 401
+
+    assert manager.count(match.id, 7) == 0

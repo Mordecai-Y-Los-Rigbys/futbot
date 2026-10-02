@@ -17,8 +17,10 @@ from app.errors import (
     api_error_handler,
     register_validation_exception_handler,
 )
+from app.startup_checks import ensure_single_worker
 
 load_dotenv()
+ensure_single_worker()
 
 # Crea las tablas en la BD (para desarrollo temprano, luego usarás Alembic)
 Base.metadata.create_all(bind=engine)
