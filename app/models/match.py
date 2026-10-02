@@ -67,6 +67,11 @@ class Match(Base):
             "league_id IS NULL OR scheduled_at IS NOT NULL",
             name="ck_matches_league_match_has_date",
         ),
+        # Un partido de liga siempre tiene rival: se define al generar el fixture.
+        CheckConstraint(
+            "league_id IS NULL OR user_2_id IS NOT NULL",
+            name="ck_matches_league_match_has_rival",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

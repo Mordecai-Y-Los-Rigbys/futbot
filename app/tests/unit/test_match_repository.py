@@ -25,18 +25,14 @@ def test_returns_none_when_the_match_does_not_exist(repo, db):
 
 
 @pytest.mark.parametrize(
-    "status, finished",
-    [
-        (MatchStatus.scheduled, False),
-        (MatchStatus.started, False),
-        (MatchStatus.finished, True),
-    ],
+    "status", [MatchStatus.scheduled, MatchStatus.started, MatchStatus.finished]
 )
-def test_finished_flag_follows_the_status(repo, db, status, finished):
+def test_state_exposes_the_status_as_a_string(repo, db, status):
     db.get.return_value = SimpleNamespace(id=5, status=status)
     state = repo.get_state(5)
-    assert (state.id, state.finished) == (5, finished)
-
+    assert state.id == 5
+    assert state.status == status.value
+    assert type(state.status) is str
 
 def test_is_read_only(repo, db):
     db.get.return_value = SimpleNamespace(id=5, status=MatchStatus.finished)

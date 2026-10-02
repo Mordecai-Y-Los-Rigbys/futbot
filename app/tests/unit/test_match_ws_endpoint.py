@@ -5,11 +5,12 @@ from contextlib import ExitStack, contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
-from starlette.testclient import WebSocketDenialResponse
+from starlette.websockets import WebSocketDisconnect
 from anyio import EndOfStream
 
 from app.api.ws_deps import get_connection_manager, get_handshake_service_scope
 from app.main import app
+from app.models.match import MatchStatus
 from app.services import match_handshake_service
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_handshake_service import MatchHandshakeService
@@ -67,11 +68,12 @@ def wait_until(predicate, timeout=2.0):
     return False
 
 
-def denied(client, path) -> WebSocketDenialResponse:
-    with pytest.raises(WebSocketDenialResponse) as exc:
-        with client.websocket_connect(path):
-            pass
-    return exc.value
+def rejection(client, path) -> tuple[int, str]:
+    """(close code, reason) con el que el server cierra el handshake."""
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with client.websocket_connect(path) as ws:
+            ws.receive_text()
+    return exc.value.code, exc.value.reason
 
 
 def stays_silent(ws, seconds=0.5) -> bool:
@@ -106,46 +108,37 @@ def test_connection_is_registered_as_subscriber(client, manager):
 
 @pytest.mark.parametrize("token", [None, "", "no-existe", "x" * 100])
 def test_missing_or_invalid_token_is_401(client, manager, token):
-    resp = denied(client, url(token=token))
-    assert resp.status_code == 401
-    assert resp.json()["code"] is None
-    assert resp.json()["message"]
+    assert rejection(client, url(token=token)) == (4401, "tokenInvalid")
     assert manager.count(1, 7) == 0
 
 
 def test_expired_token_is_401(client, tokens):
     tokens.add("viejo", match_id=1, expires_at=NOW - timedelta(seconds=1))
-    assert denied(client, url(token="viejo")).status_code == 401
+    assert rejection(client, url(token="viejo")) == (4401, "tokenExpired")
 
 
 def test_token_of_another_match_is_403(client, matches):
     matches.add(2)
-    resp = denied(client, url(match_id=2))
-    assert resp.status_code == 403
-    assert resp.json()["code"] is None
+    assert rejection(client, url(match_id=2)) == (4403, "tokenMatchMismatch")
 
 
 @pytest.mark.parametrize("match_id", ["abc", "1.5", "0", "99999999999999999999"])
 def test_garbage_match_id_is_rejected_over_http(client, match_id):
-    assert denied(client, url(match_id=match_id)).status_code == 403
+    assert rejection(client, url(match_id=match_id))[0] == 4403
 
 
 def test_nonexistent_match_is_404(client, tokens):
     tokens.add("huerfano", match_id=5)
-    resp = denied(client, url(match_id=5, token="huerfano"))
-    assert resp.status_code == 404
-    assert resp.json()["code"] is None
+    assert rejection(client, url(match_id=5, token="huerfano")) == (4404, "matchNotFound")
 
 
 def test_finished_match_is_409_match_finished(client, matches):
-    matches.add(1, finished=True)
-    resp = denied(client, url())
-    assert resp.status_code == 409
-    assert resp.json()["code"] == "matchFinished"
+    matches.add(1, status=MatchStatus.finished)
+    assert rejection(client, url()) == (4409, "matchFinished")
 
 
 def test_rejected_handshake_leaves_no_registration(client, manager):
-    denied(client, url(token="no-existe"))
+    rejection(client, url(token="no-existe"))
     assert manager.subscribers(1) == []
     assert manager._reserved == {}
 
@@ -170,10 +163,7 @@ def test_sixth_simultaneous_connection_is_429_and_a_slot_frees_on_close(client, 
         sockets = [stack.enter_context(client.websocket_connect(url())) for _ in range(5)]
         assert manager.count(1, 7) == 5
 
-        resp = denied(client, url())
-        assert resp.status_code == 429
-        assert resp.json()["code"] is None
-        assert manager.count(1, 7) == 5
+        assert rejection(client, url()) == (4429, "tooManyConnections")
 
         sockets[0].close()
         assert wait_until(lambda: manager.count(1, 7) == 4)
@@ -223,7 +213,7 @@ def test_disconnect_does_not_change_the_match(client, matches):
     with client.websocket_connect(url()):
         pass
     assert matches.states == states_before
-    assert matches.states[1].finished is False
+    assert matches.states[1].status == MatchStatus.scheduled
 
 
 def test_match_stream_reaches_open_and_late_connections(client, manager):
@@ -232,7 +222,7 @@ def test_match_stream_reaches_open_and_late_connections(client, manager):
     después recibe solo desde ese momento (sin replay)."""
 
     def emit(ws, payload):
-        (subscriber,) = manager.subscribers(1)[:1]
+        (subscriber, _user_id) = manager.subscribers(1)[0]
         ws.portal.call(subscriber.send_json, payload)
 
     with client.websocket_connect(url()) as first:
@@ -242,7 +232,7 @@ def test_match_stream_reaches_open_and_late_connections(client, manager):
 
         with client.websocket_connect(url()) as late:
             assert wait_until(lambda: len(manager.subscribers(1)) == 2)
-            for sub in manager.subscribers(1):
+            for sub, _ in manager.subscribers(1):
                 first.portal.call(sub.send_json, {"n": 2})
             assert first.receive_json() == {"n": 2}
             assert late.receive_json() == {"n": 2}  # el 1 no se le reenvía

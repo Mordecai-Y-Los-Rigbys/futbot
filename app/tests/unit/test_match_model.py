@@ -31,6 +31,7 @@ def test_ddl_for_postgres_includes_every_check():
         "ck_matches_result_iff_finished": "(status = 'finished') = (score_1 IS NOT NULL)",
         "ck_matches_scores_non_negative": "score_1 >= 0 AND score_2 >= 0",
         "ck_matches_league_match_has_date": "league_id IS NULL OR scheduled_at IS NOT NULL",
+        "ck_matches_league_match_has_rival": "league_id IS NULL OR user_2_id IS NOT NULL",
     }
     ddl = str(CreateTable(TABLE).compile(dialect=postgresql.dialect()))
     assert ddl.startswith("\nCREATE TABLE matches")

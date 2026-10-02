@@ -101,3 +101,9 @@ def test_user_1_is_required(db_session, users):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
+def test_league_match_without_rival_is_rejected(db_session, users, league):
+    db_session.add(Match(league_id=league.id, user_1_id=1, scheduled_at=DATE))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
