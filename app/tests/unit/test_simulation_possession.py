@@ -1,12 +1,16 @@
 import pytest
 
-from app.simulation.constants import POSSESSION_PROTECTION_TICKS
+from app.simulation.actions import Kick, KickTo, PlayerActions
+from app.simulation.constants import KICKER_REGAIN_BLOCK_TICKS, POSSESSION_PROTECTION_TICKS
 from app.simulation.geometry import ZERO
-from app.simulation.physics import reach, step
+from app.simulation.physics import kick_cooldown_ticks, max_kick_speed, reach, step
 from app.tests.unit.simulation_helpers import AWAY, HOME, player, run, state
 
 H, A = (HOME, 1), (AWAY, 1)
 
+
+def kick(key, action):
+    return {key: PlayerActions(kick=action)}
 
 
 # --- posesión -----------------------------------------------------------------------
@@ -81,3 +85,86 @@ def test_protection_prevents_stealing_the_ball():
 def test_winning_the_ball_grants_protection():
     s = step(state(player(HOME, 1, x=50.0), ball=(53.0, 30.0))).state
     assert s.ball.protected_until == s.tick + POSSESSION_PROTECTION_TICKS
+
+
+# --- patadas ------------------------------------------------------------------------
+
+
+def owned_ball(**stat_values):
+    """Local en (50, 30) con la pelota adelante (53, 30)."""
+    return state(player(HOME, 1, x=50.0, **stat_values), ball=(53.0, 30.0), owner=H)
+
+
+@pytest.mark.parametrize("force", [100, 40])
+def test_kick_speed_follows_the_formula(force):
+    assert max_kick_speed(60) == pytest.approx(44.0)
+    s = step(owned_ball(power=60), kick(H, Kick(force=force))).state
+    assert s.ball.owner is None
+    assert s.ball.velocity.x == pytest.approx(force / 100 * 44.0)
+    assert s.ball.velocity.y == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("force, expected", [(0, 1), (-5, 1), (250, 100)])
+def test_kick_force_is_clamped(force, expected):
+    s = step(owned_ball(power=60), kick(H, Kick(force=force))).state
+    assert s.ball.velocity.x == pytest.approx(expected / 100 * 44.0)
+
+
+def test_kick_without_the_ball_does_nothing():
+    s = step(state(player(HOME, 1, x=20.0), ball=(80.0, 30.0)), kick(H, Kick())).state
+    assert s.ball.velocity == ZERO
+
+
+def test_kick_to_a_target_in_front():
+    s = step(owned_ball(), kick(H, KickTo(100.0, 30.0))).state
+    assert s.ball.velocity.y == pytest.approx(0.0)
+    assert s.ball.velocity.x > 0
+
+
+def test_kick_to_a_target_behind_goes_to_the_closest_side():
+    # Mira hacia +x y el destino queda atrás y abajo: patea a 90°, hacia abajo.
+    s = step(owned_ball(), kick(H, KickTo(10.0, 20.0))).state
+    assert s.ball.velocity.x == pytest.approx(0.0)
+    assert s.ball.velocity.y < 0
+
+
+def test_cooldown_blocks_the_kick():
+    assert kick_cooldown_ticks(60) == 15
+    s = owned_ball(agility=60)
+    s.players[0].next_kick_tick = 5
+
+    s = step(s, kick(H, Kick())).state  # tick 1: en cooldown
+    assert s.ball.owner == H
+
+    s, _ = run(s, 3)  # ticks 2 a 4
+    s = step(s, kick(H, Kick())).state  # tick 5: ya puede
+    assert s.ball.owner is None
+
+
+def test_kicking_starts_the_cooldown():
+    s = step(owned_ball(agility=60), kick(H, Kick())).state
+    assert s.player(H).next_kick_tick == s.tick + kick_cooldown_ticks(60)
+
+
+def test_kicker_cannot_regain_the_ball_right_away():
+    # Patada mínima: la pelota casi no se aleja y queda al alcance.
+    s = step(owned_ball(), kick(H, Kick(force=1))).state
+    assert s.ball.owner is None
+
+    s, _ = run(s, KICKER_REGAIN_BLOCK_TICKS)
+    assert s.ball.owner is None
+
+    s = step(s).state
+    assert s.ball.owner == H
+
+
+def test_another_player_can_take_a_kicked_ball():
+    s = state(
+        player(HOME, 1, x=50.0),
+        player(AWAY, 1, x=60.0),
+        ball=(53.0, 30.0),
+        owner=H,
+    )
+    s = step(s, kick(H, Kick(force=20))).state
+    s, _ = run(s, 10)
+    assert s.ball.owner == A

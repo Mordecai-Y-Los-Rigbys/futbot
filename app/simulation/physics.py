@@ -8,6 +8,7 @@ Orden de un tick:
     2. Choques entre jugadores (strength).
     3. Pelota: acompaña al poseedor, o avanza, se frena, rebota y puede ser gol.
     4. Posesión (control, strength, protección).
+    5. Patadas (power, agility).
 """
 
 import copy
@@ -16,9 +17,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from app.simulation import constants as C
-from app.simulation.actions import GoTo, MoveInDirection, PlayerActions
+from app.simulation.actions import GoTo, Kick, KickAction, MoveInDirection, PlayerActions
 from app.simulation.geometry import ZERO, Vec, clamp
 from app.simulation.state import (
+    NOT_PROTECTED,
     BallState,
     Goal,
     MatchState,
@@ -38,9 +40,19 @@ def player_speed(speed: int) -> float:
     return C.PLAYER_BASE_SPEED + speed * C.PLAYER_SPEED_PER_POINT
 
 
+def max_kick_speed(power: int) -> float:
+    """Velocidad de la pelota con una patada a fuerza máxima, en u/s."""
+    return C.KICK_BASE_SPEED + power * C.KICK_SPEED_PER_POINT
+
+
 def reach(control: int) -> float:
     """Distancia máxima a la que puede controlar la pelota."""
     return C.PLAYER_RADIUS + C.BALL_RADIUS + control * C.REACH_PER_CONTROL_POINT
+
+
+def kick_cooldown_ticks(agility: int) -> int:
+    """Ticks entre dos patadas del mismo jugador."""
+    return round(C.KICK_COOLDOWN_BASE_TICKS - agility * C.KICK_COOLDOWN_TICKS_PER_POINT)
 
 
 # --- Estado inicial ---------------------------------------------------------------
@@ -127,6 +139,11 @@ def step(
         return StepResult(state_copy, (goal,))
 
     _resolve_possession(state_copy)
+    # Patear la pelota
+    for player in state_copy.players:
+        requested = actions.get(player.key)
+        if requested is not None and requested.kick is not None:
+            _kick(state_copy, player, requested.kick)
 
     return StepResult(state_copy)
 
@@ -138,6 +155,10 @@ def step(
 def _clamp_player(vector: Vec) -> Vec:
     r = C.PLAYER_RADIUS
     return Vec(clamp(vector.x, r, C.FIELD_LENGTH - r), clamp(vector.y, r, C.FIELD_WIDTH - r))
+
+# limita un punto del espacio al campo
+def _clamp_to_field(vector: Vec) -> Vec:
+    return Vec(clamp(vector.x, 0.0, C.FIELD_LENGTH), clamp(vector.y, 0.0, C.FIELD_WIDTH))
 
 
 def _move_player(player: PlayerState) -> None:
@@ -323,3 +344,45 @@ def _resolve_possession(state: MatchState) -> None:
         ball.owner = winner.key
         ball.protected_until = state.tick + C.POSSESSION_PROTECTION_TICKS
         ball.velocity = ZERO
+
+
+# --- Patadas --------------------------------------------------------------------------------
+
+
+def _kick(state: MatchState, player: PlayerState, kick: KickAction) -> None:
+    """Se llama al final del tick para cada jugador que pidió patear. Hace cinco cosas:
+
+    1. ¿Puede patear?         → si no tiene la pelota o está en cooldown, no hace nada
+    2. ¿Qué es "adelante"?    → la línea jugador → pelota
+    3. ¿Hacia dónde sale?     → adelante (kick) o hacia un punto (kick_to)
+    4. ¿Con qué velocidad?    → force × power
+    5. Soltar la pelota       → velocidad, sin dueño, cooldown y bloqueo"""
+    
+    ball = state.ball
+    if ball.owner != player.key or state.tick < player.next_kick_tick:
+        return
+
+    forward = (ball.position - player.position).normalized()
+    if forward == ZERO:
+        forward = player.facing
+
+    if isinstance(kick, Kick):
+        direction = forward
+    else:
+        target = _clamp_to_field(Vec(kick.x, kick.y))
+        direction = (target - ball.position).normalized()
+        if direction == ZERO:
+            direction = forward
+        elif direction.dot(forward) < 0:
+            # El destino queda detrás: se patea hacia el lateral (±90°) más cercano.
+            side = forward.perpendicular()
+            direction = side if direction.dot(side) >= 0 else -side
+
+    force = clamp(kick.force, C.MIN_KICK_FORCE, C.MAX_KICK_FORCE)
+    speed = force / C.MAX_KICK_FORCE * max_kick_speed(player.stats.power)
+
+    ball.velocity = direction * speed
+    ball.owner = None
+    ball.protected_until = NOT_PROTECTED
+    player.next_kick_tick = state.tick + kick_cooldown_ticks(player.stats.agility)
+    player.regain_blocked_until = state.tick + C.KICKER_REGAIN_BLOCK_TICKS
