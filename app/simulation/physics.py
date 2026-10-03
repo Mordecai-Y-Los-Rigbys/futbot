@@ -274,7 +274,8 @@ def _update_ball(state: MatchState) -> Goal | None:
         ball.velocity = ZERO
         return goal
 
-    # Sin gol: rebote en las paredes. Frente al arco no hay pared.
+    # Sin gol: rebote en las paredes. Frente al arco no hay pared, salvo que la
+    # pelota ya haya pasado la línea por afuera de los palos (chocó la pared).
 
     # Las paredes estan a un radio del borde de la cancha, así que la pelota no puede ir más allá de eso.
     wall_min_x = C.BALL_RADIUS
@@ -287,10 +288,10 @@ def _update_ball(state: MatchState) -> Goal | None:
 
     # Rebotar = reflejar la posición del otro lado de la pared (lo que se pasó,
     # vuelve hacia adentro) e invertir la velocidad, perdiendo un poco.
-    if x < wall_min_x and not _on_goal_line(y):
+    if x < wall_min_x and (x < 0 or not _on_goal_line(y)):
         x = 2 * wall_min_x - x
         velocity_x = -velocity_x * C.WALL_RESTITUTION
-    elif x > wall_max_x and not _on_goal_line(y):
+    elif x > wall_max_x and (x > C.FIELD_LENGTH or not _on_goal_line(y)):
         x =  2 * (wall_max_x) - x
         velocity_x = -velocity_x * C.WALL_RESTITUTION
 
