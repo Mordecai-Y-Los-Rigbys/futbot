@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.orm import Session
 
 from app.models.match import Match, MatchStatus
@@ -14,11 +14,21 @@ class SqlAlchemyMatchExpiryRepository(AbstractMatchExpiryRepository):
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def is_waiting_friendly():
+        """Condición SQL de un amistoso esperando rival: sin liga, sin usuario 2
+        y todavía sin arrancar."""
+        return and_(
+            Match.league_id.is_(None),
+            Match.user_2_id.is_(None),
+            Match.status == MatchStatus.scheduled,
+        )
+
     def cancel_if_waiting_friendly(self, match_id: int) -> bool:
         try:
             result = self.db.execute(
                 update(Match)
-                .where(Match.id == match_id, Match.is_waiting_friendly())
+                .where(Match.id == match_id, self.is_waiting_friendly())
                 .values(status=MatchStatus.cancelled)
             )
             self.db.commit()
@@ -30,7 +40,7 @@ class SqlAlchemyMatchExpiryRepository(AbstractMatchExpiryRepository):
     def list_waiting_friendlies(self) -> list[WaitingFriendlyData]:
         rows = self.db.execute(
             select(Match.id, Match.created_at)
-            .where(*Match.is_waiting_friendly())
+            .where(self.is_waiting_friendly())
             .order_by(Match.id.asc())
         ).all()
 

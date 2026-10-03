@@ -106,11 +106,3 @@ class Match(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-
-    @classmethod
-    def is_waiting_friendly(cls):
-        return and_(
-            cls.league_id.is_(None),
-            cls.user_2_id.is_(None),
-            cls.status == MatchStatus.scheduled,
-        )
