@@ -17,6 +17,5 @@ class UserRepository:
             avatar=avatar,
         )
         self.db.add(new_user)
-        self.db.commit()
-        self.db.refresh(new_user)
+        self.db.flush()
         return new_user

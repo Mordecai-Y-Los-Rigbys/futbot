@@ -36,9 +36,14 @@ def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
 def get_auth_service(
     db: Session = Depends(get_db),
     session_service: SessionService = Depends(get_session_service),
+    behavior_service: BehaviorService = Depends(get_behavior_service),
 ) -> AuthService:
     user_repo = UserRepository(db)
-    return AuthService(user_repo=user_repo, session_service=session_service)
+    return AuthService(
+        user_repo=user_repo,
+        session_service=session_service,
+        behavior_service=behavior_service,
+    )
 
 
 def get_current_user_id(

@@ -5,6 +5,7 @@ from app.models.behavior import Behavior
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    CreateBehaviorData,
 )
 
 
@@ -41,3 +42,11 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
     def get_by_id(self, behavior_id: int) -> BehaviorData | None:
         record = self.db.get(Behavior, behavior_id)
         return BehaviorData.model_validate(record) if record is not None else None
+    
+    def create_many(
+        self, user_id: int, behaviors: list[CreateBehaviorData]
+    ) -> list[BehaviorData]:
+        records = [Behavior(user_id=user_id, name=b.name, code=b.code) for b in behaviors]
+        self.db.add_all(records)
+        self.db.flush() 
+        return [BehaviorData.model_validate(r) for r in records]
