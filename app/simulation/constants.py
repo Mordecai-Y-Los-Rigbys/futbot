@@ -9,7 +9,7 @@ Unidades: distancias en "unidades de cancha" (u), tiempo en ticks.
 # --- Tiempo ------------------------------------------------------------------
 
 TICKS_PER_SECOND = 20
-DT = 1 / TICKS_PER_SECOND  # segundos por tick => 0,05s por tick
+SECONDS_PER_TICK = 1 / TICKS_PER_SECOND  # segundos por tick => 0,05s por tick
 
 # --- Cancha y cuerpos ----------------------------------------------------------
 
@@ -60,7 +60,7 @@ POSSESSION_PROTECTION_TICKS = 10  # nadie puede robar la pelota recién ganada
 KICKER_REGAIN_BLOCK_TICKS = 5  # el pateador no puede recuperarla enseguida
 
 # Al ganar la pelota, en vez de aparecerle de golpe al frente, se le acerca a esta velocidad.
-BALL_CARRY_SPEED = 40.0 #(u/s)
+BALL_CARRY_SPEED = 40.0 # (u/s)
 
 # --- Choques ------------------------------------------------------------------------
 

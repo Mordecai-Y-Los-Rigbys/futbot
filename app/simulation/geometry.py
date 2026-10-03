@@ -21,8 +21,8 @@ class Vec:
     def __neg__(self) -> "Vec":
         return Vec(-self.x, -self.y)
 
-    # Producto punto: si es 1, son paralelos;
-    # si es 0, son perpendiculares; si es -1, son opuestos.
+    # Producto punto: positivo si apuntan para el mismo lado, 0 si son
+    # perpendiculares, negativo si apuntan para lados opuestos.
     def dot(self, other: "Vec") -> float:
         return self.x * other.x + self.y * other.y
 
