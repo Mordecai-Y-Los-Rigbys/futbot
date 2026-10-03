@@ -3,9 +3,9 @@ from unittest.mock import create_autospec
 import pytest
 
 from app.errors import ApiError
-from app.repositories.behavior_abstract import AbstractBehaviorRepository, BehaviorData
+from app.repositories.behavior_abstract import AbstractBehaviorRepository, BehaviorData, CreateBehaviorData
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
-
+from app.services.default_behaviors import DEFAULT_BEHAVIORS
 
 @pytest.fixture
 def repo():
@@ -84,3 +84,13 @@ def test_get_owned_behavior_is_read_only(service, repo):
 
     # el único acceso al repositorio es la lectura por id
     assert [c[0] for c in repo.method_calls] == ["get_by_id"]
+    
+    
+# ---------- create_default_behaviors ----------
+
+def test_create_default_behaviors_creates_a_copy_for_the_user(service, repo):
+    service.create_default_behaviors(user_id=7)
+
+    repo.create_many.assert_called_once_with(
+        7, [CreateBehaviorData(name=b["name"], code=b["code"]) for b in DEFAULT_BEHAVIORS]
+    )

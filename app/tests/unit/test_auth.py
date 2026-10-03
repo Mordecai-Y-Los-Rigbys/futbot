@@ -22,7 +22,11 @@ def mock_session_service():
 
 @pytest.fixture
 def auth_service(mock_user_repo, mock_session_service):
-    return AuthService(user_repo=mock_user_repo, session_service=mock_session_service)
+    return AuthService(
+        user_repo=mock_user_repo,
+        session_service=mock_session_service,
+        behavior_service=MagicMock(),
+    )
 
 
 # ==============================================================================
