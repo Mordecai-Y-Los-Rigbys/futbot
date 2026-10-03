@@ -1,6 +1,6 @@
 import pytest
+from sqlalchemy.exc import IntegrityError
 
-from app.errors import ApiError
 from app.repositories.user_repository import UserRepository
 
 pytestmark = pytest.mark.integration
@@ -29,22 +29,9 @@ def test_get_by_email_only_matches_the_exact_email(repo):
     assert repo.get_by_email("b@test.com").username == "b"
 
 
-def test_duplicate_email_is_rejected_by_the_unique_constraint(repo):
+def test_duplicate_email_violates_the_unique_constraint(repo, db_session):
     repo.create("a", "dup@test.com", "hash", "A", 1)
 
-    with pytest.raises(ApiError) as exc:
+    with pytest.raises(IntegrityError):
         repo.create("b", "dup@test.com", "hash", "B", 1)
-
-    assert exc.value.status_code == 409
-    assert exc.value.code is None
-
-
-def test_session_stays_usable_after_duplicate_email(repo):
-    repo.create("a", "dup@test.com", "hash", "A", 1)
-
-    with pytest.raises(ApiError):
-        repo.create("b", "dup@test.com", "hash", "B", 1)
-
-    assert repo.get_by_email("dup@test.com").username == "a"
-    other = repo.create("c", "otro@test.com", "hash", "C", 1)
-    assert other.id is not None
+    db_session.rollback()

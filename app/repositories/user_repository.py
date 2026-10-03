@@ -1,7 +1,4 @@
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from app.errors import ApiError
 from app.models.user import User
 
 class UserRepository:
@@ -20,15 +17,6 @@ class UserRepository:
             avatar=avatar,
         )
         self.db.add(new_user)
-        try:
-            self.db.commit()
-        except IntegrityError:
-            # Sin el rollback la sesión queda inutilizable
-            self.db.rollback()
-            raise ApiError(
-                status_code=409,
-                code=None,
-                message="El email ya está asociado a otro usuario.",
-            )
+        self.db.commit()
         self.db.refresh(new_user)
         return new_user

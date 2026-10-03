@@ -1,10 +1,8 @@
 from unittest.mock import create_autospec
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.errors import ApiError
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 
@@ -83,17 +81,4 @@ def test_create_does_not_swallow_commit_errors(repo, db):
     with pytest.raises(RuntimeError):
         repo.create("messi", "messi@test.com", "hash", "Inter", 2)
 
-    db.refresh.assert_not_called()
-
-# ---------- create: email duplicado ----------
-
-def test_create_duplicate_email_raises_409_and_rolls_back(repo, db):
-    db.commit.side_effect = IntegrityError("INSERT ...", {}, Exception("duplicate key"))
-
-    with pytest.raises(ApiError) as exc:
-        repo.create("messi", "messi@test.com", "hash", "Inter", 3)
-
-    assert exc.value.status_code == 409
-    assert exc.value.code is None
-    db.rollback.assert_called_once()
     db.refresh.assert_not_called()
