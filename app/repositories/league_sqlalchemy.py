@@ -4,11 +4,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.league import LeagueStatus
-from app.domain.league_participant_member import MemberRole
+from app.domain.team_member import MemberRole
 from app.models.behavior import Behavior
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
-from app.models.team_member import MemberRole, TeamMember
+from app.models.team_member import TeamMember
 from app.models.player import Player
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,

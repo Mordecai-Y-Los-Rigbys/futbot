@@ -10,6 +10,9 @@ from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
+from app.repositories.league_abstract import AbstractLeagueRepository
+from app.repositories.team_abstract import AbstractTeamRepository
+from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.services.player_service import PlayerService
@@ -19,6 +22,13 @@ from app.services.league_validation import INVALID_JSON
 from app.services.session_service import SessionService
 
 
+def get_league_repository(db=Depends(get_db)) -> AbstractLeagueRepository:
+    return SqlAlchemyLeagueRepository(db)
+
+def get_team_repository(db=Depends(get_db)) -> AbstractTeamRepository:
+    return SqlAlchemyTeamRepository(db)
+
+
 def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
     return BehaviorService(SqlAlchemyBehaviorRepository(db))
 
@@ -26,9 +36,11 @@ def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
     return SessionService(SqlAlchemySessionRepository(db))
 
-
-def get_league_service(db: Session = Depends(get_db)) -> LeagueService:
-    return LeagueService(SqlAlchemyLeagueRepository(db))
+def get_league_service(
+    leagues=Depends(get_league_repository),
+    teams=Depends(get_team_repository),
+) -> LeagueService:
+    return LeagueService(leagues, teams)
 
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
     return PlayerService(SqlAlchemyPlayerRepository(db))

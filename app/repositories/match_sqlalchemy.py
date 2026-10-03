@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.match import Match
@@ -49,3 +49,19 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             club_1_name=row.club_1_name,
             club_2_name=row.club_2_name,
         )
+
+    def mark_started(self, match_id: int) -> None:
+        self.db.execute(
+            update(Match)
+            .where(Match.id == match_id, Match.status == MatchStatus.scheduled)
+            .values(status=MatchStatus.started)
+        )
+        self.db.commit()
+
+    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
+        self.db.execute(
+            update(Match)
+            .where(Match.id == match_id)
+            .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
+        )
+        self.db.commit()

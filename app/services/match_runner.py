@@ -18,7 +18,7 @@ from app.services.match_broadcast import (
     build_tick_payload,
 )
 from app.services.match_connection_manager import MatchConnectionManager
-from app.services.match_setup import MatchSetup
+from app.services.match_setup_service import MatchSetup
 from app.simulation import constants as C
 from app.simulation.match_rules import MatchSession, Phase, TickResult, build_session
 

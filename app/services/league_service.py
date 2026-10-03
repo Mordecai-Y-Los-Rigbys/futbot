@@ -4,9 +4,10 @@ from app.errors import ApiError
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
-    CreateLeagueMemberData,
+    CreateLeagueMemberData,   # <- falta en tu import; sin esto create_league falla con NameError
     LeagueListItemData,
 )
+from app.repositories.team_abstract import AbstractTeamRepository
 from app.schemas.league import LeagueCreator, LeaguePage, LeagueSummary
 from app.services.league_validation import parse_create_league
 
@@ -31,8 +32,9 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
 
 
 class LeagueService:
-    def __init__(self, repo: AbstractLeagueRepository):
+    def __init__(self, repo: AbstractLeagueRepository, teams: AbstractTeamRepository):
         self.repo = repo
+        self.teams = teams
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
         data = self.repo.list_page(
@@ -54,14 +56,10 @@ class LeagueService:
         player_ids = [m.player_id for m in data.members]
         behavior_ids = list({m.behavior_id for m in data.members})
         if (
-            self.repo.owned_player_ids(creator_id, player_ids) != set(player_ids)
-            or self.repo.owned_behavior_ids(creator_id, behavior_ids) != set(behavior_ids)
+            self.teams.owned_player_ids(creator_id, player_ids) != set(player_ids)
+            or self.teams.owned_behavior_ids(creator_id, behavior_ids) != set(behavior_ids)
         ):
-            raise ApiError(
-                409,
-                "playerOrBehaviorNotOwned",
-                "Algún jugador o behavior no pertenece al usuario.",
-            )
+            raise ApiError(409, "playerOrBehaviorNotOwned", "Algún jugador o behavior no pertenece al usuario.")
 
         created = self.repo.create(
             CreateLeagueData(

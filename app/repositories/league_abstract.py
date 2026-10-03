@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
-from app.domain.league_participant_member import MemberRole
+from app.domain.team_member import MemberRole
 
 
 class LeagueCreatorData(BaseModel):
@@ -61,16 +61,6 @@ class AbstractLeagueRepository(ABC):
         tratando %, _ y \\ de forma literal. `total` es la cantidad de
         ligas que matchean el filtro, sin offset/limit.
         """
-        pass
-
-    @abstractmethod
-    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        """Subconjunto de `ids` que son jugadores del usuario."""
-        pass
-
-    @abstractmethod
-    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        """Subconjunto de `ids` que son behaviors del usuario."""
         pass
 
     @abstractmethod

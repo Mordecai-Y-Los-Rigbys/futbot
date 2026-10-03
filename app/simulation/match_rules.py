@@ -16,20 +16,17 @@ from dataclasses import dataclass
 
 from app.simulation import constants as C
 from app.simulation.behaviors.primitives import MatchClock
-from app.simulation.behaviors.sandbox import CompiledBehavior, run_behaviors
+from app.simulation.behaviors.executor import run_behaviors
+from app.simulation.behaviors.sandbox import CompiledBehavior
+from app.simulation.constants import PERIODS, COUNTDOWN_SECONDS, FRIENDLY_MATCH_DURATION
 from app.simulation.physics import (  # ajustar al nombre real del módulo
     PlayerSetup,
     create_initial_state,
     reset_positions,
     step,
 )
-from app.simulation.state import Goal, MatchState, PlayerKey, Role, Team
-
-# Estructura de períodos: hoy 1. Con 4 tiempos + pausas solo cambia esto y la
-# lógica de la pausa dentro de MatchSession.advance(); el reloj ya trabaja por período.
-PERIODS = 1
-COUNTDOWN_SECONDS = 10
-FRIENDLY_MATCH_DURATION = 3  # minutos
+from app.simulation.state import Goal, MatchState, PlayerKey, Team
+from app.domain.team_member import MemberRole
 
 
 class Phase(str, enum.Enum):
@@ -49,7 +46,7 @@ class TeamSetup:
     """Los tres titulares de un club y el comportamiento de cada rol."""
 
     players: Sequence[PlayerSetup]
-    behaviors: Mapping[Role, CompiledBehavior]
+    behaviors: Mapping[MemberRole, CompiledBehavior]
 
 
 @dataclass(frozen=True)

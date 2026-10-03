@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 from app.services.match_broadcast import TickContext, build_tick_payload
 from app.services.match_runner import MatchRunner
-from app.services.match_setup import MatchSetup
+from app.services.match_setup_service import MatchSetup
 from app.simulation.match_rules import Event, Phase, TickResult
 from app.simulation.physics import create_initial_state
 from app.simulation.state import Team

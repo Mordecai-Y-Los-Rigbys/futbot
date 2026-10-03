@@ -6,27 +6,20 @@
 import argparse
 
 from app.simulation.behaviors.sandbox import compile_behavior
-from app.simulation.match_rules import COUNTDOWN_SECONDS, Event, TeamSetup
+from app.simulation.constants import STARTER_ROLES, CHASE_AND_SHOOT, COUNTDOWN_SECONDS
+from app.simulation.match_rules import Event, TeamSetup
 from app.simulation.physics import PlayerSetup
 from app.simulation.simulate import simulate_match
-from app.simulation.state import Role, Stats
-
-CHASE_AND_SHOOT = """
-bx, by = ball_position()
-if i_have_ball():
-    gx, gy = opponent_goal
-    kick_to(gx, gy)
-else:
-    go_to(bx, by)
-"""
+from app.simulation.state import Stats
+from app.domain.team_member import MemberRole
 
 
 def default_team(first_id: int) -> TeamSetup:
     behavior = compile_behavior(CHASE_AND_SHOOT)
     stats = Stats(power=60, agility=60, control=60, strength=60, speed=60)
     return TeamSetup(
-        players=[PlayerSetup(first_id + r.number, r, stats) for r in Role],
-        behaviors={r: behavior for r in Role},
+        players=[PlayerSetup(first_id + r.number, r, stats) for r in STARTER_ROLES],
+        behaviors={r: behavior for r in STARTER_ROLES},
     )
 
 

@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from app.models.behavior import Behavior
 from app.models.league import League, LeagueStatus
 from app.models.league_participant import LeagueParticipant
-from app.models.league_participant_member import LeagueParticipantMember
+from app.models.team_member import TeamMember
 from app.models.player import Player
 
 pytestmark = pytest.mark.integration
@@ -69,7 +69,7 @@ def test_create_league_enrolls_creator_with_team(
     assert league.status == LeagueStatus.preparation
     assert league.password == "secret"  # se guarda tal cual, sin hashear
     assert count(db_session, LeagueParticipant) == 1
-    assert count(db_session, LeagueParticipantMember) == 6
+    assert count(db_session, TeamMember) == 6
     assert api.get("/leagues").json()["total"] == 1  # visible en el listado
 
 
@@ -96,7 +96,7 @@ def test_nothing_is_persisted_when_team_is_not_owned(
     assert resp.json()["code"] == "playerOrBehaviorNotOwned"
     assert count(db_session, League) == 0
     assert count(db_session, LeagueParticipant) == 0
-    assert count(db_session, LeagueParticipantMember) == 0
+    assert count(db_session, TeamMember) == 0
 
 
 def test_invalid_payload_persists_nothing(login_as, create_user, team_of, db_session):

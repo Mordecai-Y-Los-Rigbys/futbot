@@ -45,3 +45,13 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
             )
             for role, player, behavior_code in rows
         ]
+    
+    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        return set(self.db.scalars(
+            select(Player.id).where(Player.user_id == user_id, Player.id.in_(ids))
+        ))
+
+    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        return set(self.db.scalars(
+            select(Behavior.id).where(Behavior.user_id == user_id, Behavior.id.in_(ids))
+        ))
