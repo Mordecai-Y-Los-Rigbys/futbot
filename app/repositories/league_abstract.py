@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 from pydantic import BaseModel
+from app.domain.league import LeagueStatus
+from app.domain.league_participant_member import MemberRole
 
 
 class LeagueCreatorData(BaseModel):
@@ -16,7 +18,7 @@ class LeagueListItemData(BaseModel):
     id: int
     name: str
     creator: LeagueCreatorData
-    status: str
+    status: LeagueStatus
     participants_count: int
     max_participants: int
     private: bool
@@ -33,7 +35,7 @@ class LeaguePageData(BaseModel):
 class CreateLeagueMemberData(BaseModel):
     player_id: int
     behavior_id: int
-    role: str
+    role: MemberRole
 
 
 class CreateLeagueData(BaseModel):
