@@ -20,6 +20,8 @@ from app.simulation import constants as C
 from app.simulation.actions import GoTo, Kick, KickAction, MoveInDirection, PlayerActions
 from app.simulation.geometry import ZERO, Vec, clamp
 from app.simulation.state import (
+    NO_KICK_COOLDOWN,
+    NOT_REGAIN_BLOCKED,
     NOT_PROTECTED,
     BallState,
     Goal,
@@ -109,6 +111,8 @@ def reset_positions(state: MatchState) -> MatchState:
         player.position = _absolute(player.team, *C.INITIAL_POSITIONS[player.number])
         player.facing = _attack_direction(player.team)
         player.move = None
+        player.next_kick_tick = NO_KICK_COOLDOWN
+        player.regain_blocked_until = NOT_REGAIN_BLOCKED
     new.ball = BallState(position=Vec(*C.KICKOFF_BALL_POSITION))
     return new
 
