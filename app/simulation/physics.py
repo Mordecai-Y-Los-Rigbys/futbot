@@ -6,6 +6,7 @@ siempre devuelve el mismo resultado para la misma entrada gracias a la semilla.
 Orden de un tick:
     1. Movimiento de los jugadores (speed).
     2. Choques entre jugadores (strength).
+    3. Pelota: acompaña al poseedor, o avanza, se frena, rebota y puede ser gol.
 """
 
 import copy
@@ -17,6 +18,7 @@ from app.simulation.actions import GoTo, MoveInDirection, PlayerActions
 from app.simulation.geometry import ZERO, Vec, clamp
 from app.simulation.state import (
     BallState,
+    Goal,
     MatchState,
     PlayerKey,
     PlayerState,
@@ -112,6 +114,11 @@ def step(
 
     _resolve_collisions(state_copy.players)
 
+    # Actualizar pelota, chequear gol y posesión
+    goal = _update_ball(state_copy)
+    if goal is not None:
+        return StepResult(state_copy, (goal,))
+
     return StepResult(state_copy)
 
 
@@ -183,3 +190,86 @@ def _separate(player_a: PlayerState, player_b: PlayerState) -> bool:
     player_a.position = _clamp_player(player_a.position - push_by_b)
     player_b.position = _clamp_player(player_b.position + push_by_a)
     return True
+
+# --- Pelota ----------------------------------------------------------------------------------
+
+
+# chequea si la pelota se sale del campo y la devuelve a la cancha
+def _clamp_ball(vector: Vec) -> Vec:
+    r = C.BALL_RADIUS
+    return Vec(clamp(vector.x, r, C.FIELD_LENGTH - r), clamp(vector.y, r, C.FIELD_WIDTH - r))
+
+
+def _on_goal_line(y: float) -> bool:
+    """True si la altura 'y' queda entre los palos."""
+    return C.GOAL_Y_MIN <= y <= C.GOAL_Y_MAX
+
+def _goal_crossing(old: Vec, new: Vec) -> Goal | None:
+    """Goal si la pelota, al ir de old a new, cruzó una línea de fondo entre
+    los palos. Si no, None."""
+    for line, scorer in ((0.0, Team.AWAY), (C.FIELD_LENGTH, Team.HOME)):
+        crossed = (new.x - line) * (old.x - line) <= 0 and new.x != old.x
+        if not crossed:
+            continue
+        # Fracción del recorrido en la que tocó la línea, y la altura en ese punto.
+        t = (line - old.x) / (new.x - old.x)
+        y_at_crossing = old.y + (new.y - old.y) * t
+        if _on_goal_line(y_at_crossing):
+            return Goal(scoring_team=scorer)
+    return None
+
+def _update_ball(state: MatchState) -> Goal | None:
+    ball = state.ball
+    if ball.owner is not None:
+        # En posesión, la pelota va delante del jugador.
+        owner = state.player(ball.owner)
+        offset = C.PLAYER_RADIUS + C.BALL_RADIUS
+        ball.position = _clamp_ball(owner.position + owner.facing * offset)
+        ball.velocity = ZERO
+        return None
+
+    if ball.velocity == ZERO:
+        return None
+
+    old_position = ball.position
+    new_position = old_position + ball.velocity * C.SECONDS_PER_TICK
+
+    goal = _goal_crossing(old_position, new_position)
+    if goal is not None:
+        ball.position = new_position  # adentro del arco
+        ball.velocity = ZERO
+        return goal
+
+    # Sin gol: rebote en las paredes. Frente al arco no hay pared.
+
+    # Las paredes estan a un radio del borde de la cancha, así que la pelota no puede ir más allá de eso.
+    wall_min_x = C.BALL_RADIUS
+    wall_max_x = C.FIELD_LENGTH - C.BALL_RADIUS
+    wall_min_y = C.BALL_RADIUS
+    wall_max_y = C.FIELD_WIDTH - C.BALL_RADIUS
+    
+    x, y = new_position.x, new_position.y
+    velocity_x, velocity_y  = ball.velocity.x, ball.velocity.y
+
+    # Rebotar = reflejar la posición del otro lado de la pared (lo que se pasó,
+    # vuelve hacia adentro) e invertir la velocidad, perdiendo un poco.
+    if x < wall_min_x and not _on_goal_line(y):
+        x = 2 * wall_min_x - x
+        velocity_x = -velocity_x * C.WALL_RESTITUTION
+    elif x > wall_max_x and not _on_goal_line(y):
+        x =  2 * (wall_max_x) - x
+        velocity_x = -velocity_x * C.WALL_RESTITUTION
+
+    if y < wall_min_y:
+        y = 2 * wall_min_y - y
+        velocity_y = -velocity_y * C.WALL_RESTITUTION
+    elif y > wall_max_y:
+        y = 2 * wall_max_y - y
+        velocity_y = -velocity_y * C.WALL_RESTITUTION
+
+    new_velocity = Vec(velocity_x, velocity_y) * C.BALL_FRICTION_PER_TICK
+    if new_velocity.length() < C.BALL_MIN_SPEED:
+        new_velocity = ZERO
+    ball.position = Vec(x, y)
+    ball.velocity = new_velocity
+    return None
