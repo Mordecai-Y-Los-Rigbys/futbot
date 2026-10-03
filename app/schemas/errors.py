@@ -40,3 +40,13 @@ class CreatePlayerBadRequest(BaseModel):
         "statSumMismatch",
     ]
     message: str
+
+
+class CreateFriendlyMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType", "incompleteForm", "nameTooLong", "invalidTeam"]
+    message: str
+
+
+class CreateFriendlyMatchConflict(BaseModel):
+    code: Literal["alreadyPlaying", "playerOrBehaviorNotOwned"]
+    message: str
