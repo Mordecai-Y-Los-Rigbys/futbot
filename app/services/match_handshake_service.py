@@ -55,5 +55,7 @@ class MatchHandshakeService:
             raise ApiError(404, "matchNotFound", "Partido no encontrado.")
         if match.status == "finished":
             raise ApiError(409, "matchFinished", "El partido ya terminó.")
+        if match.status == "cancelled":
+            raise ApiError(409, "matchCancelled", "El partido fue cancelado.")
 
         return HandshakeGrant(user_id=record.user_id, match_id=record.match_id)

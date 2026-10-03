@@ -236,3 +236,37 @@ def test_match_stream_reaches_open_and_late_connections(client, manager):
                 first.portal.call(sub.send_json, {"n": 2})
             assert first.receive_json() == {"n": 2}
             assert late.receive_json() == {"n": 2}  # el 1 no se le reenvía
+
+def test_open_connection_survives_token_expiry(client, tokens, manager, monkeypatch):
+    tokens.add("corto", user_id=7, match_id=1, expires_at=NOW + timedelta(minutes=1))
+    with client.websocket_connect(url(token="corto")):
+        assert wait_until(lambda: len(manager.subscribers(1)) == 1)
+
+        # El reloj pasa el vencimiento: la conexión abierta no se corta.
+        monkeypatch.setattr(
+            match_handshake_service, "_utcnow", lambda: NOW + timedelta(minutes=2)
+        )
+        assert manager.count(1, 7) == 1
+        assert len(manager.subscribers(1)) == 1
+
+        # Pero un handshake nuevo con ese token ya da 401.
+        assert rejection(client, url(token="corto")) == (4401, "tokenExpired")
+        assert manager.count(1, 7) == 1
+
+def test_cancelled_match_is_4409_match_cancelled(client, matches):
+    matches.add(1, status=MatchStatus.cancelled)
+    assert rejection(client, url()) == (4409, "matchCancelled")
+
+
+def test_close_match_closes_with_1000_wait_expired_and_releases(client, manager):
+    with client.websocket_connect(url()) as ws:
+        assert wait_until(lambda: len(manager.subscribers(1)) == 1)
+
+        ws.portal.call(manager.close_match, 1)
+
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_text()
+        assert (exc.value.code, exc.value.reason) == (1000, "waitExpired")
+
+    assert wait_until(lambda: manager.count(1, 7) == 0)
+    assert manager.subscribers(1) == []
