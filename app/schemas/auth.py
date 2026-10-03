@@ -42,3 +42,8 @@ class LogInRequest(BaseModel):
     
     email: EmailStr
     password: str = Field(min_length=1)
+
+class LogInBadRequest(BaseModel):
+
+    code: Literal["invalidFieldType", "incompleteForm", "invalidEmail"]
+    message: str

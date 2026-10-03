@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_auth_service
-from app.schemas.auth import LogInRequest, RegisterUserRequest, UserResponse
+from app.schemas.auth import LogInRequest, RegisterUserRequest, UserResponse, ErrorResponse, LogInBadRequest, RegisterUserBadRequest
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -12,6 +12,10 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     response_model_by_alias=True,
+    responses={
+        400: {"model": RegisterUserBadRequest},
+        409: {"model": ErrorResponse},
+    },
 )
 def register_user(
     request: RegisterUserRequest,
@@ -36,6 +40,10 @@ def register_user(
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     response_model_by_alias=True,
+    responses={
+        400: {"model": LogInBadRequest},
+        401: {"model": ErrorResponse},
+    },
 )
 def user_login(
     request: LogInRequest,

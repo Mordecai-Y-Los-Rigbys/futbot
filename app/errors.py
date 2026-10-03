@@ -3,9 +3,16 @@ from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.schemas.auth import RegisterUserBadRequest, RegisterUserFieldError
+from app.schemas.auth import (
+    LogInBadRequest,
+    RegisterUserBadRequest,
+    RegisterUserFieldError,
+)
 
 REGISTER_FIELDS = ("username", "email", "password", "clubName", "avatar")
+
+# Tipos de error de Pydantic/FastAPI que indican que el body entero es ilegible
+UNREADABLE_BODY_TYPES = {"json_invalid", "model_attributes_type"}
 
 
 class ApiError(Exception):
@@ -27,6 +34,19 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return exc.to_response()
 
 
+def is_unreadable_body(errors: List[Dict[str, Any]]) -> bool:
+    """JSON roto, body vacío o body que no es un objeto: el error es del body entero."""
+    return any(
+        err.get("type") in UNREADABLE_BODY_TYPES
+        or tuple(err.get("loc", ())) == ("body",)
+        for err in errors
+    )
+
+
+# ------------------------------------------------------------------
+# Register
+# ------------------------------------------------------------------
+
 def determine_rejection_reason(error_detail: Dict[str, Any], field: str) -> str:
     err_type: str = error_detail.get("type", "")
     value = error_detail.get("input")
@@ -44,7 +64,7 @@ def determine_rejection_reason(error_detail: Dict[str, Any], field: str) -> str:
         if value == "":
             return "required"
         if len(value) > 255:
-            return "tooLong"   # email-validator falla antes por largo, con un error de formato
+            return "tooLong"  # email-validator falla antes por largo, con un error de formato
         return "invalidEmail"
 
     # 4. Todo lo demás es tipo inválido o fuera de rango (avatar: 0, 6, "a", 1.5, etc.)
@@ -58,6 +78,7 @@ def _register_field(error_detail: Dict[str, Any]) -> str | None:
         return loc[1]
     return None
 
+
 def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | None:
     field = _register_field(error_detail)
     if field is None:
@@ -67,69 +88,6 @@ def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | 
     )
 
 
-def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
-    """
-    Traduce los errores de validación de Pydantic para /auth/log-in según el contrato:
-    - invalidFieldType: Si algún campo no es un string.
-    - incompleteForm: Si falta algún campo o se envió vacío ("").
-    - invalidEmail: Si el email tiene formato inválido.
-    """
-    errors = exc.errors()
-
-    # 1. Comprobar tipos incorrectos (ej: int, bool, list en vez de str)
-    for err in errors:
-        err_type = str(err.get("type", ""))
-        # Captura errores de tipo de Pydantic (string_type, etc.)
-        if "type" in err_type and "missing" not in err_type:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": "invalidFieldType",
-                    "message": "El email y la contraseña deben ser cadenas de texto.",
-                },
-            )
-
-    # 2. Comprobar campos faltantes o vacíos ("")
-    for err in errors:
-        err_type = str(err.get("type", ""))
-        val_input = err.get("input")
-        # Si falta el campo ('missing'), es string vacío (""), o falló por min_length / too_short
-        if (
-            "missing" in err_type
-            or "too_short" in err_type
-            or val_input == ""
-            or (isinstance(val_input, str) and len(val_input) == 0)
-        ):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": "incompleteForm",
-                    "message": "Completá el email y la contraseña.",
-                },
-            )
-
-    # 3. Comprobar formato de email inválido (cuando sí viene un valor pero no cumple RFC)
-    for err in errors:
-        err_type = str(err.get("type", ""))
-        err_msg = str(err.get("msg", "")).lower()
-        loc = tuple(err.get("loc", ()))
-        if "email" in err_type or "email" in err_msg or "email" in loc:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "code": "invalidEmail",
-                    "message": "El formato del email no es válido.",
-                },
-            )
-
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={
-            "code": "incompleteForm",
-            "message": "Completá el email y la contraseña.",
-        },
-    )
-    
 def handle_register_validation_error(exc: RequestValidationError) -> JSONResponse:
     field_errors = [
         fe for fe in (build_field_error(err) for err in exc.errors()) if fe is not None
@@ -150,16 +108,60 @@ def handle_register_validation_error(exc: RequestValidationError) -> JSONRespons
     )
 
 
+# ------------------------------------------------------------------
+# Login
+# ------------------------------------------------------------------
+
+def _login_error(code: str, message: str) -> JSONResponse:
+    payload = LogInBadRequest(code=code, message=message)
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content=payload.model_dump(),
+    )
+
+
+def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
+    """
+    Traduce los errores de validación de /auth/log-in según el contrato.
+    Orden de evaluación: body ilegible > invalidFieldType > incompleteForm > invalidEmail.
+    """
+    errors = exc.errors()
+    incomplete = ("incompleteForm", "Completá el email y la contraseña.")
+
+    # 0. Body ilegible: mismo criterio que register (todo falta)
+    if is_unreadable_body(errors):
+        return _login_error(*incomplete)
+
+    # 1. Algún campo no es un string
+    if any(err.get("type") == "string_type" for err in errors):
+        return _login_error(
+            "invalidFieldType",
+            "El email y la contraseña deben ser cadenas de texto.",
+        )
+
+    # 2. Campo faltante o vacío
+    if any(
+        err.get("type") in ("missing", "string_too_short") or err.get("input") == ""
+        for err in errors
+    ):
+        return _login_error(*incomplete)
+
+    # 3. Email con formato inválido
+    if any(tuple(err.get("loc", ()))[-1:] == ("email",) for err in errors):
+        return _login_error("invalidEmail", "El formato del email no es válido.")
+
+    return _login_error(*incomplete)
+
+
+# ------------------------------------------------------------------
+# Genérico y dispatcher
+# ------------------------------------------------------------------
+
 def handle_generic_validation_error(exc: RequestValidationError) -> JSONResponse:
     errors = exc.errors()
     only_missing = all(err.get("type") == "missing" for err in errors)
-    body_unreadable = any(
-        err.get("type") in ("json_invalid", "model_attributes_type")
-        or tuple(err.get("loc", ())) == ("body",)
-        for err in errors
-    )
 
-    if only_missing or body_unreadable:
+    if only_missing or is_unreadable_body(errors):
         code, message = "incompleteForm", "Completá todos los campos."
     else:
         code, message = "invalidFieldType", "Algún campo tiene un tipo inválido."
@@ -176,9 +178,18 @@ VALIDATION_HANDLERS = {
 }
 
 
+def _route_path(request: Request) -> str:
+    # La ruta declarada (con prefijo de router, sin root_path); si no, la URL cruda
+    route = request.scope.get("route")
+    return (getattr(route, "path", None) or request.url.path).rstrip("/")
+
+
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    path = request.url.path.rstrip("/")
-    handler = VALIDATION_HANDLERS.get(path, handle_generic_validation_error)
+    path = _route_path(request)
+    handler = next(
+        (h for suffix, h in VALIDATION_HANDLERS.items() if path.endswith(suffix)),
+        handle_generic_validation_error,
+    )
     return handler(exc)

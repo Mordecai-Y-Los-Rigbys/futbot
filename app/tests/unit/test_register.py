@@ -1,5 +1,5 @@
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 
@@ -46,6 +46,20 @@ def assert_all_required(response):
     assert response.status_code == 400
     assert response.json()["code"] == "invalidFields"
     assert reasons(response) == {f: "required" for f in REGISTER_FIELDS}
+
+
+def post_unreadable(client, url, kind):
+    """Envía un body ilegible: JSON roto, sin body o algo que no es un objeto."""
+    if kind == "broken_json":
+        return client.post(
+            url,
+            content="{esto no es json",
+            headers={"Content-Type": "application/json"},
+        )
+    if kind == "no_body":
+        return client.post(url)
+    payload = {"array": [], "string": "texto", "number": 42}[kind]
+    return client.post(url, json=payload)
 
 
 # ==============================================================================
@@ -249,3 +263,63 @@ def test_login_validation_codes(client, payload, code):
 
     assert response.status_code == 400
     assert response.json()["code"] == code
+
+
+def test_login_email_not_a_string_is_invalid_field_type(client):
+    response = client.post("/auth/log-in", json={"email": 123, "password": "x"})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalidFieldType"
+
+
+# ==============================================================================
+# Body ilegible: login y register responden igual (convención 9)
+# ==============================================================================
+
+@pytest.mark.parametrize("kind", ["broken_json", "no_body", "array", "string", "number"])
+def test_login_unreadable_body_is_incomplete_form(client, kind):
+    response = post_unreadable(client, "/auth/log-in", kind)
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "incompleteForm"
+
+
+@pytest.mark.parametrize("kind", ["broken_json", "no_body", "array", "string", "number"])
+def test_register_unreadable_body_reports_all_fields_required(client, kind):
+    assert_all_required(post_unreadable(client, "/auth/register", kind))
+
+
+# ==============================================================================
+# Dispatch: los handlers aplican aunque la app tenga un prefijo
+# ==============================================================================
+
+@pytest.fixture(scope="module")
+def prefixed_client():
+    router = APIRouter(prefix="/api")
+
+    @router.post("/auth/register")
+    def register(body: RegisterUserRequest):
+        return {"ok": True}
+
+    @router.post("/auth/log-in")
+    def login(body: LogInRequest):
+        return {"ok": True}
+
+    app = FastAPI()
+    app.include_router(router)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    return TestClient(app)
+
+
+def test_register_handler_applies_under_a_router_prefix(prefixed_client):
+    response = prefixed_client.post("/api/auth/register", json={})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalidFields"
+
+
+def test_login_handler_applies_under_a_router_prefix(prefixed_client):
+    response = prefixed_client.post("/api/auth/log-in", json={"email": "a@b.com"})
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "incompleteForm"
