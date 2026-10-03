@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 
 from app.schemas.auth import RegisterUserBadRequest, RegisterUserFieldError
 
+REGISTER_FIELDS = ("username", "email", "password", "clubName", "avatar")
+
 
 class ApiError(Exception):
     """Error con la forma del contrato: { "code": str | None, "message": str }."""
@@ -25,34 +27,44 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return exc.to_response()
 
 
-def determine_rejection_reason(error_detail: Dict[str, Any]) -> str:
-    """
-    Analiza el tipo y el mensaje de un error de Pydantic para mapearlo 
-    al motivo de rechazo exacto exigido por el contrato de la API 
-    ('tooLong', 'invalidEmail' o 'required').
-    """
+def determine_rejection_reason(error_detail: Dict[str, Any], field: str) -> str:
     err_type: str = error_detail.get("type", "")
-    err_msg: str = str(error_detail.get("msg", "")).lower()
+    value = error_detail.get("input")
 
-    if "too_long" in err_type:
+    # 1. Faltante o vacío
+    if err_type == "missing" or err_type.endswith("_too_short"):
+        return "required"
+
+    # 2. Demasiado largo
+    if err_type.endswith("_too_long"):
         return "tooLong"
 
-    if "email" in err_type or "email" in err_msg:
+    # 3. Email: el orden importa (vacío > largo > formato > tipo)
+    if field == "email" and isinstance(value, str):
+        if value == "":
+            return "required"
+        if len(value) > 255:
+            return "tooLong"   # email-validator falla antes por largo, con un error de formato
         return "invalidEmail"
 
-    return "required"
+    # 4. Todo lo demás es tipo inválido o fuera de rango (avatar: 0, 6, "a", 1.5, etc.)
+    return "invalidType"
 
 
-def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError:
-    """
-    Procesa un detalle de error individual de Pydantic, extrae el nombre del campo 
-    afectado a partir de su ubicación y determina su motivo de rechazo.
-    """
-    loc = error_detail.get("loc", ())
-    field_name: str = str(loc[-1]) if loc else "unknown"
-    reason: str = determine_rejection_reason(error_detail)
+def _register_field(error_detail: Dict[str, Any]) -> str | None:
+    """Devuelve el campo conocido del body, o None si el error es del body entero."""
+    loc = tuple(error_detail.get("loc", ()))
+    if len(loc) >= 2 and loc[0] == "body" and loc[1] in REGISTER_FIELDS:
+        return loc[1]
+    return None
 
-    return RegisterUserFieldError(field=field_name, reason=reason)
+def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | None:
+    field = _register_field(error_detail)
+    if field is None:
+        return None
+    return RegisterUserFieldError(
+        field=field, reason=determine_rejection_reason(error_detail, field)
+    )
 
 
 def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
@@ -118,27 +130,55 @@ def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
         },
     )
     
-async def register_validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    """
-    Manejador global para RequestValidationError.
-    Discrimina por ruta para responder según el contrato de login o de registro.
-    """
-    path = request.url.path.rstrip("/")
-    if path.endswith("/auth/log-in") or path.endswith("/log-in"):
-        return handle_login_validation_error(exc)
-
-    field_errors: List[RegisterUserFieldError] = [
-        build_field_error(err) for err in exc.errors()
+def handle_register_validation_error(exc: RequestValidationError) -> JSONResponse:
+    field_errors = [
+        fe for fe in (build_field_error(err) for err in exc.errors()) if fe is not None
     ]
+    if not field_errors:
+        # Body ilegible (JSON roto, vacío, array): se reportan los cinco campos
+        field_errors = [
+            RegisterUserFieldError(field=f, reason="required") for f in REGISTER_FIELDS
+        ]
 
-    response_payload = RegisterUserBadRequest(
+    payload = RegisterUserBadRequest(
         message="Revisá los campos marcados.",
         errors=field_errors,
     )
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content=payload.model_dump(by_alias=True),
+    )
+
+
+def handle_generic_validation_error(exc: RequestValidationError) -> JSONResponse:
+    errors = exc.errors()
+    only_missing = all(err.get("type") == "missing" for err in errors)
+    body_unreadable = any(
+        err.get("type") in ("json_invalid", "model_attributes_type")
+        or tuple(err.get("loc", ())) == ("body",)
+        for err in errors
+    )
+
+    if only_missing or body_unreadable:
+        code, message = "incompleteForm", "Completá todos los campos."
+    else:
+        code, message = "invalidFieldType", "Algún campo tiene un tipo inválido."
 
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content=response_payload.model_dump(by_alias=True),
+        content={"code": code, "message": message},
     )
+
+
+VALIDATION_HANDLERS = {
+    "/auth/register": handle_register_validation_error,
+    "/auth/log-in": handle_login_validation_error,
+}
+
+
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    path = request.url.path.rstrip("/")
+    handler = VALIDATION_HANDLERS.get(path, handle_generic_validation_error)
+    return handler(exc)

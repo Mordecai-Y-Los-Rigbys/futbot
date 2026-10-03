@@ -17,7 +17,7 @@ from app.database import Base, engine
 from app.errors import (
     ApiError,
     api_error_handler,
-    register_validation_exception_handler,
+    validation_exception_handler,
 )
 from app.startup_checks import ensure_single_worker
 
@@ -42,9 +42,6 @@ app.include_router(players_router)
 app.include_router(behaviors_router)
 app.include_router(leagues_router)
 app.include_router(ws_matches_router)
-app.add_exception_handler(
-    RequestValidationError, register_validation_exception_handler
-)
 
 # Task 0.2: Configuración de CORS
 origins = [
@@ -60,6 +57,7 @@ app.add_middleware(
 )
 
 app.add_exception_handler(ApiError, api_error_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 
 # Task 0.1: Endpoint de prueba
