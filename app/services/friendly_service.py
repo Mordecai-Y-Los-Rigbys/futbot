@@ -5,9 +5,26 @@ from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
     CreateFriendlyMemberData,
+    FriendlyMatchData,
 )
-from app.schemas.friendly import MatchClub, MatchResponse
+from app.schemas.friendly import MatchClub, MatchPage, MatchResponse
 from app.services.friendly_validation import parse_create_friendly
+
+PAGE_SIZE = 50
+       
+       
+def _to_response(m: FriendlyMatchData) -> MatchResponse:
+    return MatchResponse(
+        id=m.id,
+        league_id=None,
+        name=m.name,
+        status=m.status,
+        club1=MatchClub(id=m.club1.id, username=m.club1.username, name=m.club1.club_name),
+        club2=None,
+        scheduled_at=None,
+        created_at=m.created_at,
+        result=None,
+    )
 
 
 class FriendlyService:
@@ -45,18 +62,18 @@ class FriendlyService:
                 ],
             )
         )
-        return MatchResponse(
-            id=created.id,
-            league_id=None,
-            name=created.name,
-            status=created.status,
-            club1=MatchClub(
-                id=created.club1.id,
-                username=created.club1.username,
-                name=created.club1.club_name,
-            ),
-            club2=None,
-            scheduled_at=None,
-            created_at=created.created_at,
-            result=None,
+        return _to_response(created)
+
+    def list_waiting_friendlies(self, user_id: int, name: str | None, page: int) -> MatchPage:
+        data = self.repo.list_waiting_page(
+            exclude_user_id=user_id,
+            name=name or None,  # "" se trata como ausente
+            offset=(page - 1) * PAGE_SIZE,
+            limit=PAGE_SIZE,
+        )
+        return MatchPage(
+            items=[_to_response(i) for i in data.items],
+            page=page,
+            page_size=PAGE_SIZE,
+            total=data.total,
         )

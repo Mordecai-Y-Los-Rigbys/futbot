@@ -30,3 +30,10 @@ class MatchResponse(CamelModel):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class MatchPage(CamelModel):
+    items: list[MatchResponse]
+    page: int
+    page_size: int
+    total: int
