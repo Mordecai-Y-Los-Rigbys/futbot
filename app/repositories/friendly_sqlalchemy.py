@@ -1,7 +1,7 @@
 from datetime import timezone
 
-from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.behavior import Behavior
 from app.models.league_participant_member import MemberRole
@@ -13,7 +13,14 @@ from app.repositories.friendly_abstract import (
     CreateFriendlyData,
     FriendlyClubData,
     FriendlyMatchData,
+    FriendlyPageData,
 )
+from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
+
+
+def _escape_like(value: str) -> str:
+    # El orden importa: primero la barra, después los comodines.
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
@@ -90,3 +97,44 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
             ),
             created_at=created_at,
         )
+
+    def list_waiting_page(
+        self, exclude_user_id: int, name: str | None, offset: int, limit: int
+    ) -> FriendlyPageData:
+        filters = [
+            SqlAlchemyMatchExpiryRepository.is_waiting_friendly(),
+            Match.user_1_id != exclude_user_id,
+        ]
+        if name:
+            filters.append(Match.name.ilike(f"%{_escape_like(name)}%", escape="\\"))
+
+        total = self.db.scalar(select(func.count()).select_from(Match).where(*filters))
+
+        matches = self.db.scalars(
+            select(Match)
+            .options(joinedload(Match.user_1))  # creador en la misma consulta
+            .where(*filters)
+            .order_by(Match.id.asc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+
+        items = []
+        for m in matches:
+            created_at = m.created_at
+            if created_at.tzinfo is None:  # DateTime naive -> UTC, como en los otros repos
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            items.append(
+                FriendlyMatchData(
+                    id=m.id,
+                    name=m.name,
+                    status=m.status.value,
+                    club1=FriendlyClubData(
+                        id=m.user_1.id,
+                        username=m.user_1.username,
+                        club_name=m.user_1.club_name,
+                    ),
+                    created_at=created_at,
+                )
+            )
+        return FriendlyPageData(items=items, total=total)

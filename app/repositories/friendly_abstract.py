@@ -12,7 +12,7 @@ class FriendlyClubData(BaseModel):
 
 class FriendlyMatchData(BaseModel):
     id: int
-    name: str
+    name: str | None        
     status: str
     club1: FriendlyClubData
     created_at: datetime
@@ -28,6 +28,11 @@ class CreateFriendlyData(BaseModel):
     name: str
     creator_id: int
     members: list[CreateFriendlyMemberData]
+    
+    
+class FriendlyPageData(BaseModel):
+    items: list[FriendlyMatchData]
+    total: int
 
 
 class AbstractFriendlyRepository(ABC):
@@ -48,3 +53,10 @@ class AbstractFriendlyRepository(ABC):
     def create_with_team(self, data: CreateFriendlyData) -> FriendlyMatchData:
         """Crea el partido `scheduled` y el equipo del creador en una única
         transacción (o nada)."""
+
+    @abstractmethod
+    def list_waiting_page(
+        self, exclude_user_id: int, name: str | None, offset: int, limit: int
+    ) -> FriendlyPageData:
+        """Amistosos esperando rival creados por otros usuarios, ordenados por
+        id ascendente, con `total` calculado con los mismos filtros."""
