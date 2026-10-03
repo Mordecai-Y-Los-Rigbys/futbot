@@ -20,7 +20,7 @@ class Match(Base):
 
     El resultado (`score_1`/`score_2`) se persiste recién al terminar el
     partido: mientras se juega, el marcador vive en la simulación (campos
-    `homeScore`/`awayScore` de cada `tick`).
+    `score1`/`score2` de cada `tick`).
 
     El "estado de espera" del amistoso (`waiting`/`starting`) es del amistoso,
     no del partido: para el partido sigue siendo `scheduled` hasta que arranca.
