@@ -1,4 +1,3 @@
-import time
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 
@@ -169,16 +168,35 @@ def test_connecting_and_disconnecting_does_not_change_the_match(
     db_session.refresh(match)
     assert match.status == status
 
-def test_open_connection_survives_token_expiry(client, make_match, make_token, manager):
+def test_open_connection_survives_token_expiry(
+    client, db_session, make_match, make_token, manager
+):
     match = make_match()
-    make_token("corto", 7, match, expires_in=timedelta(seconds=2))
+    make_token("corto", 7, match)
 
     with client.websocket_connect(path(match, "corto")):
-        time.sleep(2.5)  # el token ya venció
+        # Se vence el token directamente en la base, sin esperar.
+        token = db_session.get(MatchWsToken, "corto")
+        token.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        db_session.commit()
+
         assert manager.count(match.id, 7) == 1
         assert rejection(client, path(match, "corto")) == (4401, "tokenExpired")
 
     assert manager.count(match.id, 7) == 0
+
+
+def test_reconnecting_after_the_match_is_cancelled_is_4409(
+    client, db_session, make_match, make_token, manager
+):
+    match = make_match()
+    make_token("tok", 7, match)
+
+    with client.websocket_connect(path(match, "tok")):
+        match.status = MatchStatus.cancelled
+        db_session.commit()
+
+        assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")
 
 def test_cancelled_match_is_4409_even_with_a_valid_token(client, make_match, make_token):
     match = make_match(status=MatchStatus.cancelled)

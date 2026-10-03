@@ -82,6 +82,8 @@ INVALID = [
     pytest.param(dict(user_1_id=1, user_2_id=2, status=ST, score_1=1, score_2=0), id="resultado en un partido que no terminó"),
     pytest.param(dict(user_1_id=1, user_2_id=2, status=S, score_1=1), id="un solo score"),
     pytest.param(dict(user_1_id=1, user_2_id=2, status=F, score_1=-1, score_2=0), id="score negativo"),
+    pytest.param(dict(user_1_id=1, status=MatchStatus.cancelled, score_1=1, score_2=0), id="cancelado sin rival con resultado"),
+    pytest.param(dict(user_1_id=1, user_2_id=2, status=MatchStatus.cancelled, score_1=0, score_2=0), id="cancelado con rival y resultado"),
 ]
 
 @pytest.mark.parametrize("fields", INVALID)
