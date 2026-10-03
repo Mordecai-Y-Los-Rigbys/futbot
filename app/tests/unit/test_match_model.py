@@ -7,6 +7,7 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from app import models  # noqa: F401  (registra todos los modelos)
+from app.domain.match import MatchStatus
 from app.models.match import Match
 
 TABLE = Match.__table__
@@ -15,7 +16,7 @@ TABLE = Match.__table__
 def test_status_values_match_the_openapi_contract():
     enum_type = TABLE.c.status.type
     assert enum_type.name == "match_status"
-    assert list(enum_type.enums) == ["scheduled", "started", "finished"]
+    assert list(enum_type.enums) == [MatchStatus.scheduled, MatchStatus.started, MatchStatus.finished, MatchStatus.cancelled]
 
 
 def test_mappers_configure_without_ambiguity():

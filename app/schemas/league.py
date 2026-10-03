@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, field_serializer
 from pydantic.alias_generators import to_camel
 
+from app.domain.league import LeagueStatus
+
 
 class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -19,7 +21,7 @@ class LeagueSummary(CamelModel):
     id: int
     name: str
     creator: LeagueCreator
-    status: Literal["preparation", "started", "cancelled", "finished"]
+    status: Literal[LeagueStatus.preparation, LeagueStatus.cancelled, LeagueStatus.started, LeagueStatus.finished]
     participants_count: int
     max_participants: int
     private: bool
