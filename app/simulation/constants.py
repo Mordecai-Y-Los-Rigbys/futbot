@@ -78,3 +78,8 @@ INITIAL_POSITIONS = {
     3: (40.0, FIELD_WIDTH / 2),
 }
 KICKOFF_BALL_POSITION = (FIELD_LENGTH / 2, FIELD_WIDTH / 2)
+
+# --- Ejecución de comportamientos ---------------------------------------------------
+
+# Tiempo máximo de ejecución del comportamiento de un jugador en un tick (segundos).
+BEHAVIOR_TIME_LIMIT = 0.01
