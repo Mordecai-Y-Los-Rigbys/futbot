@@ -9,7 +9,7 @@ class RegisterUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=72)
     club_name: str = Field(alias="clubName", min_length=1, max_length=20)
-    avatar: int = Field(strict=True, ge=1, le=5)
+    avatar: int = Field(ge=1, le=5)
 
 
 class UserResponse(BaseModel):
@@ -23,7 +23,7 @@ class UserResponse(BaseModel):
 class RegisterUserFieldError(BaseModel):
 
     field: Literal["username", "email", "password", "clubName", "avatar"]
-    reason: Literal["required", "tooLong", "invalidEmail", "invalidType"]
+    reason: Literal["required", "tooLong", "invalidEmail"]
 
 
 class RegisterUserBadRequest(BaseModel):
@@ -41,9 +41,4 @@ class ErrorResponse(BaseModel):
 class LogInRequest(BaseModel):
     
     email: EmailStr
-    password: str = Field(min_length=1)
-
-class LogInBadRequest(BaseModel):
-
-    code: Literal["invalidFieldType", "incompleteForm", "invalidEmail"]
-    message: str
+    password: str = Field(min_length=1, max_length=256)
