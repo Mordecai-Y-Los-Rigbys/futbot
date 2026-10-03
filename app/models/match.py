@@ -1,14 +1,12 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, and_
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.match import MatchStatus
 from app.models.league import League
 from app.models.user import User
 from app.database import Base
-
-
 
 
 class Match(Base):
@@ -36,9 +34,9 @@ class Match(Base):
             "user_2_id IS NULL OR user_1_id <> user_2_id",
             name="ck_matches_distinct_clubs",
         ),
-        # No puede arrancar ni terminar sin rival.
+        # Solo un partido sin arrancar o cancelado puede no tener rival.
         CheckConstraint(
-            "status = 'scheduled' OR user_2_id IS NOT NULL",
+            "status IN ('scheduled', 'cancelled') OR user_2_id IS NOT NULL",
             name="ck_matches_started_has_rival",
         ),
         # El resultado se guarda completo o no se guarda.
@@ -96,3 +94,6 @@ class Match(Base):
     league: Mapped[League | None] = relationship(League)
     user_1: Mapped[User] = relationship(User, foreign_keys=[user_1_id])
     user_2: Mapped[User | None] = relationship(User, foreign_keys=[user_2_id])
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
