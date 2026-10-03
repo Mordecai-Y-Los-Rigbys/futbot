@@ -2,8 +2,13 @@ import enum
 from dataclasses import dataclass
 
 from app.simulation.actions import MoveAction
+from app.simulation.constants import (
+    NO_KICK_COOLDOWN, 
+    NOT_REGAIN_BLOCKED, 
+    NOT_PROTECTED
+)
 from app.simulation.geometry import ZERO, Vec
-
+from app.domain.team_member import MemberRole, _ROLE_NUMBERS
 
 class Team(str, enum.Enum):
     HOME = "home"  # club1: ataca hacia x = FIELD_LENGTH
@@ -13,25 +18,7 @@ class Team(str, enum.Enum):
     def opponent(self) -> "Team":
         return Team.AWAY if self is Team.HOME else Team.HOME
 
-
-class Role(str, enum.Enum):
-    DEFENSE = "defense"
-    MIDFIELD = "midfield"
-    FORWARD = "forward"
-
-    @property
-    def number(self) -> int:
-        """Número del jugador en cancha: 1 = defensa, 2 = medio, 3 = delantero."""
-        return _ROLE_NUMBERS[self]
-
-
-_ROLE_NUMBERS = {Role.DEFENSE: 1, Role.MIDFIELD: 2, Role.FORWARD: 3}
-
 PlayerKey = tuple[Team, int]
-
-NO_KICK_COOLDOWN = 0          # puede patear desde el primer tick
-NOT_REGAIN_BLOCKED = -1       # nunca bloqueado: todos los ticks son > -1
-NOT_PROTECTED = -1            # nunca protegida: todos los ticks son > -1
 
 
 @dataclass(frozen=True)
@@ -47,7 +34,7 @@ class Stats:
 class PlayerState:
     player_id: int
     team: Team
-    role: Role
+    role: MemberRole
     stats: Stats
     position: Vec
     facing: Vec  # hacia donde mira, direccion del ultimo movimiento; ahí lleva la pelota

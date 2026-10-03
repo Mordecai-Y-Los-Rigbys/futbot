@@ -15,10 +15,10 @@ from typing import Any
 from app.simulation import constants as C
 from app.simulation.actions import GoTo, Kick, KickTo, MoveInDirection, PlayerActions
 from app.simulation.behaviors.frame import direction_to_absolute, to_absolute, to_relative
-from app.simulation.state import MatchState, PlayerKey, PlayerState, Role, Team
+from app.simulation.state import MatchState, PlayerKey, PlayerState, Team
 
 STATS = ("power", "agility", "control", "strength", "speed")
-PLAYER_NUMBERS = frozenset(role.number for role in Role)
+PLAYER_NUMBERS = frozenset(role.number for role in C.STARTER_ROLES)
 
 
 class BehaviorError(Exception):

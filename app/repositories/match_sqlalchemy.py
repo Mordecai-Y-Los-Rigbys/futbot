@@ -1,6 +1,7 @@
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, aliased
 
+from app.domain.match import MatchStatus
 from app.models.match import Match
 from app.models.user import User
 from app.repositories.match_abstract import (

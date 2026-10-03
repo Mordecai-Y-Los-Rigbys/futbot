@@ -101,3 +101,8 @@ PERIODS = 1
 COUNTDOWN_SECONDS = 10
 FRIENDLY_MATCH_DURATION = 3  # minutos
 
+# Estructura de estado de jugador.
+NO_KICK_COOLDOWN = 0          # puede patear desde el primer tick
+NOT_REGAIN_BLOCKED = -1       # nunca bloqueado: todos los ticks son > -1
+NOT_PROTECTED = -1            # nunca protegida: todos los ticks son > -1
+

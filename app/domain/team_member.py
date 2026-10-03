@@ -13,7 +13,7 @@ class MemberRole(str, enum.Enum):
         return _ROLE_NUMBERS[self]
 
 _ROLE_NUMBERS = {
-    MemberRole.defense: 1,   # ← ajustalo a la numeración que tenía Role
+    MemberRole.defense: 1,
     MemberRole.midfield: 2,
     MemberRole.forward: 3,
 }

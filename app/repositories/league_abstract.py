@@ -70,8 +70,12 @@ class AbstractLeagueRepository(ABC):
         equipo, todo en una única transacción (o nada).
         """
         pass
-    
-    # league_abstract.py
-    class AbstractLeagueRepository(ABC):
-        @abstractmethod
-        def get_match_duration_minutes(self, league_id: int) -> int | None: ...
+
+    @abstractmethod
+    def get_match_duration_minutes(self, league_id: int) -> int | None:
+        """Duración de cada partido de la liga, en minutos.
+
+        Es el valor `match_duration` que definió el creador al crear la liga
+        (entre 1 y 10). Devuelve None si la liga no existe.
+        """
+        pass

@@ -8,13 +8,13 @@ from app.simulation.state import (
     MatchState,
     PlayerKey,
     PlayerState,
-    Role,
     Stats,
     Team,
 )
+from app.domain.team_member import MemberRole
 
 HOME, AWAY = Team.HOME, Team.AWAY
-_ROLES = {1: Role.DEFENSE, 2: Role.MIDFIELD, 3: Role.FORWARD}
+_ROLES = {1: MemberRole.defense, 2: MemberRole.midfield, 3: MemberRole.forward}
 
 
 def stats(power=60, agility=60, control=60, strength=60, speed=60) -> Stats:
