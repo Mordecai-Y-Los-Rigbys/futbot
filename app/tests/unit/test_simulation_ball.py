@@ -9,10 +9,11 @@ from app.simulation.constants import (
     GOAL_Y_MIN,
     WALL_RESTITUTION,
 )
+from app.simulation.actions import MoveInDirection, PlayerActions
 from app.simulation.geometry import ZERO
 from app.simulation.physics import step
 from app.simulation.state import Goal
-from app.tests.unit.simulation_helpers import AWAY, HOME, run, state
+from app.tests.unit.simulation_helpers import AWAY, HOME, player, run, state
 
 BOUNCED = 40 * WALL_RESTITUTION * BALL_FRICTION_PER_TICK
 
@@ -79,10 +80,34 @@ def test_friction_is_applied_every_tick():
     ball, _ = ball_after_one_tick((50.0, 30.0), (10.0, 0.0))
     assert ball.velocity.x == pytest.approx(10.0 * BALL_FRICTION_PER_TICK)
 
-
 def test_ball_crossing_just_outside_the_post_bounces_back_in():
     # Cruza la línea afuera del palo pero termina a la altura del arco.
     ball, events = ball_after_one_tick((1.0, GOAL_Y_MIN - 1.0), (-40.0, 20.0))
     assert not events
     assert ball.velocity.x > 0
     assert ball.position.x >= BALL_RADIUS
+
+
+def carry_towards_away_goal(y, ticks=20):
+    """Un jugador local con la pelota cerca del arco visitante corre hacia él. Corta en
+    el primer gol."""
+    s = state(player(HOME, 1, x=95.0, y=y), ball=(98.0, y), owner=(HOME, 1))
+    actions = {(HOME, 1): PlayerActions(move=MoveInDirection(1, 0))}
+    for _ in range(ticks):
+        result = step(s, actions)
+        s = result.state
+        if result.events:
+            return s, list(result.events)
+    return s, []
+
+
+def test_carrying_the_ball_into_the_goal_is_a_goal():
+    s, events = carry_towards_away_goal(y=30.0)
+    assert events == [Goal(scoring_team=HOME)]
+    assert s.ball.owner is None
+
+
+def test_carrying_the_ball_outside_the_posts_is_not_a_goal():
+    s, events = carry_towards_away_goal(y=10.0)
+    assert events == []
+    assert s.ball.position.x <= FIELD_LENGTH - BALL_RADIUS

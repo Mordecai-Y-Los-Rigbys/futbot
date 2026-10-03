@@ -254,29 +254,37 @@ def _goal_crossing(old: Vec, new: Vec) -> Goal | None:
 
 def _update_ball(state: MatchState) -> Goal | None:
     ball = state.ball
+    if ball.owner is None and ball.velocity == ZERO:
+        return None  # libre y quieta: nada que hacer
+
+    # A dónde va la pelota en este tick.
+    old_position = ball.position
     if ball.owner is not None:
-        # En posesión, la pelota va delante del jugador.
+        # Llevada: va delante del jugador.
         owner = state.player(ball.owner)
         offset = C.PLAYER_RADIUS + C.BALL_RADIUS
-        ball.position = _clamp_ball(owner.position + owner.facing * offset)
-        ball.velocity = ZERO
-        return None
+        new_position = owner.position + owner.facing * offset
+    else:
+        # Libre: avanza según su velocidad.
+        new_position = old_position + ball.velocity * C.SECONDS_PER_TICK
 
-    if ball.velocity == ZERO:
-        return None
-
-    old_position = ball.position
-    new_position = old_position + ball.velocity * C.SECONDS_PER_TICK
-
+    # Gol: llevada o pateada, si cruza la línea entre los palos.
     goal = _goal_crossing(old_position, new_position)
     if goal is not None:
         ball.position = new_position  # adentro del arco
         ball.velocity = ZERO
+        ball.owner = None
         return goal
 
-    # Sin gol: rebote en las paredes. Frente al arco no hay pared, salvo que la
-    # pelota ya haya pasado la línea por afuera de los palos (chocó la pared).
+    # Llevada sin gol: queda dentro de la cancha.
+    if ball.owner is not None:
+        ball.position = _clamp_ball(new_position)
+        return None
 
+    # Libre sin gol: rebote en las paredes. Frente al arco no hay pared, así que normalmente no rebota ahí. 
+    # Pero si la pelota ya pasó la línea de fondo y no fue gol, es porque cruzó por afuera
+    # de los palos (chocó la pared): en ese caso rebota igual.
+    
     # Las paredes estan a un radio del borde de la cancha, así que la pelota no puede ir más allá de eso.
     wall_min_x = C.BALL_RADIUS
     wall_max_x = C.FIELD_LENGTH - C.BALL_RADIUS
@@ -308,7 +316,6 @@ def _update_ball(state: MatchState) -> Goal | None:
     ball.position = Vec(x, y)
     ball.velocity = new_velocity
     return None
-
 
 
 # --- Posesión ------------------------------------------------------------------------------
