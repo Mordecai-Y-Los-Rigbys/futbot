@@ -152,7 +152,6 @@ def step(
     return StepResult(state_copy)
 
 
-
 # --- Movimiento ------------------------------------------------------------------------
 
 # limita la posicion de un jugador al campo
@@ -260,10 +259,17 @@ def _update_ball(state: MatchState) -> Goal | None:
     # A dónde va la pelota en este tick.
     old_position = ball.position
     if ball.owner is not None:
-        # Llevada: va delante del jugador.
+        # Llevada: se acerca al frente del jugador a BALL_CARRY_SPEED; cuando
+        # llega, queda pegada.
         owner = state.player(ball.owner)
         offset = C.PLAYER_RADIUS + C.BALL_RADIUS
-        new_position = owner.position + owner.facing * offset
+        carry_spot = owner.position + owner.facing * offset
+        to_carry_spot = carry_spot - old_position
+        max_step = C.BALL_CARRY_SPEED * C.SECONDS_PER_TICK
+        if to_carry_spot.length() <= max_step:
+            new_position = carry_spot
+        else:
+            new_position = old_position + to_carry_spot.normalized() * max_step
     else:
         # Libre: avanza según su velocidad.
         new_position = old_position + ball.velocity * C.SECONDS_PER_TICK

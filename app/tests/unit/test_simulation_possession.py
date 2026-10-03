@@ -1,7 +1,12 @@
 import pytest
 
 from app.simulation.actions import Kick, KickTo, PlayerActions
-from app.simulation.constants import KICKER_REGAIN_BLOCK_TICKS, POSSESSION_PROTECTION_TICKS
+from app.simulation.constants import (
+    BALL_CARRY_SPEED,
+    KICKER_REGAIN_BLOCK_TICKS,
+    POSSESSION_PROTECTION_TICKS,
+    TICKS_PER_SECOND,
+)
 from app.simulation.geometry import ZERO
 from app.simulation.physics import kick_cooldown_ticks, max_kick_speed, reach, step
 from app.tests.unit.simulation_helpers import AWAY, HOME, player, run, state
@@ -85,6 +90,21 @@ def test_protection_prevents_stealing_the_ball():
 def test_winning_the_ball_grants_protection():
     s = step(state(player(HOME, 1, x=50.0), ball=(53.0, 30.0))).state
     assert s.ball.protected_until == s.tick + POSSESSION_PROTECTION_TICKS
+
+
+def test_won_ball_moves_gradually_to_the_front_of_the_player():
+    # Gana una pelota que está al costado: no aparece de golpe adelante, se acerca.
+    s = step(state(player(HOME, 1, x=50.0), ball=(50.0, 34.0))).state
+    assert s.ball.owner == H
+
+    before = s.ball.position
+    s = step(s).state
+    moved = (s.ball.position - before).length()
+    assert moved == pytest.approx(BALL_CARRY_SPEED / TICKS_PER_SECOND)
+
+    s, _ = run(s, 3)
+    assert s.ball.position.x == pytest.approx(53.0)
+    assert s.ball.position.y == pytest.approx(30.0)
 
 
 # --- patadas ------------------------------------------------------------------------
