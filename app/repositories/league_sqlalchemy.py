@@ -8,11 +8,7 @@ from app.domain.league_participant_member import MemberRole
 from app.models.behavior import Behavior
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
-<<<<<<< HEAD
 from app.models.team_member import MemberRole, TeamMember
-=======
-from app.models.league_participant_member import LeagueParticipantMember
->>>>>>> b7c8313618f0f7672715198f3df15c610e0bbad0
 from app.models.player import Player
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
