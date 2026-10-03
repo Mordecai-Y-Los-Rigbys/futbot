@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+# app/services/match_handshake_service.py
+from app.domain.match import MatchStatus
 from app.errors import ApiError
 from app.repositories.match_abstract import AbstractMatchRepository
 from app.repositories.match_ws_token_abstract import AbstractMatchWsTokenRepository
@@ -53,7 +55,10 @@ class MatchHandshakeService:
         match = self.matches.get_state(record.match_id)
         if match is None:
             raise ApiError(404, "matchNotFound", "Partido no encontrado.")
-        if match.status == "finished":
+        if match.status == MatchStatus.finished:
             raise ApiError(409, "matchFinished", "El partido ya terminó.")
+        if match.status == MatchStatus.cancelled:
+            raise ApiError(409, "matchCancelled", "El partido fue cancelado.")
+
 
         return HandshakeGrant(user_id=record.user_id, match_id=record.match_id)
