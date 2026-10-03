@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, and_
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -106,3 +106,11 @@ class Match(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    @classmethod
+    def is_waiting_friendly(cls):
+        return and_(
+            cls.league_id.is_(None),
+            cls.user_2_id.is_(None),
+            cls.status == MatchStatus.scheduled,
+        )

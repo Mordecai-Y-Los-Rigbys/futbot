@@ -10,17 +10,6 @@ from app.repositories.match_expiry_abstract import (
 )
 
 
-def _is_waiting_friendly():
-    # Misma condición que tiene que usar el endpoint de unirse al amistoso
-    # (UPDATE ... SET user_2_id = :rival WHERE user_2_id IS NULL ...): la base
-    # decide quién gana la carrera entre el rival y el vencimiento.
-    return (
-        Match.league_id.is_(None),
-        Match.user_2_id.is_(None),
-        Match.status == MatchStatus.scheduled,
-    )
-
-
 class SqlAlchemyMatchExpiryRepository(AbstractMatchExpiryRepository):
     def __init__(self, db: Session):
         self.db = db
@@ -29,7 +18,7 @@ class SqlAlchemyMatchExpiryRepository(AbstractMatchExpiryRepository):
         try:
             result = self.db.execute(
                 update(Match)
-                .where(Match.id == match_id, *_is_waiting_friendly())
+                .where(Match.id == match_id, Match.is_waiting_friendly())
                 .values(status=MatchStatus.cancelled)
             )
             self.db.commit()
@@ -41,7 +30,7 @@ class SqlAlchemyMatchExpiryRepository(AbstractMatchExpiryRepository):
     def list_waiting_friendlies(self) -> list[WaitingFriendlyData]:
         rows = self.db.execute(
             select(Match.id, Match.created_at)
-            .where(*_is_waiting_friendly())
+            .where(*Match.is_waiting_friendly())
             .order_by(Match.id.asc())
         ).all()
 

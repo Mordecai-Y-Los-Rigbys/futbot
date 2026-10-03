@@ -9,6 +9,10 @@ from starlette.concurrency import run_in_threadpool
 from app.repositories.match_expiry_abstract import AbstractMatchExpiryRepository
 from app.services.match_timing import MAX_FRIENDLY_WAIT
 
+    
+EXPIRY_RETRIES = 3
+EXPIRY_RETRY_DELAY = 2.0  # segundos
+
 logger = logging.getLogger(__name__)
 
 RepoScope = Callable[[], AbstractContextManager[AbstractMatchExpiryRepository]]
@@ -94,10 +98,25 @@ class FriendlyExpiryService:
     async def _run(self, match_id: int, delay: float) -> None:
         try:
             await asyncio.sleep(delay)
-            await self.expire(match_id)
         except asyncio.CancelledError:
             raise
-        except Exception:
-            # Un fallo puntual (base caída, etc.) no puede matar el timer en
-            # silencio: se loguea; el amistoso se reintenta al reiniciar (recover).
-            logger.exception("No se pudo caducar el amistoso del partido %s", match_id)
+        await self._expire_with_retries(match_id)
+
+    async def _expire_with_retries(self, match_id: int) -> None:
+        for attempt in range(1, EXPIRY_RETRIES + 1):
+            try:
+                await self.expire(match_id)
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "No se pudo caducar el amistoso del partido %s (intento %s/%s)",
+                    match_id, attempt, EXPIRY_RETRIES,
+                )
+                if attempt < EXPIRY_RETRIES:
+                    await asyncio.sleep(EXPIRY_RETRY_DELAY * attempt)
+        logger.error(
+            "Se agotaron los reintentos para caducar el partido %s; "
+            "queda en espera hasta el próximo recover()", match_id,
+        )
