@@ -7,9 +7,11 @@ Orden de un tick:
     1. Movimiento de los jugadores (speed).
     2. Choques entre jugadores (strength).
     3. Pelota: acompaña al poseedor, o avanza, se frena, rebota y puede ser gol.
+    4. Posesión (control, strength, protección).
 """
 
 import copy
+import random
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -34,6 +36,11 @@ from app.simulation.state import (
 def player_speed(speed: int) -> float:
     """Velocidad de movimiento en u/s."""
     return C.PLAYER_BASE_SPEED + speed * C.PLAYER_SPEED_PER_POINT
+
+
+def reach(control: int) -> float:
+    """Distancia máxima a la que puede controlar la pelota."""
+    return C.PLAYER_RADIUS + C.BALL_RADIUS + control * C.REACH_PER_CONTROL_POINT
 
 
 # --- Estado inicial ---------------------------------------------------------------
@@ -118,6 +125,8 @@ def step(
     goal = _update_ball(state_copy)
     if goal is not None:
         return StepResult(state_copy, (goal,))
+
+    _resolve_possession(state_copy)
 
     return StepResult(state_copy)
 
@@ -273,3 +282,44 @@ def _update_ball(state: MatchState) -> Goal | None:
     ball.position = Vec(x, y)
     ball.velocity = new_velocity
     return None
+
+
+
+# --- Posesión ------------------------------------------------------------------------------
+
+
+def _resolve_possession(state: MatchState) -> None:
+    """Decide quién tiene la pelota al final de cada tick."""
+    ball = state.ball
+    if ball.owner is not None and state.tick <= ball.protected_until:
+        return
+
+    # Son candidatos los que esten al alcance y no tengan bloqueada la recuperación
+    candidates = [ p for p in state.players
+        if state.tick > p.regain_blocked_until and 
+        (p.position - ball.position).length() <= reach(p.stats.control)
+    ]
+    if not candidates:
+        return
+
+    strongest = max(p.stats.strength for p in candidates)
+    candidates = [p for p in candidates if p.stats.strength == strongest] 
+    # Si hay varios con la misma fuerza, gana el que esté más cerca de la pelota.
+    closest = min((p.position - ball.position).length() for p in candidates)
+    candidates = [
+        p
+        for p in candidates
+        if (p.position - ball.position).length() - closest <= C.DISTANCE_EPSILON
+    ]
+    
+    candidates.sort(key=lambda p: (p.team.value, p.number))
+    if len(candidates) == 1:
+        winner = candidates[0]
+    else:
+        # Empate exacto: al azar, pero reproducible (semilla del partido + tick).
+        winner = random.Random(f"{state.seed}:{state.tick}").choice(candidates)
+
+    if winner.key != ball.owner:
+        ball.owner = winner.key
+        ball.protected_until = state.tick + C.POSSESSION_PROTECTION_TICKS
+        ball.velocity = ZERO
