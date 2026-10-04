@@ -2,15 +2,18 @@ from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
 from app.database import SessionLocal
-from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
-from app.repositories.match_ws_token_sqlalchemy import SqlAlchemyMatchWsTokenRepository
+from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
+from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
+from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
+from app.repositories.match_ws_token_sqlalchemy import SqlAlchemyMatchWsTokenRepository
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_handshake_service import MatchHandshakeService
 from app.services.friendly_expiry import FriendlyExpiryService
-from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.services.friendly_start import FriendlyStartService
-
+from app.services.match_runner import MatchRunner
+from app.services.match_setup_service import MatchSetup, MatchSetupService
 
 # Único registro de conexiones del proceso.
 _connection_manager = MatchConnectionManager()
@@ -59,9 +62,27 @@ def _start_repo_scope():
     with SessionLocal() as db:
         yield SqlAlchemyMatchStartRepository(db)
 
+@contextmanager
+def _match_repo_scope():
+    with SessionLocal() as db:
+        yield SqlAlchemyMatchRepository(db)
 
-# on_start=None: acá se engancha la simulación cuando exista.
-_friendly_start = FriendlyStartService(_start_repo_scope)
+def _load_setup(match_id: int) -> MatchSetup:
+    with SessionLocal() as db:
+        return MatchSetupService(
+            SqlAlchemyMatchRepository(db),
+            SqlAlchemyLeagueRepository(db),
+            SqlAlchemyTeamRepository(db),
+        ).load_match_setup(match_id)
+
+
+async def _start_simulation(match_id: int) -> None:
+    _match_runner.start(match_id)   # start() es sync y devuelve la Task
+
+_friendly_start = FriendlyStartService(_start_repo_scope, _start_simulation)
+
+def get_match_runner() -> MatchRunner:
+    return _match_runner
 
 
 def get_friendly_start() -> FriendlyStartService:

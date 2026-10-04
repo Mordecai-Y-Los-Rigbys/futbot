@@ -65,7 +65,7 @@ class FriendlyStartService:
 
         def mark() -> bool:
             with self._repo_scope() as repo:
-                return repo.start_if_ready(match_id)
+                return repo.is_ready_to_start(match_id)   # antes: start_if_ready
 
         started = await run_in_threadpool(mark)
         if started and self._on_start is not None:

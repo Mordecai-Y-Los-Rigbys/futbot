@@ -7,9 +7,7 @@ from app.api import ws_deps
 
 main_module = importlib.import_module("app.main")
 
-@pytest.mark.skip(
-    reason="Pendiente del ticket de inicio de partido: conectar el motor de simulación."
-)
+
 def test_configured_start_service_has_a_simulation_callback():
     service = ws_deps.get_friendly_start()
     assert callable(service._on_start)
@@ -21,17 +19,17 @@ def test_lifespan_recovers_and_shuts_down_friendly_services(monkeypatch):
     start = Mock()
     start.recover = AsyncMock()
 
-    # No crear artificialmente el nombre faltante: debe existir en main.
-    assert callable(
-        getattr(main_module, "get_friendly_start", None)
-    ), "main.py debe importar get_friendly_start"
+    runner = Mock()
+    runner.shutdown = AsyncMock()
 
-    monkeypatch.setattr(
-        main_module, "get_friendly_expiry", lambda: expiry
-    )
-    monkeypatch.setattr(
-        main_module, "get_friendly_start", lambda: start
-    )
+    assert callable(getattr(main_module, "get_friendly_start", None)), \
+        "main.py debe importar get_friendly_start"
+    assert callable(getattr(main_module, "get_match_runner", None)), \
+        "main.py debe importar get_match_runner"
+
+    monkeypatch.setattr(main_module, "get_friendly_expiry", lambda: expiry)
+    monkeypatch.setattr(main_module, "get_friendly_start", lambda: start)
+    monkeypatch.setattr(main_module, "get_match_runner", lambda: runner)
 
     async def scenario():
         async with main_module.lifespan(main_module.app):
@@ -39,8 +37,10 @@ def test_lifespan_recovers_and_shuts_down_friendly_services(monkeypatch):
             start.recover.assert_awaited_once_with()
             expiry.shutdown.assert_not_called()
             start.shutdown.assert_not_called()
+            runner.shutdown.assert_not_awaited()
 
         start.shutdown.assert_called_once_with()
         expiry.shutdown.assert_called_once_with()
+        runner.shutdown.assert_awaited_once_with()
 
     asyncio.run(scenario())

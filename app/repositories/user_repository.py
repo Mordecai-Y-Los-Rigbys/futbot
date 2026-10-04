@@ -11,7 +11,7 @@ class UserRepository:
     def get_by_email(self, email: str) -> User | None:
         return self.db.query(User).filter(User.email == email).first()
 
-    def create(self, username: str, email: str, password_hash: str, club_name: str, avatar: int) -> User:
+    def create(self, username, email, password_hash, club_name, avatar) -> User:
         new_user = User(
             username=username,
             email=email,
@@ -19,12 +19,13 @@ class UserRepository:
             club_name=club_name,
             avatar=avatar,
         )
-        self.db.add(new_user)
         try:
-            self.db.commit()
+            # SAVEPOINT: si el INSERT falla, solo se deshace este insert y no lo
+            # que la transacción ya tenía pendiente. El commit lo hace quien cierra
+            # el registro (SessionRepository.create).
+            with self.db.begin_nested():
+                self.db.add(new_user)  # el flush ocurre al salir del bloque
         except IntegrityError:
-            # Sin el rollback la sesión queda inutilizable
-            self.db.rollback()
             raise ApiError(
                 status_code=409,
                 code=None,

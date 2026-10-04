@@ -411,7 +411,7 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
     }
     assert repo.join_friendly.call_args.args[0].user_id == 7  # el usuario de la sesión
     assert expiry.unscheduled == [100]  # se cancela el vencimiento de 15 min
-    assert start.scheduled == [100]     # arranca la cuenta regresiva de 10 s
+    assert start.scheduled == [100]     # arranca la cuenta regresiva de 3 s
 
 
 @pytest.mark.parametrize(

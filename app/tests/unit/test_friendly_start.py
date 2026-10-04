@@ -19,15 +19,15 @@ class FakeStartRepo(AbstractMatchStartRepository):
         self.pending = list(pending)
         self.failures = failures
         self.attempts = 0
-        self.started = []
+        self.triggered = []
 
-    def start_if_ready(self, match_id):
+    def is_ready_to_start(self, match_id):
         self.attempts += 1
         if self.failures > 0:
             self.failures -= 1
             raise RuntimeError("boom")
         if self.ready:
-            self.started.append(match_id)
+            self.triggered.append(match_id)
         return self.ready
 
     def list_pending_start(self):
@@ -47,9 +47,9 @@ def no_retry_delay(monkeypatch):
     monkeypatch.setattr(friendly_start, "START_RETRY_DELAY", 0)
 
 
-def test_default_countdown_is_ten_seconds():
-    assert FRIENDLY_COUNTDOWN == timedelta(seconds=10)
-    assert make_service(FakeStartRepo(), countdown=FRIENDLY_COUNTDOWN).countdown == timedelta(seconds=10)
+def test_default_countdown_is_three_seconds():
+    assert FRIENDLY_COUNTDOWN == timedelta(seconds=3)
+    assert make_service(FakeStartRepo(), countdown=FRIENDLY_COUNTDOWN).countdown == timedelta(seconds=3)
 
 
 def test_start_returns_false_and_skips_on_start_when_not_ready():
@@ -72,7 +72,7 @@ def test_on_start_failure_does_not_propagate():
 
     service = make_service(repo, on_start)
     assert asyncio.run(service.start(100)) is True
-    assert repo.started == [100]
+    assert repo.triggered == [100]
 
 
 def test_unschedule_prevents_the_start():
@@ -85,7 +85,7 @@ def test_unschedule_prevents_the_start():
         await asyncio.sleep(WAIT)
 
     asyncio.run(scenario())
-    assert repo.started == []
+    assert repo.triggered == []
 
 
 def test_scheduling_again_replaces_the_previous_timer():
@@ -98,7 +98,7 @@ def test_scheduling_again_replaces_the_previous_timer():
         await asyncio.sleep(WAIT)
 
     asyncio.run(scenario())
-    assert repo.started == [100]  # una sola vez
+    assert repo.triggered == [100]  # una sola vez
 
 
 def test_a_failure_is_retried(no_retry_delay):
@@ -111,7 +111,7 @@ def test_a_failure_is_retried(no_retry_delay):
 
     asyncio.run(scenario())
     assert repo.attempts == 2
-    assert repo.started == [100]
+    assert repo.triggered == [100]
 
 
 def test_retries_are_bounded(no_retry_delay):
@@ -124,7 +124,7 @@ def test_retries_are_bounded(no_retry_delay):
 
     asyncio.run(scenario())
     assert repo.attempts == friendly_start.START_RETRIES
-    assert repo.started == []
+    assert repo.triggered == []
 
 
 def test_recover_reschedules_the_pending_matches():
@@ -136,7 +136,7 @@ def test_recover_reschedules_the_pending_matches():
         await asyncio.sleep(WAIT)
 
     asyncio.run(scenario())
-    assert sorted(repo.started) == [1, 2]
+    assert sorted(repo.triggered) == [1, 2]
 
 
 def test_recover_with_nothing_pending_is_a_noop():
@@ -155,10 +155,10 @@ def test_shutdown_cancels_pending_timers():
         await asyncio.sleep(WAIT)
 
     asyncio.run(scenario())
-    assert repo.started == []
+    assert repo.triggered == []
     
 
-def test_countdown_waits_ten_seconds_before_starting(monkeypatch):
+def test_countdown_waits_three_seconds_before_starting(monkeypatch):
     from types import SimpleNamespace
 
     async def scenario():
@@ -201,16 +201,16 @@ def test_countdown_waits_ten_seconds_before_starting(monkeypatch):
             # El timeout solo detecta un bloqueo; no simula el tiempo.
             await asyncio.wait_for(waiting.wait(), timeout=5)
 
-            assert requested_delays == [10.0]
+            assert requested_delays == [3.0]
             assert repo.attempts == 0
-            assert repo.started == []
+            assert repo.triggered == []
             assert callbacks == []
 
             release.set()
             await asyncio.wait_for(task, timeout=5)
 
             assert repo.attempts == 1
-            assert repo.started == [100]
+            assert repo.triggered == [100]
             assert callbacks == [100]
         finally:
             service.shutdown()

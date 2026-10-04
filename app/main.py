@@ -12,7 +12,7 @@ from app.api.leagues import router as leagues_router
 from app.api.players import router as players_router
 from app.api.ws_matches import router as ws_matches_router
 from app.api.friendlies import router as friendlies_router
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry, get_friendly_start, get_match_runner
 
 from app.database import Base, engine
 from app.errors import (
@@ -36,6 +36,7 @@ async def lifespan(_app: FastAPI):
     await start.recover()
     yield
     start.shutdown()
+    await get_match_runner().shutdown()
     expiry.shutdown()
 
 app = FastAPI(title="Futbot API", lifespan=lifespan)

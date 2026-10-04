@@ -9,9 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.domain.match import MatchStatus
 from app.main import app
-from app.models.match import Match, MatchStatus
-from app.models.match_member import MatchMember
+from app.models.match import Match
+from app.models.team_member import TeamMember
 from app.models.player import Player
 from app.repositories.friendly_abstract import CreateFriendlyMemberData, JoinFriendlyData
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
@@ -142,8 +143,8 @@ def match_row(db_session, match_id) -> Match:
 def members_of(db_session, match_id, user_id):
     db_session.expire_all()
     return db_session.scalars(
-        select(MatchMember).where(
-            MatchMember.match_id == match_id, MatchMember.user_id == user_id
+        select(TeamMember).where(
+            TeamMember.match_id == match_id, TeamMember.user_id == user_id
         )
     ).all()
 
@@ -610,7 +611,7 @@ def status_of(db_session, match_id):
     return db_session.scalar(select(Match.status).where(Match.id == match_id))
 
 
-def test_match_stays_scheduled_during_the_countdown_and_then_starts(
+def test_match_stays_scheduled_during_the_countdown_and_the_simulation_is_triggered(
     login_as, db_session, joiner, friendly, joiner_team
 ):
     created, _ = friendly
@@ -621,23 +622,29 @@ def test_match_stays_scheduled_during_the_countdown_and_then_starts(
     def scope():
         yield SqlAlchemyMatchStartRepository(db_session)
 
-    service = FriendlyStartService(scope, countdown=timedelta(milliseconds=400))
+    triggered = []
+
+    async def on_start(match_id):
+        triggered.append(match_id)
+
+    service = FriendlyStartService(scope, on_start, countdown=timedelta(milliseconds=400))
 
     async def scenario():
         service.schedule(created["id"])
         await asyncio.sleep(0.05)
-        during = status_of(db_session, created["id"])  # todavía en cuenta regresiva
+        during = (status_of(db_session, created["id"]), list(triggered))  # en cuenta regresiva
         await asyncio.sleep(1.0)
         return during
 
     during = asyncio.run(scenario())
-    assert during == MatchStatus.scheduled
-    assert status_of(db_session, created["id"]) == MatchStatus.started
+    assert during == (MatchStatus.scheduled, [])                    # todavía no dispara
+    assert status_of(db_session, created["id"]) == MatchStatus.scheduled  # lo arranca el runner
+    assert triggered == [created["id"]]                             # pero la simulación sí se disparó
 
 
 # --- repositorio de arranque ---------------------------------------------------------------------------------------------------
 
-def test_start_if_ready_only_starts_a_friendly_with_a_rival(
+def test_is_ready_to_start_only_if_friendly_has_rival(
     db_session, creator, other, make_league
 ):
     repo = SqlAlchemyMatchStartRepository(db_session)
@@ -651,14 +658,13 @@ def test_start_if_ready_only_starts_a_friendly_with_a_rival(
     )
 
     assert repo.list_pending_start() == [ready.id]
-    assert repo.start_if_ready(waiting.id) is False
-    assert repo.start_if_ready(cancelled.id) is False
-    assert repo.start_if_ready(league_match.id) is False
-    assert repo.start_if_ready(ready.id) is True
-    assert repo.start_if_ready(ready.id) is False  # idempotente
-    assert status_of(db_session, ready.id) == MatchStatus.started
-    assert status_of(db_session, waiting.id) == MatchStatus.scheduled
-    assert repo.list_pending_start() == []
+    assert repo.is_ready_to_start(waiting.id) is False
+    assert repo.is_ready_to_start(cancelled.id) is False
+    assert repo.is_ready_to_start(league_match.id) is False
+    assert repo.is_ready_to_start(ready.id) is True
+    assert repo.is_ready_to_start(ready.id) is True
+    assert status_of(db_session, ready.id) == MatchStatus.scheduled
+    assert repo.list_pending_start() == [ready.id]
     
     
 def test_nonexistent_behavior_rejects_join_without_side_effects(
@@ -768,12 +774,15 @@ def test_start_callback_sees_committed_match_and_both_teams(
     first, second = asyncio.run(scenario())
 
     assert first is True
-    assert second is False
-    assert observations == [{
+    assert second is True     
+    snapshot = {
         "id": match_id,
-        "status": MatchStatus.started,
+        "status": MatchStatus.scheduled,
         "creator_id": created["club1"]["id"],
         "rival_id": joiner.id,
         "creator_team": expected_team(creator_members),
         "rival_team": expected_team(joiner_team),
-    }]
+    }
+    # start() no longer changes the match state, so each call triggers on_start;
+    # the real idempotency lives in MatchRunner.start().
+    assert observations == [snapshot, snapshot]

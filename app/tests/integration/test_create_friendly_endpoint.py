@@ -1,9 +1,10 @@
 import pytest
 
 from app.api.ws_deps import get_friendly_expiry
+from app.domain.match import MatchStatus
 from app.main import app
-from app.models.match import Match, MatchStatus
-from app.models.match_member import MatchMember
+from app.models.match import Match
+from app.models.team_member import TeamMember
 from app.models.player import Player
 
 pytestmark = pytest.mark.integration
@@ -71,7 +72,7 @@ def test_success_creates_match_and_team(client, login, db_session, setup, expiry
 
     match = db_session.get(Match, body["id"])
     assert match.status == MatchStatus.scheduled and match.user_2_id is None
-    assert db_session.query(MatchMember).filter_by(match_id=match.id).count() == 6
+    assert db_session.query(TeamMember).filter_by(match_id=match.id).count() == 6
     assert expiry.calls == [(body["id"], expiry.calls[0][1])]
 
 

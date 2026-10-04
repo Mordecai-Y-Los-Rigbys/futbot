@@ -1,7 +1,7 @@
 import pytest
 
 from app.models.match import Match
-from app.models.match_member import MatchMember
+from app.models.team_member import TeamMember
 from app.models.player import Player
 from app.repositories.friendly_abstract import CreateFriendlyData, CreateFriendlyMemberData
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
@@ -39,4 +39,4 @@ def test_failure_while_saving_the_team_leaves_no_match(db_session, make_user, ma
         )
 
     assert db_session.query(Match).count() == 0
-    assert db_session.query(MatchMember).count() == 0
+    assert db_session.query(TeamMember).count() == 0

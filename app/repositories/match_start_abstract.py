@@ -5,10 +5,9 @@ class AbstractMatchStartRepository(ABC):
     """Operaciones del arranque automático de un amistoso con rival."""
 
     @abstractmethod
-    def start_if_ready(self, match_id: int) -> bool:
-        """Pasa el partido a `started` solo si sigue siendo un amistoso
-        `scheduled` con rival, en una única actualización condicional.
-        Devuelve True si lo arrancó."""
+    def is_ready_to_start(self, match_id: int) -> bool:
+        """True si el partido sigue siendo un amistoso `scheduled` con rival,
+        es decir, si corresponde arrancar la simulación. No cambia su estado."""
 
     @abstractmethod
     def list_pending_start(self) -> list[int]:

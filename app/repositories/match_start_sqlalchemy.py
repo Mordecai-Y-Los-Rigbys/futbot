@@ -1,7 +1,8 @@
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from app.models.match import Match, MatchStatus
+from app.domain.match import MatchStatus
+from app.models.match import Match
 from app.repositories.match_start_abstract import AbstractMatchStartRepository
 
 
@@ -10,7 +11,7 @@ class SqlAlchemyMatchStartRepository(AbstractMatchStartRepository):
         self.db = db
 
     @staticmethod
-    def is_ready_to_start():
+    def ready_condition():
         """Amistoso (sin liga) con rival que todavía no arrancó."""
         return and_(
             Match.league_id.is_(None),
@@ -18,22 +19,15 @@ class SqlAlchemyMatchStartRepository(AbstractMatchStartRepository):
             Match.status == MatchStatus.scheduled,
         )
 
-    def start_if_ready(self, match_id: int) -> bool:
-        try:
-            result = self.db.execute(
-                update(Match)
-                .where(Match.id == match_id, self.is_ready_to_start())
-                .values(status=MatchStatus.started)
-            )
-            self.db.commit()
-        except Exception:
-            self.db.rollback()
-            raise
-        return result.rowcount == 1
+    def is_ready_to_start(self, match_id: int) -> bool:
+        found = self.db.scalar(
+            select(Match.id).where(Match.id == match_id, self.ready_condition())
+        )
+        return found is not None
 
     def list_pending_start(self) -> list[int]:
         return list(
             self.db.scalars(
-                select(Match.id).where(self.is_ready_to_start()).order_by(Match.id.asc())
+                select(Match.id).where(self.ready_condition()).order_by(Match.id.asc())
             )
         )
