@@ -19,6 +19,7 @@ from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
 from app.services.session_service import SessionService
 from app.services.friendly_service import FriendlyService
+from app.services.user_service import UserService
 
 
 
@@ -83,3 +84,7 @@ async def get_json_body(
 
 def get_friendly_service(db: Session = Depends(get_db)) -> FriendlyService:
     return FriendlyService(SqlAlchemyFriendlyRepository(db))
+
+
+def get_user_service(db: Session = Depends(get_db)) -> UserService:
+    return UserService(UserRepository(db))
