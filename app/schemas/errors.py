@@ -50,3 +50,15 @@ class CreateFriendlyMatchBadRequest(BaseModel):
 class CreateFriendlyMatchConflict(BaseModel):
     code: Literal["alreadyPlaying", "playerOrBehaviorNotOwned"]
     message: str
+
+
+class JoinFriendlyMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]
+    message: str
+
+
+class JoinFriendlyMatchConflict(BaseModel):
+    code: Literal[
+        "notJoinable", "isOwnMatch", "alreadyPlaying", "playerOrBehaviorNotOwned"
+    ]
+    message: str

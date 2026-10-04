@@ -72,3 +72,52 @@ def parse_create_friendly(body: Any) -> CreateFriendlyInput:
             MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]
         ],
     )
+
+
+@dataclass(frozen=True)
+class JoinFriendlyInput:
+    members: list[MemberInput]
+
+
+def _check_members_types(body: dict) -> None:
+    """invalidFieldType para `members` (sin mirar `name`, que acá se ignora)."""
+
+    def fail(msg: str):
+        raise _bad("invalidFieldType", msg)
+
+    if "members" in body:
+        if not isinstance(body["members"], list):
+            fail("`members` debe ser un array.")
+        for m in body["members"]:
+            if not isinstance(m, dict):
+                fail("Cada elemento de `members` debe ser un objeto.")
+            for f in ("playerId", "behaviorId"):
+                if f in m and not _is_id(m[f]):
+                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_INT}.")
+            if "role" in m and not isinstance(m["role"], str):
+                fail("`role` debe ser un string.")
+
+
+def parse_join_friendly(body: Any) -> JoinFriendlyInput:
+    """Todos los 400, en orden: invalidFieldType > incompleteForm > invalidTeam.
+    Un body ilegible, vacío o que no es un objeto cuenta como si faltara
+    `members` (convención 9) y se evalúa antes que cualquier regla de campo."""
+    if body is None or body is INVALID_JSON or not isinstance(body, dict):
+        raise _bad("incompleteForm", "Falta `members`.")
+
+    _check_members_types(body)
+
+    if "members" not in body:
+        raise _bad("incompleteForm", "Falta `members`.")
+    for m in body["members"]:
+        for k in MEMBER_KEYS:
+            if k not in m:
+                raise _bad("incompleteForm", f"Cada elemento de `members` necesita `{k}`.")
+
+    _check_team(body["members"])
+
+    return JoinFriendlyInput(
+        members=[
+            MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]
+        ]
+    )
