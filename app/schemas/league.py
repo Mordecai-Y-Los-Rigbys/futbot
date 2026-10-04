@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_serializer
 from pydantic.alias_generators import to_camel
