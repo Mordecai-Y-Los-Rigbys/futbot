@@ -3,19 +3,20 @@ from datetime import timezone
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
+from app.domain.team_member import MemberRole
 from app.models.behavior import Behavior
-from app.models.league_participant_member import MemberRole
 from app.models.match import Match, MatchStatus
-from app.models.match_member import MatchMember
 from app.models.player import Player
+from app.models.team_member import TeamMember
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
+    CreateFriendlyMemberData,
     FriendlyClubData,
     FriendlyMatchData,
     FriendlyPageData,
     FriendlyJoinState,
-    JoinFriendlyData
+    JoinFriendlyData,
 )
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 
@@ -23,6 +24,33 @@ from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryReposi
 def _escape_like(value: str) -> str:
     # El orden importa: primero la barra, después los comodines.
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _friendly_team(
+    match_id: int, user_id: int, members: list[CreateFriendlyMemberData]
+) -> list[TeamMember]:
+    """Equipo de un usuario en un amistoso: filas de team_members con match_id
+    (y sin league_id: el CHECK exige que haya exactamente un dueño)."""
+    return [
+        TeamMember(
+            league_id=None,
+            match_id=match_id,
+            user_id=user_id,
+            player_id=m.player_id,
+            behavior_id=m.behavior_id,
+            role=MemberRole(m.role),
+        )
+        for m in members
+    ]
+
+
+def _utc(created_at):
+    # DateTime naive -> UTC, como en los otros repos.
+    return created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at
+
+
+def _club(user) -> FriendlyClubData:
+    return FriendlyClubData(id=user.id, username=user.username, club_name=user.club_name)
 
 
 class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
@@ -69,35 +97,19 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
         try:
             self.db.add(match)
             self.db.flush()  # obtiene match.id
-            self.db.add_all(
-                MatchMember(
-                    match_id=match.id,
-                    user_id=data.creator_id,
-                    player_id=m.player_id,
-                    behavior_id=m.behavior_id,
-                    role=MemberRole(m.role),
-                )
-                for m in data.members
-            )
+            self.db.add_all(_friendly_team(match.id, data.creator_id, data.members))
             self.db.commit()
         except Exception:
             self.db.rollback()
             raise
 
         self.db.refresh(match)
-        created_at = match.created_at
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
         return FriendlyMatchData(
             id=match.id,
             name=match.name,
             status=match.status.value,
-            club1=FriendlyClubData(
-                id=match.user_1.id,
-                username=match.user_1.username,
-                club_name=match.user_1.club_name,
-            ),
-            created_at=created_at,
+            club1=_club(match.user_1),
+            created_at=_utc(match.created_at),
         )
 
     def list_waiting_page(
@@ -121,26 +133,18 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
             .limit(limit)
         ).all()
 
-        items = []
-        for m in matches:
-            created_at = m.created_at
-            if created_at.tzinfo is None:  # DateTime naive -> UTC, como en los otros repos
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            items.append(
-                FriendlyMatchData(
-                    id=m.id,
-                    name=m.name,
-                    status=m.status.value,
-                    club1=FriendlyClubData(
-                        id=m.user_1.id,
-                        username=m.user_1.username,
-                        club_name=m.user_1.club_name,
-                    ),
-                    created_at=created_at,
-                )
+        items = [
+            FriendlyMatchData(
+                id=m.id,
+                name=m.name,
+                status=m.status.value,
+                club1=_club(m.user_1),
+                created_at=_utc(m.created_at),
             )
+            for m in matches
+        ]
         return FriendlyPageData(items=items, total=total)
-    
+
     def get_friendly_state(self, match_id: int) -> FriendlyJoinState | None:
         row = self.db.execute(
             select(Match.id, Match.user_1_id, Match.user_2_id, Match.status).where(
@@ -170,16 +174,7 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
             if result.rowcount != 1:  # lo ganó otro rival o el vencimiento
                 self.db.rollback()
                 return None
-            self.db.add_all(
-                MatchMember(
-                    match_id=data.match_id,
-                    user_id=data.user_id,
-                    player_id=m.player_id,
-                    behavior_id=m.behavior_id,
-                    role=MemberRole(m.role),
-                )
-                for m in data.members
-            )
+            self.db.add_all(_friendly_team(data.match_id, data.user_id, data.members))
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -187,18 +182,11 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
 
         match = self.db.get(Match, data.match_id)
         self.db.refresh(match)
-        created_at = match.created_at
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-
-        def club(u):
-            return FriendlyClubData(id=u.id, username=u.username, club_name=u.club_name)
-
         return FriendlyMatchData(
             id=match.id,
             name=match.name,
             status=match.status.value,
-            club1=club(match.user_1),
-            club2=club(match.user_2),
-            created_at=created_at,
+            club1=_club(match.user_1),
+            club2=_club(match.user_2),
+            created_at=_utc(match.created_at),
         )

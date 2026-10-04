@@ -1,5 +1,3 @@
-import enum
-
 from sqlalchemy import (
     CheckConstraint,
     Enum,
@@ -10,13 +8,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.domain.team_member import MemberRole 
 from app.database import Base
+from app.domain.team_member import MemberRole  # noqa: F401  (se re-exporta)
 
 
 class TeamMember(Base):
     """Un integrante del equipo de un usuario, en una liga o en un amistoso.
 
+    Es la única tabla de equipos:
     - Equipo de liga: `league_id` + `user_id` (participante de esa liga).
     - Equipo de amistoso: `match_id` + `user_id`.
     Exactamente uno de `league_id` / `match_id` está seteado. El equipo de liga
