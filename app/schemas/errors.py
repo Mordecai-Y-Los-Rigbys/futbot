@@ -63,4 +63,14 @@ class JoinMatchForbidden(BaseModel):
 
 class JoinMatchConflict(BaseModel):
     code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
+
+class JoinFriendlyMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]
+    message: str
+
+
+class JoinFriendlyMatchConflict(BaseModel):
+    code: Literal[
+        "notJoinable", "isOwnMatch", "alreadyPlaying", "playerOrBehaviorNotOwned"
+    ]
     message: str
