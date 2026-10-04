@@ -50,3 +50,17 @@ class CreateFriendlyMatchBadRequest(BaseModel):
 class CreateFriendlyMatchConflict(BaseModel):
     code: Literal["alreadyPlaying", "playerOrBehaviorNotOwned"]
     message: str
+
+class JoinMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType"]
+    message: str
+
+
+class JoinMatchForbidden(BaseModel):
+    code: Literal["invalidLeaguePassword"]
+    message: str
+
+
+class JoinMatchConflict(BaseModel):
+    code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
+    message: str
