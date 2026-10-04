@@ -27,7 +27,7 @@ def test_mappers_configure_without_ambiguity():
 def test_ddl_for_postgres_includes_every_check():
     expected_checks = {
         "ck_matches_distinct_clubs": "user_2_id IS NULL OR user_1_id <> user_2_id",
-        "ck_matches_started_has_rival": "status = 'scheduled' OR user_2_id IS NOT NULL",
+        "ck_matches_started_has_rival": "status IN ('scheduled', 'cancelled') OR user_2_id IS NOT NULL",
         "ck_matches_scores_both_or_none": "(score_1 IS NULL) = (score_2 IS NULL)",
         "ck_matches_result_iff_finished": "(status = 'finished') = (score_1 IS NOT NULL)",
         "ck_matches_scores_non_negative": "score_1 >= 0 AND score_2 >= 0",

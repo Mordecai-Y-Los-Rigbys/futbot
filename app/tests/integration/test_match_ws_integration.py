@@ -1,4 +1,5 @@
-from contextlib import ExitStack
+import time
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -11,7 +12,11 @@ from app.api.ws_deps import get_connection_manager
 from app.main import app
 from app.models.match import Match, MatchStatus
 from app.models.match_ws_token import MatchWsToken
+from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 from app.services.match_connection_manager import MatchConnectionManager
+from app.services.match_timing import WS_TOKEN_TTL
+from app.services.friendly_expiry import FriendlyExpiryService
+
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +47,7 @@ def make_match(db_session, make_user):
 
     def _make(status=MatchStatus.scheduled) -> Match:
         user_1 = make_user(900)
-        user_2 = make_user(901) if status != MatchStatus.scheduled else None
+        user_2 = make_user(901) if status in (MatchStatus.started, MatchStatus.finished) else None
         match = Match(
             user_1_id=user_1.id,
             user_2_id=user_2.id if user_2 else None,
@@ -59,7 +64,7 @@ def make_match(db_session, make_user):
 
 @pytest.fixture()
 def make_token(db_session, make_user):
-    def _make(token, user_id, match, expires_in=timedelta(hours=2)) -> str:
+    def _make(token, user_id, match, expires_in=WS_TOKEN_TTL) -> str:
         make_user(user_id)
         now = datetime.now(timezone.utc)
         db_session.add(
@@ -166,3 +171,76 @@ def test_connecting_and_disconnecting_does_not_change_the_match(
 
     db_session.refresh(match)
     assert match.status == status
+
+def test_open_connection_survives_token_expiry(
+    client, db_session, make_match, make_token, manager
+):
+    match = make_match()
+    match_id = match.id  # se guarda antes: después del commit/close el objeto no sirve
+    make_token("corto", 7, match)
+    url = path(match, "corto")
+
+    with client.websocket_connect(url):
+        # Se vence el token directamente en la base, sin esperar.
+        db_session.query(MatchWsToken).filter(MatchWsToken.token == "corto").update(
+            {MatchWsToken.expires_at: datetime.now(timezone.utc) - timedelta(seconds=1)}
+        )
+        db_session.commit()
+        db_session.close()  # libera la transacción para que el teardown no se trabe
+
+        assert manager.count(match_id, 7) == 1
+        assert rejection(client, url) == (4401, "tokenExpired")
+
+    assert manager.count(match_id, 7) == 0
+
+
+def test_reconnecting_after_the_match_is_cancelled_is_4409(
+    client, db_session, make_match, make_token, manager
+):
+    match = make_match()
+    match_id = match.id
+    make_token("tok", 7, match)
+    url = path(match, "tok")
+
+    with client.websocket_connect(url):
+        db_session.query(Match).filter(Match.id == match_id).update(
+            {Match.status: MatchStatus.cancelled}
+        )
+        db_session.commit()
+        db_session.close()
+
+        assert rejection(client, url) == (4409, "matchCancelled")
+
+def test_cancelled_match_is_4409_even_with_a_valid_token(client, make_match, make_token):
+    match = make_match(status=MatchStatus.cancelled)
+    make_token("tok", 7, match)
+    assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")
+
+def test_expiry_cancels_the_match_and_closes_the_open_connection(
+    client, db_session, make_match, make_token, manager
+):
+    match = make_match()  # amistoso sin rival
+    make_token("tok", 7, match)
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind())
+
+    @contextmanager
+    def scope():
+        with factory() as db:
+            yield SqlAlchemyMatchExpiryRepository(db)
+
+    expiry = FriendlyExpiryService(scope, manager.close_match, wait=timedelta(seconds=1))
+
+    with client.websocket_connect(path(match, "tok")) as ws:
+        for _ in range(100):  # espera a que quede suscripto
+            if manager.subscribers(match.id):
+                break
+            time.sleep(0.01)
+        ws.portal.call(lambda: expiry.schedule(match.id))
+
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_text()
+        assert (exc.value.code, exc.value.reason) == (1000, "waitExpired")
+
+    db_session.refresh(match)
+    assert match.status == MatchStatus.cancelled
+    assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")

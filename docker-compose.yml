@@ -20,7 +20,9 @@ services:
     volumes:
       # Sincroniza la carpeta local con el contenedor para hot-reload
       - .:/app:z
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      --ws websockets --ws-ping-interval 20 --ws-ping-timeout 20
     depends_on:
       - db
 
