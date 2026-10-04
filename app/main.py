@@ -13,6 +13,7 @@ from app.api.players import router as players_router
 from app.api.ws_matches import router as ws_matches_router
 from app.api.friendlies import router as friendlies_router
 from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.users import router as users_router
 
 from app.database import Base, engine
 from app.errors import (
@@ -47,6 +48,7 @@ app.include_router(behaviors_router)
 app.include_router(leagues_router)
 app.include_router(ws_matches_router)
 app.include_router(friendlies_router)
+app.include_router(users_router)
 
 
 # Task 0.2: Configuración de CORS
