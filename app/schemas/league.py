@@ -21,7 +21,7 @@ class LeagueSummary(CamelModel):
     id: int
     name: str
     creator: LeagueCreator
-    status: Literal[LeagueStatus.preparation, LeagueStatus.cancelled, LeagueStatus.started, LeagueStatus.finished]
+    status: LeagueStatus
     participants_count: int
     max_participants: int
     private: bool

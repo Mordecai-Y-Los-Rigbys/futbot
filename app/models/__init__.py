@@ -6,7 +6,6 @@ from app.models.league import League, LeagueStatus  # noqa: F401
 from app.models.league_participant import LeagueParticipant  # noqa: F401
 from app.models.league_participant_member import (  # noqa: F401
     LeagueParticipantMember,
-    MemberRole,
 )
 from app.models.match import Match, MatchStatus  # noqa: F401
 from app.models.match_ws_token import MatchWsToken  # noqa: F401
@@ -21,7 +20,6 @@ __all__ = [
     "LeagueStatus", 
     "LeagueParticipant",
     "LeagueParticipantMember",
-    "MemberRole",
     "Match",
     "MatchStatus",
     "MatchWsToken"
