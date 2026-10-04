@@ -11,7 +11,9 @@ from app.repositories.user_repository import UserRepository
 
 @pytest.fixture
 def db():
-    return create_autospec(Session, instance=True)
+    mock = create_autospec(Session, instance=True)
+    mock.begin_nested.return_value.__exit__.return_value = False  # no tragar excepciones
+    return mock
 
 
 @pytest.fixture
@@ -60,10 +62,17 @@ def test_get_by_email_does_not_write(repo, db):
 
 # ---------- create ----------
 
-def test_create_adds_commits_and_refreshes_in_order(repo, db):
-    repo.create("messi", "messi@test.com", "hash", "Inter", 2)
+def test_create_adds_inside_a_savepoint_and_refreshes(repo, db):
+    result = repo.create("messi", "messi@test.com", "hash", "Inter", 2)
 
-    assert [c[0] for c in db.method_calls] == ["add", "commit", "refresh"]
+    db.begin_nested.assert_called_once()
+    added = db.add.call_args.args[0]
+    assert isinstance(added, User)
+    assert (added.username, added.email, added.password_hash,
+            added.club_name, added.avatar) == ("messi", "messi@test.com", "hash", "Inter", 2)
+    db.refresh.assert_called_once_with(added)
+    db.commit.assert_not_called()  # el commit no es de este repo
+    assert result is added
 
 
 def test_create_builds_the_user_with_the_given_fields(repo, db):
@@ -77,23 +86,21 @@ def test_create_builds_the_user_with_the_given_fields(repo, db):
     assert result is added
 
 
-def test_create_does_not_swallow_commit_errors(repo, db):
-    db.commit.side_effect = RuntimeError("falló el commit")
+def test_create_does_not_swallow_unexpected_errors(repo, db):
+    db.add.side_effect = RuntimeError("falló")
 
     with pytest.raises(RuntimeError):
         repo.create("messi", "messi@test.com", "hash", "Inter", 2)
 
     db.refresh.assert_not_called()
-
 # ---------- create: email duplicado ----------
 
-def test_create_duplicate_email_raises_409_and_rolls_back(repo, db):
-    db.commit.side_effect = IntegrityError("INSERT ...", {}, Exception("duplicate key"))
+def test_create_duplicate_email_raises_409(repo, db):
+    db.add.side_effect = IntegrityError("INSERT ...", {}, Exception("duplicate key"))
 
     with pytest.raises(ApiError) as exc:
         repo.create("messi", "messi@test.com", "hash", "Inter", 3)
 
     assert exc.value.status_code == 409
     assert exc.value.code is None
-    db.rollback.assert_called_once()
     db.refresh.assert_not_called()

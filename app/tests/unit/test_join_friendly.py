@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.api.deps import get_friendly_service
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry
 from app.errors import ApiError
 from app.main import app
 from app.repositories.friendly_abstract import (
@@ -358,30 +358,16 @@ class FakeExpiry:
         self.unscheduled.append(match_id)
 
 
-class FakeStart:
-    def __init__(self):
-        self.scheduled = []
-
-    def schedule(self, match_id):
-        self.scheduled.append(match_id)
-
-
 @pytest.fixture()
 def expiry():
     return FakeExpiry()
 
 
 @pytest.fixture()
-def start():
-    return FakeStart()
-
-
-@pytest.fixture()
-def join_api(api, repo, expiry, start):
+def join_api(api, repo, expiry):
     """Cliente sin sesión. `api` limpia los overrides al terminar."""
     app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo)
     app.dependency_overrides[get_friendly_expiry] = lambda: expiry
-    app.dependency_overrides[get_friendly_start] = lambda: start
     return api
 
 
@@ -391,11 +377,11 @@ def auth_join_api(join_api):
     return join_api
 
 
-def nothing_scheduled(expiry, start):
-    return expiry.unscheduled == [] and start.scheduled == []
+def nothing_scheduled(expiry):
+    return expiry.unscheduled == []
 
 
-def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
+def test_endpoint_success_full_structure(auth_join_api, repo, expiry):
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
@@ -411,7 +397,6 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
     }
     assert repo.join_friendly.call_args.args[0].user_id == 7  # el usuario de la sesión
     assert expiry.unscheduled == [100]  # se cancela el vencimiento de 15 min
-    assert start.scheduled == [100]     # arranca la cuenta regresiva de 10 s
 
 
 @pytest.mark.parametrize(
@@ -423,32 +408,32 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
         ("/friendlies/2147483648/members", {"members": []}),
     ],
 )
-def test_no_cookie_is_401_even_with_bad_id_or_body(join_api, repo, expiry, start, path, payload):
+def test_no_cookie_is_401_even_with_bad_id_or_body(join_api, repo, expiry, path, payload):
     resp = join_api.post(path, json=payload)
     assert resp.status_code == 401
     assert resp.json()["code"] is None
     Error.model_validate(resp.json())
     repo.get_friendly_state.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize("cookie", ["no-existe", "vencida"])
-def test_invalid_or_expired_cookie_is_401(join_api, repo, expiry, start, cookie):
+def test_invalid_or_expired_cookie_is_401(join_api, repo, expiry, cookie):
     join_api.cookies.set("session_id", cookie)
     resp = join_api.post("/friendlies/abc/members", json={"members": 5})
     assert resp.status_code == 401 and resp.json()["code"] is None
     repo.get_friendly_state.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize("raw_id", ["abc", "1.5", "0", "-1", "2147483648", "99999999999999999999"])
-def test_invalid_route_id_is_404_never_422(auth_join_api, repo, expiry, start, raw_id):
+def test_invalid_route_id_is_404_never_422(auth_join_api, repo, expiry, raw_id):
     resp = auth_join_api.post(f"/friendlies/{raw_id}/members", json=body())
     assert resp.status_code == 404
     assert resp.json()["code"] is None
     Error.model_validate(resp.json())
     repo.get_friendly_state.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 def test_invalid_route_id_beats_invalid_body(auth_join_api):
@@ -456,12 +441,12 @@ def test_invalid_route_id_beats_invalid_body(auth_join_api):
     assert auth_join_api.post("/friendlies/abc/members").status_code == 404
 
 
-def test_nonexistent_match_is_404(auth_join_api, repo, expiry, start):
+def test_nonexistent_match_is_404(auth_join_api, repo, expiry):
     repo.get_friendly_state.return_value = None
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 404
     assert resp.json() == {"code": None, "message": "Partido amistoso no encontrado."}
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize(
@@ -481,14 +466,14 @@ def test_nonexistent_match_is_404(auth_join_api, repo, expiry, start):
         ({"json": {"members": []}}, "invalidTeam"),
     ],
 )
-def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, start, kwargs, code):
+def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, kwargs, code):
     resp = auth_join_api.post(URL, **kwargs)
     assert resp.status_code == 400
     assert resp.json()["code"] == code
     assert resp.json()["message"]
     JoinFriendlyMatchBadRequest.model_validate(resp.json())
     repo.join_friendly.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize(
@@ -508,10 +493,10 @@ def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, start, kwarg
         (lambda r: setattr(r.join_friendly, "return_value", None), "notJoinable"),
     ],
 )
-def test_conflicts_are_409_and_schedule_nothing(auth_join_api, repo, expiry, start, setup, code):
+def test_conflicts_are_409_and_schedule_nothing(auth_join_api, repo, expiry, setup, code):
     setup(repo)
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 409
     assert resp.json()["code"] == code
     JoinFriendlyMatchConflict.model_validate(resp.json())
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)

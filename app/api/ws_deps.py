@@ -8,8 +8,6 @@ from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryReposi
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_handshake_service import MatchHandshakeService
 from app.services.friendly_expiry import FriendlyExpiryService
-from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
-from app.services.friendly_start import FriendlyStartService
 
 
 # Único registro de conexiones del proceso.
@@ -52,17 +50,3 @@ _friendly_expiry = FriendlyExpiryService(
 
 def get_friendly_expiry() -> FriendlyExpiryService:
     return _friendly_expiry
-
-
-@contextmanager
-def _start_repo_scope():
-    with SessionLocal() as db:
-        yield SqlAlchemyMatchStartRepository(db)
-
-
-# on_start=None: acá se engancha la simulación cuando exista.
-_friendly_start = FriendlyStartService(_start_repo_scope)
-
-
-def get_friendly_start() -> FriendlyStartService:
-    return _friendly_start
