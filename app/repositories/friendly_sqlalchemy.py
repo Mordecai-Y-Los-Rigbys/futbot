@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.behavior import Behavior
@@ -14,6 +14,8 @@ from app.repositories.friendly_abstract import (
     FriendlyClubData,
     FriendlyMatchData,
     FriendlyPageData,
+    FriendlyJoinState,
+    JoinFriendlyData
 )
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 
@@ -138,3 +140,65 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
                 )
             )
         return FriendlyPageData(items=items, total=total)
+    
+    def get_friendly_state(self, match_id: int) -> FriendlyJoinState | None:
+        row = self.db.execute(
+            select(Match.id, Match.user_1_id, Match.user_2_id, Match.status).where(
+                Match.id == match_id, Match.league_id.is_(None)
+            )
+        ).first()
+        if row is None:
+            return None
+        return FriendlyJoinState(
+            id=row.id,
+            creator_id=row.user_1_id,
+            rival_id=row.user_2_id,
+            status=row.status.value,
+        )
+
+    def join_friendly(self, data: JoinFriendlyData) -> FriendlyMatchData | None:
+        try:
+            result = self.db.execute(
+                update(Match)
+                .where(
+                    Match.id == data.match_id,
+                    SqlAlchemyMatchExpiryRepository.is_waiting_friendly(),
+                    Match.user_1_id != data.user_id,
+                )
+                .values(user_2_id=data.user_id)
+            )
+            if result.rowcount != 1:  # lo ganó otro rival o el vencimiento
+                self.db.rollback()
+                return None
+            self.db.add_all(
+                MatchMember(
+                    match_id=data.match_id,
+                    user_id=data.user_id,
+                    player_id=m.player_id,
+                    behavior_id=m.behavior_id,
+                    role=MemberRole(m.role),
+                )
+                for m in data.members
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        match = self.db.get(Match, data.match_id)
+        self.db.refresh(match)
+        created_at = match.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+
+        def club(u):
+            return FriendlyClubData(id=u.id, username=u.username, club_name=u.club_name)
+
+        return FriendlyMatchData(
+            id=match.id,
+            name=match.name,
+            status=match.status.value,
+            club1=club(match.user_1),
+            club2=club(match.user_2),
+            created_at=created_at,
+        )

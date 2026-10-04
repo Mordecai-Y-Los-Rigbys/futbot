@@ -8,14 +8,15 @@ class FriendlyClubData(BaseModel):
     id: int
     username: str
     club_name: str
-
-
+    
+        
 class FriendlyMatchData(BaseModel):
     id: int
-    name: str | None        
+    name: str | None
     status: str
     club1: FriendlyClubData
     created_at: datetime
+    club2: FriendlyClubData | None = None
 
 
 class CreateFriendlyMemberData(BaseModel):
@@ -29,6 +30,18 @@ class CreateFriendlyData(BaseModel):
     creator_id: int
     members: list[CreateFriendlyMemberData]
     
+    
+class FriendlyJoinState(BaseModel):
+    id: int
+    creator_id: int
+    rival_id: int | None
+    status: str
+
+
+class JoinFriendlyData(BaseModel):
+    match_id: int
+    user_id: int
+    members: list[CreateFriendlyMemberData]
     
 class FriendlyPageData(BaseModel):
     items: list[FriendlyMatchData]
@@ -60,3 +73,15 @@ class AbstractFriendlyRepository(ABC):
     ) -> FriendlyPageData:
         """Amistosos esperando rival creados por otros usuarios, ordenados por
         id ascendente, con `total` calculado con los mismos filtros."""
+        
+    @abstractmethod
+    def get_friendly_state(self, match_id: int) -> FriendlyJoinState | None:
+        """Estado mínimo de un amistoso (partido sin liga), o None si no existe
+        o es un partido de liga."""
+
+    @abstractmethod
+    def join_friendly(self, data: JoinFriendlyData) -> FriendlyMatchData | None:
+        """Ocupa `club2` con una actualización condicional (solo si el partido
+        sigue siendo un amistoso esperando rival y el usuario no es el creador)
+        y guarda el equipo del rival, todo en una transacción. Devuelve None si
+        el partido ya no admitía rival (sin escribir nada)."""
