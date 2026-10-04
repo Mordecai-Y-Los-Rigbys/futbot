@@ -6,3 +6,5 @@ MAX_DURATION_TIMEDELTA = timedelta(minutes=MAX_DURATION)  # máximo de un partid
 WS_TOKEN_MARGIN = timedelta(minutes=10)  # cuenta regresiva, pausas, latencias, reconexiones
 
 WS_TOKEN_TTL = MAX_FRIENDLY_WAIT + MAX_DURATION_TIMEDELTA + WS_TOKEN_MARGIN
+
+FRIENDLY_COUNTDOWN = timedelta(seconds=10)  # cuenta regresiva desde que se une el rival
