@@ -45,7 +45,7 @@ app.include_router(behaviors_router)
 app.include_router(leagues_router)
 app.include_router(ws_matches_router)
 app.include_router(friendlies_router)
-
+app.include_router(matches_router)
 app.add_exception_handler(
     RequestValidationError, register_validation_exception_handler
 )

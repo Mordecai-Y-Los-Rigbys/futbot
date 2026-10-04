@@ -17,6 +17,13 @@ def register_payload(**over):
     payload.update(over)
     return payload
 
+def test_openapi_documents_the_auth_error_schemas():
+    from app.main import app
+
+    schemas = app.openapi()["components"]["schemas"]
+    assert "LogInBadRequest" in schemas
+    assert "RegisterUserBadRequest" in schemas
+
 
 # ==============================================================================
 # PRUEBAS DE INTEGRACIÓN: POST /auth/register
