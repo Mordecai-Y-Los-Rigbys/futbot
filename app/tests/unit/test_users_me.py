@@ -6,7 +6,7 @@ import pytest
 
 from app.api.deps import get_session_service, get_user_service
 from app.errors import ApiError
-from app.repositories.user_repository import UserRepository
+from app.repositories.user_abstract import AbstractUserRepository
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
 
@@ -29,7 +29,7 @@ def make_user(id=7, username="mgonzalez", club_name="Boca Juniors FC"):
 
 @pytest.fixture
 def user_repo():
-    return create_autospec(UserRepository, instance=True)
+    return create_autospec(AbstractUserRepository, instance=True)
 
 
 def test_service_returns_the_user(user_repo):

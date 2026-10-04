@@ -1,10 +1,10 @@
 from app.errors import ApiError
 from app.models.user import User
-from app.repositories.user_repository import UserRepository
+from app.repositories.user_abstract import AbstractUserRepository
 
 
 class UserService:
-    def __init__(self, user_repo: UserRepository):
+    def __init__(self, user_repo: AbstractUserRepository):
         self.user_repo = user_repo
 
     def get_by_id(self, user_id: int) -> User:

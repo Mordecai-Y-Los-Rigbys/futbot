@@ -3,15 +3,27 @@ from sqlalchemy.orm import Session
 
 from app.errors import ApiError
 from app.models.user import User
+from app.repositories.user_abstract import AbstractUserRepository
 
-class UserRepository:
+
+class SqlAlchemyUserRepository(AbstractUserRepository):
     def __init__(self, db: Session):
         self.db = db
 
     def get_by_email(self, email: str) -> User | None:
         return self.db.query(User).filter(User.email == email).first()
 
-    def create(self, username: str, email: str, password_hash: str, club_name: str, avatar: int) -> User:
+    def get_by_id(self, user_id: int) -> User | None:
+        return self.db.get(User, user_id)
+
+    def create(
+        self,
+        username: str,
+        email: str,
+        password_hash: str,
+        club_name: str,
+        avatar: int,
+    ) -> User:
         new_user = User(
             username=username,
             email=email,
@@ -32,6 +44,3 @@ class UserRepository:
             )
         self.db.refresh(new_user)
         return new_user
-
-    def get_by_id(self, user_id: int) -> User | None:
-        return self.db.get(User, user_id)
