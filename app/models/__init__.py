@@ -7,6 +7,7 @@ from app.models.league_participant import LeagueParticipant  # noqa: F401
 from app.models.match import Match, MatchStatus  # noqa: F401
 from app.models.team_member import MemberRole, TeamMember  # noqa: F401
 from app.models.match_ws_token import MatchWsToken  # noqa: F401
+from app.models.match_member import MatchMember
 
 __all__ = [
     "UserSession", 

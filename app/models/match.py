@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, and_
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.match import MatchStatus
@@ -88,6 +88,7 @@ class Match(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    name: Mapped[str | None] = mapped_column(String(20), nullable=True)
     score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
     score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

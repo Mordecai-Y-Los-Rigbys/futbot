@@ -13,6 +13,7 @@ from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
+from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
 from app.services.player_service import PlayerService
@@ -20,6 +21,8 @@ from app.services.behavior_service import BehaviorService
 from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
 from app.services.session_service import SessionService
+from app.services.friendly_service import FriendlyService
+
 
 
 def get_league_repository(db=Depends(get_db)) -> AbstractLeagueRepository:
@@ -93,3 +96,7 @@ async def get_json_body(
         return json.loads(raw)
     except ValueError:
         return INVALID_JSON
+
+
+def get_friendly_service(db: Session = Depends(get_db)) -> FriendlyService:
+    return FriendlyService(SqlAlchemyFriendlyRepository(db))
