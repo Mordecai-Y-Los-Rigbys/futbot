@@ -1,22 +1,12 @@
-import enum
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database import Base
+from app.domain.match import MatchStatus
 from app.models.league import League
 from app.models.user import User
-
-
-class MatchStatus(str, enum.Enum):
-    """Mismos valores que `MatchStatus` del OpenAPI."""
-
-    scheduled = "scheduled"  # todavía no se jugó
-    started = "started"  # se está jugando ahora
-    finished = "finished"  # ya tiene resultado
-    cancelled = "cancelled"  # amistoso cuya espera venció sin rival
-
+from app.database import Base
 
 class Match(Base):
     """Un partido, de liga o amistoso.

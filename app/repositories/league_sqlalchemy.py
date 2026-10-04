@@ -3,10 +3,11 @@ from datetime import timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.domain.league import LeagueStatus
 from app.models.behavior import Behavior
-from app.models.league import League, LeagueStatus
+from app.models.league import League
 from app.models.league_participant import LeagueParticipant
-from app.models.league_participant_member import LeagueParticipantMember, MemberRole
+from app.models.league_participant_member import LeagueParticipantMember
 from app.models.player import Player
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
@@ -120,7 +121,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
                     user_id=data.creator_id,
                     player_id=m.player_id,
                     behavior_id=m.behavior_id,
-                    role=MemberRole(m.role),
+                    role=m.role,
                 )
                 for m in data.members
             )

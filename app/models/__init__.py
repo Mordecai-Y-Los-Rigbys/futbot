@@ -2,13 +2,12 @@ from app.models.session import UserSession # noqa: F401
 from app.models.user import User # noqa: F401
 from app.models.behavior import Behavior  # noqa: F401
 from app.models.player import Player  # noqa: F401
-from app.models.league import League, LeagueStatus  # noqa: F401
+from app.models.league import League  # noqa: F401
 from app.models.league_participant import LeagueParticipant  # noqa: F401
 from app.models.league_participant_member import (  # noqa: F401
     LeagueParticipantMember,
-    MemberRole,
 )
-from app.models.match import Match, MatchStatus  # noqa: F401
+from app.models.match import Match  # noqa: F401
 from app.models.match_ws_token import MatchWsToken  # noqa: F401
 from app.models.match_member import MatchMember
 
@@ -18,11 +17,8 @@ __all__ = [
     "Behavior",
     "Player",
     "League", 
-    "LeagueStatus", 
     "LeagueParticipant",
     "LeagueParticipantMember",
-    "MemberRole",
     "Match",
-    "MatchStatus",
     "MatchWsToken"
 ]
