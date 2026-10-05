@@ -63,6 +63,7 @@ class JoinMatchForbidden(BaseModel):
 
 class JoinMatchConflict(BaseModel):
     code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
+    message: str
 
 class JoinFriendlyMatchBadRequest(BaseModel):
     code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]

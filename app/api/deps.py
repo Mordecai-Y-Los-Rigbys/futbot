@@ -11,6 +11,7 @@ from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
+from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.player_service import PlayerService

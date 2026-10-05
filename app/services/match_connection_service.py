@@ -2,6 +2,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any
 
+from app.models.match import MatchStatus
 from app.errors import ApiError
 from app.repositories.match_connection_abstract import (
     AbstractMatchConnectionRepository,
@@ -28,9 +29,9 @@ class MatchConnectionService:
         if self._password_applies(match, user_id):
             self._check_password(match, body)
 
-        if match.status == "finished":
+        if match.status == MatchStatus.finished:
             raise ApiError(409, "matchFinished", "El partido ya terminó.")
-        if match.status == "cancelled":
+        if match.status == MatchStatus.cancelled:
             raise ApiError(409, "matchCancelled", "El partido fue cancelado.")
 
         now = _utcnow()

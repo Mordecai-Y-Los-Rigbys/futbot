@@ -3,6 +3,7 @@ import re
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_behavior_service, get_current_user_id
+from app.helpers.ids import MAX_ID, parse_path_id as _parse_id
 from app.api.pagination import parse_page
 from app.errors import ApiError
 from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
@@ -16,13 +17,7 @@ _ID_RE = re.compile(r"[0-9]{1,10}")  # solo dígitos ASCII, largo acotado
 
 
 def parse_path_id(raw: str) -> int:
-    """Un id que no puede identificar ningún recurso es un recurso inexistente (404)."""
-    if not _ID_RE.fullmatch(raw):
-        raise ApiError(404, None, "Comportamiento no encontrado.")
-    value = int(raw)
-    if value < 1 or value > MAX_ID:
-        raise ApiError(404, None, "Comportamiento no encontrado.")
-    return value
+    return _parse_id(raw, "Comportamiento no encontrado.")
 
 
 # /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.

@@ -2,6 +2,7 @@ from typing import Any
 import re
 
 from app.errors import ApiError
+from app.helpers.ids import parse_path_id
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
@@ -42,12 +43,7 @@ def _not_found() -> ApiError:
 
 
 def _parse_match_id(raw: str) -> int:
-    """Un id de ruta que no es entero o está fuera de rango es un 404."""
-    if _ID_RE.fullmatch(raw):
-        value = int(raw)
-        if 1 <= value <= MAX_ID:
-            return value
-    raise _not_found()
+    return parse_path_id(raw, "Partido amistoso no encontrado.")
 
 
 class FriendlyService:
