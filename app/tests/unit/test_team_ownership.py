@@ -7,25 +7,6 @@ from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
 
 MEMBERS = [MemberInput(player_id=i, behavior_id=10 + (i % 2), role="x") for i in range(1, 7)]
 
-class SpyPlayers(FakePlayers):
-    def __init__(self):
-        super().__init__()
-        self.calls = []
-
-    def owned_player_ids(self, user_id, ids):
-        self.calls.append((user_id, ids))
-        return super().owned_player_ids(user_id, ids)
-
-
-class SpyBehaviors(FakeBehaviors):
-    def __init__(self):
-        super().__init__()
-        self.calls = []
-
-    def owned_behavior_ids(self, user_id, ids):
-        self.calls.append((user_id, ids))
-        return super().owned_behavior_ids(user_id, ids)
-
 
 def test_owned_team_passes():
     ensure_owned_team(FakePlayers(), FakeBehaviors(), 1, MEMBERS)
