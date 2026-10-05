@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import get_behavior_service, get_current_user_id
 from app.helpers.ids import parse_path_id as _parse_id
 from app.api.pagination import parse_page
-from app.errors import ApiError
 from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
 from app.schemas.errors import Error, ListPageBadRequest
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
