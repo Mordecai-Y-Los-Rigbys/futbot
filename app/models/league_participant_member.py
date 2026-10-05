@@ -1,5 +1,3 @@
-import enum
-
 from sqlalchemy import (
     Enum,
     ForeignKey,
@@ -9,14 +7,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.domain.league_participant_member import MemberRole
 from app.database import Base
-
-
-class MemberRole(str, enum.Enum):
-    forward = "forward"
-    midfield = "midfield"
-    defense = "defense"
-    substitute = "substitute"
 
 
 class LeagueParticipantMember(Base):

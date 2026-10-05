@@ -10,7 +10,21 @@ FORWARD_CODE = """\
 # Va a buscar la pelota y, si la tiene, patea al arco rival.
 ball = ball_position()
 if i_have_ball():
-    kick_to(opponent_goal[0], opponent_goal[1])
+    me = my_position()
+    goal = opponent_goal
+    
+    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear
+    # (de la pelota al arco).
+    forward = (ball[0] - me[0], ball[1] - me[1])
+    to_goal = (goal[0] - ball[0], goal[1] - ball[1])
+    
+    # Si apuntan para lados opuestos (producto escalar negativo), el arco quedó
+    # a mis espaldas y el motor patearía de costado: primero camino hacia el
+    # arco para girar, y pateo en un tick siguiente.
+    if (forward[0] * to_goal[0] + forward[1] * to_goal[1]) < 0:
+        go_to(goal[0], goal[1])
+    else:
+        kick_to(goal[0], goal[1])
 else:
     go_to(ball[0], ball[1])
 """
@@ -22,9 +36,22 @@ me = my_position()
 ball = ball_position()
 if i_have_ball():
     if me[1] < field_width / 2:
-        kick_to(me[0] + 15, 0)
+        target = (me[0] + 15, 0)
     else:
-        kick_to(me[0] + 15, field_width)
+        target = (me[0] + 15, field_width)
+    
+    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear 
+    # (de la pelota al destino).
+    forward = (ball[0] - me[0], ball[1] - me[1])
+    to_target = (target[0] - ball[0], target[1] - ball[1])
+    
+    # Si apuntan para lados opuestos (producto escalar negativo), el destino
+    # quedó a mis espaldas y el motor patearía de costado: primero camino hacia
+    # él para girar, y pateo en un tick siguiente.
+    if (forward[0] * to_target[0] + forward[1] * to_target[1]) < 0:
+        go_to(target[0], target[1])
+    else:
+        kick_to(target[0], target[1])
 elif distance(me[0], me[1], ball[0], ball[1]) < 15:
     go_to(ball[0], ball[1])
 else:
@@ -40,14 +67,30 @@ me = my_position()
 ball = ball_position()
 if i_have_ball():
     if me[1] < field_width / 2:
-        kick_to(me[0] + 25, 0)
+        target = (me[0] + 25, 0)
     else:
-        kick_to(me[0] + 25, field_width)
+        target = (me[0] + 25, field_width)
+    
+    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear 
+    # (de la pelota al destino).
+    forward = (ball[0] - me[0], ball[1] - me[1])
+    to_target = (target[0] - ball[0], target[1] - ball[1])
+    
+    # Si apuntan para lados opuestos (producto escalar negativo), el destino
+    # quedó a mis espaldas y el motor patearía de costado: primero camino hacia
+    # él para girar, y pateo en un tick siguiente.
+    if (forward[0] * to_target[0] + forward[1] * to_target[1]) < 0:
+        go_to(target[0], target[1])
+    else:
+        kick_to(target[0], target[1])
 elif teammate_has_ball():
+    # Un compañero la lleva: acompaño unos metros detrás, sin disputársela.
     go_to(ball[0] - 10, ball[1])
 elif distance(me[0], me[1], ball[0], ball[1]) < 20:
+    # Nadie de mi equipo la tiene y está cerca: voy a buscarla.
     go_to(ball[0], ball[1])
 else:
+    # La pelota está lejos: me ubico detrás para acompañar la jugada.
     go_to(ball[0] - 10, ball[1])
 """
 

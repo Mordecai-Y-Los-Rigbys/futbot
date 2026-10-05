@@ -1,21 +1,41 @@
-import uuid
-from fastapi.testclient import TestClient
-from app.main import app
+import pytest
 
-client = TestClient(app)
+from app.models.session import UserSession
+from app.models.user import User
+
+pytestmark = pytest.mark.integration
+
+
+def register_payload(**over):
+    payload = {
+        "username": "primeruser",
+        "email": "user@example.com",
+        "password": "securepassword",
+        "clubName": "Club A",
+        "avatar": 3,
+    }
+    payload.update(over)
+    return payload
+
+def test_openapi_documents_the_auth_error_schemas():
+    from app.main import app
+
+    schemas = app.openapi()["components"]["schemas"]
+    assert "LogInBadRequest" in schemas
+    assert "RegisterUserBadRequest" in schemas
+
 
 # ==============================================================================
 # PRUEBAS DE INTEGRACIÓN: POST /auth/register
 # ==============================================================================
 
-def test_register_success_exact_limits():
+def test_register_success_exact_limits(client):
     """Valida el registro exitoso aceptando valores cercanos a los límites máximos permitidos."""
-    unique_email = f"user.limit.{uuid.uuid4().hex[:8]}@example.com"
     response = client.post(
         "/auth/register",
         json={
             "username": "12345678901234567890",
-            "email": unique_email,
+            "email": "user.limit@example.com",
             "password": "a" * 72,
             "clubName": "12345678901234567890",
             "avatar": 5,
@@ -31,7 +51,22 @@ def test_register_success_exact_limits():
     assert "session_id" in response.cookies
 
 
-def test_register_validation_multiple_errors_and_exceeded_limits():
+def test_register_stores_hashed_password_and_creates_session(client, db_session):
+    """Valida que se persista el hash (no el texto plano) y que exista la sesión de la cookie."""
+    response = client.post("/auth/register", json=register_payload())
+    assert response.status_code == 201
+
+    user = db_session.query(User).filter(User.email == "user@example.com").one()
+    assert user.password_hash != "securepassword"
+    assert user.password_hash.startswith("$2")  # prefijo de bcrypt
+    assert user.club_name == "Club A"
+
+    session = db_session.get(UserSession, response.cookies["session_id"])
+    assert session is not None
+    assert session.user_id == user.id
+
+
+def test_register_validation_multiple_errors_and_exceeded_limits(client):
     """Valida múltiples campos inválidos a la vez, campos vacíos y superación de límites."""
     response = client.post(
         "/auth/register",
@@ -57,19 +92,20 @@ def test_register_validation_multiple_errors_and_exceeded_limits():
     assert "avatar" in errors
 
 
-def test_register_email_variants_invalid_formats():
+def test_register_invalid_payload_persists_nothing(client, db_session):
+    response = client.post("/auth/register", json=register_payload(email="sin-arroba"))
+
+    assert response.status_code == 400
+    assert db_session.query(User).count() == 0
+
+
+def test_register_email_variants_invalid_formats(client):
     """Valida diversos formatos de correo electrónico incorrectos que deben retornar invalidEmail."""
     invalid_emails = ["sin-arroba.com", "test@", "@dominio.com"]
     for bad_email in invalid_emails:
         response = client.post(
             "/auth/register",
-            json={
-                "username": "user",
-                "email": bad_email,
-                "password": "password123",
-                "clubName": "Club",
-                "avatar": 1,
-            },
+            json=register_payload(email=bad_email, username="user", password="password123"),
         )
         assert response.status_code == 400
         data = response.json()
@@ -78,7 +114,7 @@ def test_register_email_variants_invalid_formats():
         assert email_errors[0]["reason"] == "invalidEmail"
 
 
-def test_register_missing_fields_required():
+def test_register_missing_fields_required(client):
     """Valida que la ausencia de campos obligatorios devuelva reason: required."""
     response = client.post("/auth/register", json={})
     assert response.status_code == 400
@@ -90,16 +126,9 @@ def test_register_missing_fields_required():
     assert expected_fields.issubset(fields_with_required)
 
 
-def test_register_duplicate_email_conflict_409():
+def test_register_duplicate_email_conflict_409(client, db_session):
     """Valida que un email ya registrado devuelva 409 Conflict y no cree la cuenta."""
-    unique_email = f"repetido.{uuid.uuid4().hex[:8]}@example.com"
-    payload = {
-        "username": "primeruser",
-        "email": unique_email,
-        "password": "securepassword",
-        "clubName": "Club A",
-        "avatar": 3,
-    }
+    payload = register_payload()
 
     res1 = client.post("/auth/register", json=payload)
     assert res1.status_code == 201
@@ -111,13 +140,40 @@ def test_register_duplicate_email_conflict_409():
     data = res2.json()
     assert data["code"] is None
     assert data["message"] is not None
+    assert db_session.query(User).count() == 1
 
 
 # ==============================================================================
 # PRUEBAS DE INTEGRACIÓN: POST /auth/log-in
 # ==============================================================================
 
-def test_login_missing_and_empty_fields():
+def test_login_after_register_succeeds(client):
+    client.post("/auth/register", json=register_payload())
+    client.cookies.clear()
+
+    response = client.post(
+        "/auth/log-in",
+        json={"email": "user@example.com", "password": "securepassword"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "primeruser"
+    assert "session_id" in response.cookies
+
+
+def test_login_wrong_password_returns_401(client):
+    client.post("/auth/register", json=register_payload())
+
+    response = client.post(
+        "/auth/log-in",
+        json={"email": "user@example.com", "password": "incorrecta"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] is None
+
+
+def test_login_missing_and_empty_fields(client):
     """Valida que la ausencia de campos o campos vacíos devuelva 400 con incompleteForm."""
     payloads = [
         {},
@@ -136,7 +192,7 @@ def test_login_missing_and_empty_fields():
         assert data["message"] == "Completá el email y la contraseña."
 
 
-def test_login_invalid_email_format():
+def test_login_invalid_email_format(client):
     """Valida el rechazo de emails mal formados en la validación inicial con invalidEmail."""
     invalid_emails = ["sin-arroba", "test@", "@dominio.com", "espacio @gmail.com"]
 
@@ -147,7 +203,7 @@ def test_login_invalid_email_format():
         assert data["code"] == "invalidEmail"
 
 
-def test_login_invalid_field_types():
+def test_login_invalid_field_types(client):
     """Valida que tipos incorrectos (ej. enteros en vez de strings) devuelvan invalidFieldType."""
     payloads = [
         {"email": 12345, "password": "password123"},

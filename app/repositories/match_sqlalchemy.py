@@ -13,4 +13,4 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
         if record is None:
             return None
 
-        return MatchStateData(id=record.id, status=record.status.value)
+        return MatchStateData(id=record.id, status=record.status) 

@@ -5,3 +5,7 @@ venv/
 all_code.txt
 codigo.txt
 .gitignore
+/prueba-ws
+conectar.py
+.gitignore
+probe.py

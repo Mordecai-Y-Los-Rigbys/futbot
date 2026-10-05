@@ -136,3 +136,8 @@ def count_queries(db_session):
             event.remove(engine, "before_cursor_execute", _on)
 
     return _count
+
+@pytest.fixture(autouse=True)
+def no_retry_delay(monkeypatch):
+    from app.services import friendly_expiry
+    monkeypatch.setattr(friendly_expiry, "EXPIRY_RETRY_DELAY", 0)

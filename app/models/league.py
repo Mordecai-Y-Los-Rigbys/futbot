@@ -14,14 +14,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.domain.league import LeagueStatus
 from app.models.user import User
-
-
-class LeagueStatus(str, enum.Enum):
-    preparation = "preparation"
-    started = "started"
-    cancelled = "cancelled"
-    finished = "finished"
 
 
 class League(Base):

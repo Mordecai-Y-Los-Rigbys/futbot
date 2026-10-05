@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
+from app.domain.match import MatchStatus
 
 
 class MatchStateData(BaseModel):
     id: int
-    status: str
+    status: MatchStatus
 
 
 class AbstractMatchRepository(ABC):

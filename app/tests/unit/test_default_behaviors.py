@@ -26,6 +26,7 @@ FORBIDDEN = (
     ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
     ast.Lambda, ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp,
     ast.DictComp, ast.GeneratorExp, ast.Attribute,
+    ast.Try, ast.TryStar,
 )
 MAX_LINES = 250
 

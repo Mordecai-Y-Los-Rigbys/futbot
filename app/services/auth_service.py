@@ -1,7 +1,7 @@
 from typing import Tuple
 from app.errors import ApiError
 from app.models.user import User
-from app.repositories.user_repository import UserRepository
+from app.repositories.user_abstract import AbstractUserRepository
 from app.schemas.auth import RegisterUserRequest
 from app.services.behavior_service import BehaviorService
 from app.services.security_service import hash_password, verify_password
@@ -11,7 +11,7 @@ from app.services.session_service import SessionService
 class AuthService:
     def __init__(
         self, 
-        user_repo: UserRepository,
+        user_repo: AbstractUserRepository,
         session_service: SessionService,
         behavior_service: BehaviorService,
     ):
