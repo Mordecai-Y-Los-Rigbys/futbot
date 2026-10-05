@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.errors import ApiError
+from app.helpers.ids import MAX_ID
 
-MAX_INT = 2147483647
+
 INVALID_JSON = object()  # sentinel: el body no se pudo parsear
 
 MIN_PARTICIPANTS = 3
@@ -46,7 +47,7 @@ def _is_int(v: Any) -> bool:
 
 
 def _is_id(v: Any) -> bool:
-    return _is_int(v) and 1 <= v <= MAX_INT
+    return _is_int(v) and 1 <= v <= MAX_ID
 
 
 def _check_types(body: dict) -> None:
@@ -58,7 +59,7 @@ def _check_types(body: dict) -> None:
     if "name" in body and not isinstance(body["name"], str):
         fail("`name` debe ser un string.")
     for f in INT_FIELDS:
-        if f in body and (not _is_int(body[f]) or body[f] > MAX_INT):
+        if f in body and (not _is_int(body[f]) or body[f] > MAX_ID):
             fail(f"`{f}` debe ser un entero.")
     if "private" in body and not isinstance(body["private"], bool):
         fail("`private` debe ser un booleano.")
@@ -74,7 +75,7 @@ def _check_types(body: dict) -> None:
                 fail("Cada elemento de `members` debe ser un objeto.")
             for f in ("playerId", "behaviorId"):
                 if f in m and not _is_id(m[f]):
-                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_INT}.")
+                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_ID}.")
             if "role" in m and not isinstance(m["role"], str):
                 fail("`role` debe ser un string.")
 
