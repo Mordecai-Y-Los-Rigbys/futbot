@@ -56,10 +56,14 @@ def test_each_user_gets_their_own_copies(client, db_session):
     first = register(client, "a@test.com", "a").json()["id"]
     second = register(client, "b@test.com", "b").json()["id"]
 
-    first_ids = {b.id for b in behaviors_of(db_session, first)}
-    second_ids = {b.id for b in behaviors_of(db_session, second)}
-    assert len(first_ids) == len(second_ids) == len(DEFAULT_BEHAVIORS)
-    assert first_ids.isdisjoint(second_ids)
+    # Modificar la copia de un usuario no cambia la del otro.
+    edited = behaviors_of(db_session, first)[0]
+    edited.code = "go_to(0, 0)"
+    db_session.commit()
+
+    assert [b.code for b in behaviors_of(db_session, second)] == [
+        b["code"] for b in DEFAULT_BEHAVIORS
+    ]
 
 
 def test_if_the_behaviors_fail_nothing_is_saved(client, db_session, monkeypatch):
@@ -71,7 +75,6 @@ def test_if_the_behaviors_fail_nothing_is_saved(client, db_session, monkeypatch)
     with pytest.raises(RuntimeError):
         register(client)
 
-    db_session.rollback()
     assert db_session.query(User).count() == 0
     assert db_session.query(Behavior).count() == 0
 
