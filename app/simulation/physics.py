@@ -68,7 +68,7 @@ class PlayerSetup:
 
 
 def _absolute(team: Team, x: float, y: float) -> Vec:
-    """Coordenadas relativas al equipo -> absolutas (el visitante se espeja)."""
+    """Coordenadas relativas al equipo -> absolutas (el visitante se rota 180°)."""
     if team is Team.HOME:
         return Vec(x, y)
     return Vec(C.FIELD_LENGTH - x, C.FIELD_WIDTH - y)

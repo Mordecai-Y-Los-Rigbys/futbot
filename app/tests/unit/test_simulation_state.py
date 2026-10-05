@@ -37,7 +37,7 @@ def initial(seed=1):
         ((HOME, 1), (12.0, 30.0)),
         ((HOME, 2), (26.0, 30.0)),
         ((HOME, 3), (40.0, 30.0)),
-        ((AWAY, 3), (60.0, 30.0)),  # el visitante queda espejado
+        ((AWAY, 3), (60.0, 30.0)),  # el visitante queda rotado 180°
         ((AWAY, 1), (88.0, 30.0)),
     ],
 )
