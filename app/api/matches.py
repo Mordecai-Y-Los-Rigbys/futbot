@@ -1,4 +1,3 @@
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -8,7 +7,6 @@ from app.api.deps import (
     get_json_body,
     get_match_connection_service,
 )
-from app.errors import ApiError
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
     Error,
@@ -20,9 +18,6 @@ from app.schemas.match_connection import JoinMatchResponse
 from app.services.match_connection_service import MatchConnectionService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
-
-MAX_ID = 2147483647
-_ID_RE = re.compile(r"[0-9]{1,10}")
 
 
 @router.post(
