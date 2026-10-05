@@ -9,6 +9,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
     healthcheck:
       # -h 127.0.0.1 fuerza TCP: durante la inicialización Postgres levanta un
       # servidor temporal que solo escucha en el socket unix, y sin -h el
