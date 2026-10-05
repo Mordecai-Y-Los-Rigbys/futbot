@@ -21,10 +21,8 @@ class AbstractMatchExpiryRepository(ABC):
         espera, en una única actualización condicional. Devuelve True si lo
         canceló, False si ya no correspondía (se unió un rival, ya estaba
         cancelado, no existe, etc.)."""
-        pass
 
     @abstractmethod
     def list_waiting_friendlies(self) -> list[WaitingFriendlyData]:
         """Amistosos en espera con su fecha de creación (para reprogramar
         los timers al arrancar la app)."""
-        pass

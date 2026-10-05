@@ -61,7 +61,6 @@ class AbstractLeagueRepository(ABC):
         tratando %, _ y \\ de forma literal. `total` es la cantidad de
         ligas que matchean el filtro, sin offset/limit.
         """
-        pass
 
     @abstractmethod
     def create(self, data: CreateLeagueData) -> LeagueListItemData:
@@ -69,7 +68,6 @@ class AbstractLeagueRepository(ABC):
         Crea la liga en estado `preparation`, inscribe al creador y guarda su
         equipo, todo en una única transacción (o nada).
         """
-        pass
 
     @abstractmethod
     def get_match_duration_minutes(self, league_id: int) -> int | None:
@@ -78,4 +76,3 @@ class AbstractLeagueRepository(ABC):
         Es el valor `match_duration` que definió el creador al crear la liga
         (entre 1 y 10). Devuelve None si la liga no existe.
         """
-        pass
