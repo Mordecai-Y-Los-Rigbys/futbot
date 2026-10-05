@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, String
+from sqlalchemy import (
+    CheckConstraint, 
+    DateTime, 
+    Enum, 
+    ForeignKey, 
+    Integer, 
+    func, 
+    String,
+    BigInteger,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.match import MatchStatus
@@ -19,7 +28,7 @@ class Match(Base):
 
     El resultado (`score_1`/`score_2`) se persiste recién al terminar el
     partido: mientras se juega, el marcador vive en la simulación (campos
-    `homeScore`/`awayScore` de cada `tick`).
+    `score1`/`score2` de cada `tick`).
 
     El "estado de espera" del amistoso (`waiting`/`starting`) es del amistoso,
     no del partido: para el partido sigue siendo `scheduled` hasta que arranca.
@@ -97,3 +106,4 @@ class Match(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

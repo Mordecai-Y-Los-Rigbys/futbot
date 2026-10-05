@@ -4,7 +4,7 @@ from app.repositories.behavior_abstract import (
     BehaviorData,
     CreateBehaviorData,
 )
-from app.services.default_behaviors import DEFAULT_BEHAVIORS
+from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 
 PAGE_SIZE = 50
 

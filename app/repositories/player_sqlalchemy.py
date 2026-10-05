@@ -45,8 +45,8 @@ class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
         ) or 0
         
         # --- ESQUELETO DE DELETABLE ---
-        # TODO: Reemplazar literal(True) por subconsultas EXISTS cuando
-        # existan los modelos de Ligas y Partidos, chequear si esta en un partido en juego, 
+        # TODO: Reemplazar literal(True) por subconsultas EXISTS en el tercer
+        # sprint, chequear si esta en un partido en juego, 
         # o si esta en una liga no finalizada.
         is_deletable = literal(True).label("deletable")
         
@@ -65,3 +65,8 @@ class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
             result.append(data)
     
         return result, total
+    
+    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        return set(self.db.scalars(
+            select(Player.id).where(Player.user_id == user_id, Player.id.in_(ids))
+        ))

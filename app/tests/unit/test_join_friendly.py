@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.api.deps import get_friendly_service
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry
 from app.errors import ApiError
 from app.main import app
 from app.repositories.friendly_abstract import (
@@ -17,10 +17,31 @@ from app.schemas.errors import Error, JoinFriendlyMatchBadRequest, JoinFriendlyM
 from app.services.friendly_service import FriendlyService
 from app.services.friendly_validation import JoinFriendlyInput, parse_join_friendly
 from app.services.league_validation import INVALID_JSON, MemberInput
+from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
+
 
 ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
 NOW = datetime(2026, 10, 4, 13, 0, tzinfo=timezone.utc)
 URL = "/friendlies/100/members"
+
+class SpyPlayers(FakePlayers):
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def owned_player_ids(self, user_id, ids):
+        self.calls.append((user_id, ids))
+        return super().owned_player_ids(user_id, ids)
+
+
+class SpyBehaviors(FakeBehaviors):
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def owned_behavior_ids(self, user_id, ids):
+        self.calls.append((user_id, ids))
+        return super().owned_behavior_ids(user_id, ids)
 
 
 # --- helpers ----------------------------------------------------------------------------
@@ -171,22 +192,27 @@ def test_type_error_beats_invalid_team():
 
 _BODY = object()
 
+@pytest.fixture()
+def players():
+    return FakePlayers()
+
+
+@pytest.fixture()
+def behaviors():
+    return FakeBehaviors()
+
 
 @pytest.fixture()
 def repo():
     r = MagicMock(spec=AbstractFriendlyRepository)
     r.get_friendly_state.return_value = state()
     r.user_is_playing.return_value = False
-    r.owned_player_ids.side_effect = lambda uid, ids: set(ids)
-    r.owned_behavior_ids.side_effect = lambda uid, ids: set(ids)
     r.join_friendly.return_value = joined_match()
     return r
 
-
-def join(repo, user_id=2, raw_id="100", raw_body=_BODY):
-    return FriendlyService(repo).join_friendly(
-        user_id, raw_id, body() if raw_body is _BODY else raw_body
-    )
+def join(repo, players=None, behaviors=None, user_id=2, raw_id="100", raw_body=_BODY):
+    service = FriendlyService(repo, players or FakePlayers(), behaviors or FakeBehaviors())
+    return service.join_friendly(user_id, raw_id, body() if raw_body is _BODY else raw_body)
 
 
 def error_of(repo, **kwargs):
@@ -218,10 +244,11 @@ def test_service_persists_the_rival_team(repo):
 
 
 def test_service_checks_ownership_for_the_joining_user(repo):
-    join(repo, user_id=2)
-    assert repo.owned_player_ids.call_args.args == (2, [11, 12, 13, 14, 15, 16])
-    assert repo.owned_behavior_ids.call_args.args[0] == 2
-    assert sorted(repo.owned_behavior_ids.call_args.args[1]) == [21, 22]  # sin duplicar
+    players, behaviors = SpyPlayers(), SpyBehaviors()
+    join(repo, players, behaviors, user_id=2)
+    assert players.calls == [(2, [11, 12, 13, 14, 15, 16])]
+    assert len(behaviors.calls) == 1 and behaviors.calls[0][0] == 2
+    assert sorted(behaviors.calls[0][1]) == [21, 22]  # sin duplicar
     repo.user_is_playing.assert_called_once_with(2)
 
 
@@ -313,15 +340,13 @@ def test_already_playing(repo):
 
 
 def test_player_not_owned_or_missing(repo):
-    repo.owned_player_ids.side_effect = lambda uid, ids: set(ids) - {13}
-    err = error_of(repo)
+    err = error_of(repo, players=FakePlayers(owned={11, 12, 14, 15, 16}))
     assert (err.status_code, err.code) == (409, "playerOrBehaviorNotOwned")
     repo.join_friendly.assert_not_called()
 
 
 def test_behavior_not_owned_or_missing(repo):
-    repo.owned_behavior_ids.side_effect = lambda uid, ids: set(ids) - {22}
-    err = error_of(repo)
+    err = error_of(repo, behaviors=FakeBehaviors(owned={21}))
     assert err.code == "playerOrBehaviorNotOwned"
     repo.join_friendly.assert_not_called()
 
@@ -338,8 +363,7 @@ def test_own_match_beats_already_playing(repo):
 
 def test_already_playing_beats_not_owned(repo):
     repo.user_is_playing.return_value = True
-    repo.owned_player_ids.side_effect = lambda uid, ids: set()
-    assert error_of(repo).code == "alreadyPlaying"
+    assert error_of(repo, players=FakePlayers(owned=set())).code == "alreadyPlaying"
 
 
 def test_losing_the_race_in_the_database_is_not_joinable(repo):
@@ -358,30 +382,15 @@ class FakeExpiry:
         self.unscheduled.append(match_id)
 
 
-class FakeStart:
-    def __init__(self):
-        self.scheduled = []
-
-    def schedule(self, match_id):
-        self.scheduled.append(match_id)
-
-
 @pytest.fixture()
 def expiry():
     return FakeExpiry()
 
 
 @pytest.fixture()
-def start():
-    return FakeStart()
-
-
-@pytest.fixture()
-def join_api(api, repo, expiry, start):
-    """Cliente sin sesión. `api` limpia los overrides al terminar."""
-    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo)
+def join_api(api, repo, players, behaviors, expiry):
+    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo, players, behaviors)
     app.dependency_overrides[get_friendly_expiry] = lambda: expiry
-    app.dependency_overrides[get_friendly_start] = lambda: start
     return api
 
 
@@ -391,11 +400,11 @@ def auth_join_api(join_api):
     return join_api
 
 
-def nothing_scheduled(expiry, start):
-    return expiry.unscheduled == [] and start.scheduled == []
+def nothing_scheduled(expiry):
+    return expiry.unscheduled == []
 
 
-def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
+def test_endpoint_success_full_structure(auth_join_api, repo, expiry):
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
@@ -411,7 +420,6 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
     }
     assert repo.join_friendly.call_args.args[0].user_id == 7  # el usuario de la sesión
     assert expiry.unscheduled == [100]  # se cancela el vencimiento de 15 min
-    assert start.scheduled == [100]     # arranca la cuenta regresiva de 10 s
 
 
 @pytest.mark.parametrize(
@@ -423,32 +431,32 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
         ("/friendlies/2147483648/members", {"members": []}),
     ],
 )
-def test_no_cookie_is_401_even_with_bad_id_or_body(join_api, repo, expiry, start, path, payload):
+def test_no_cookie_is_401_even_with_bad_id_or_body(join_api, repo, expiry, path, payload):
     resp = join_api.post(path, json=payload)
     assert resp.status_code == 401
     assert resp.json()["code"] is None
     Error.model_validate(resp.json())
     repo.get_friendly_state.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize("cookie", ["no-existe", "vencida"])
-def test_invalid_or_expired_cookie_is_401(join_api, repo, expiry, start, cookie):
+def test_invalid_or_expired_cookie_is_401(join_api, repo, expiry, cookie):
     join_api.cookies.set("session_id", cookie)
     resp = join_api.post("/friendlies/abc/members", json={"members": 5})
     assert resp.status_code == 401 and resp.json()["code"] is None
     repo.get_friendly_state.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize("raw_id", ["abc", "1.5", "0", "-1", "2147483648", "99999999999999999999"])
-def test_invalid_route_id_is_404_never_422(auth_join_api, repo, expiry, start, raw_id):
+def test_invalid_route_id_is_404_never_422(auth_join_api, repo, expiry, raw_id):
     resp = auth_join_api.post(f"/friendlies/{raw_id}/members", json=body())
     assert resp.status_code == 404
     assert resp.json()["code"] is None
     Error.model_validate(resp.json())
     repo.get_friendly_state.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 def test_invalid_route_id_beats_invalid_body(auth_join_api):
@@ -456,12 +464,12 @@ def test_invalid_route_id_beats_invalid_body(auth_join_api):
     assert auth_join_api.post("/friendlies/abc/members").status_code == 404
 
 
-def test_nonexistent_match_is_404(auth_join_api, repo, expiry, start):
+def test_nonexistent_match_is_404(auth_join_api, repo, expiry):
     repo.get_friendly_state.return_value = None
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 404
     assert resp.json() == {"code": None, "message": "Partido amistoso no encontrado."}
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize(
@@ -481,37 +489,31 @@ def test_nonexistent_match_is_404(auth_join_api, repo, expiry, start):
         ({"json": {"members": []}}, "invalidTeam"),
     ],
 )
-def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, start, kwargs, code):
+def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, kwargs, code):
     resp = auth_join_api.post(URL, **kwargs)
     assert resp.status_code == 400
     assert resp.json()["code"] == code
     assert resp.json()["message"]
     JoinFriendlyMatchBadRequest.model_validate(resp.json())
     repo.join_friendly.assert_not_called()
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)
 
 
 @pytest.mark.parametrize(
     "setup, code",
     [
-        (lambda r: setattr(r.get_friendly_state, "return_value", state(rival_id=3)), "notJoinable"),
-        (lambda r: setattr(r.get_friendly_state, "return_value", state(creator_id=7)), "isOwnMatch"),
-        (lambda r: setattr(r.user_is_playing, "return_value", True), "alreadyPlaying"),
-        (
-            lambda r: setattr(r.owned_player_ids, "side_effect", lambda uid, ids: set()),
-            "playerOrBehaviorNotOwned",
-        ),
-        (
-            lambda r: setattr(r.owned_behavior_ids, "side_effect", lambda uid, ids: set()),
-            "playerOrBehaviorNotOwned",
-        ),
-        (lambda r: setattr(r.join_friendly, "return_value", None), "notJoinable"),
+        (lambda r, p, b: setattr(r.get_friendly_state, "return_value", state(rival_id=3)), "notJoinable"),
+        (lambda r, p, b: setattr(r.get_friendly_state, "return_value", state(creator_id=7)), "isOwnMatch"),
+        (lambda r, p, b: setattr(r.user_is_playing, "return_value", True), "alreadyPlaying"),
+        (lambda r, p, b: setattr(p, "owned", set()), "playerOrBehaviorNotOwned"),
+        (lambda r, p, b: setattr(b, "owned", set()), "playerOrBehaviorNotOwned"),
+        (lambda r, p, b: setattr(r.join_friendly, "return_value", None), "notJoinable"),
     ],
 )
-def test_conflicts_are_409_and_schedule_nothing(auth_join_api, repo, expiry, start, setup, code):
-    setup(repo)
+def test_conflicts_are_409_and_schedule_nothing(auth_join_api, repo, players, behaviors, expiry, setup, code):
+    setup(repo, players, behaviors)
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 409
     assert resp.json()["code"] == code
     JoinFriendlyMatchConflict.model_validate(resp.json())
-    assert nothing_scheduled(expiry, start)
+    assert nothing_scheduled(expiry)

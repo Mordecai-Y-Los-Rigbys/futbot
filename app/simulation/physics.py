@@ -28,11 +28,11 @@ from app.simulation.state import (
     MatchState,
     PlayerKey,
     PlayerState,
-    Role,
     Stats,
     StepResult,
     Team,
 )
+from app.domain.team_member import MemberRole
 
 # --- Stats -> física ------------------------------------------------------------
 
@@ -63,7 +63,7 @@ def kick_cooldown_ticks(agility: int) -> int:
 @dataclass(frozen=True)
 class PlayerSetup:
     player_id: int
-    role: Role
+    role: MemberRole
     stats: Stats
 
 
@@ -85,7 +85,7 @@ def create_initial_state(
     pelota libre en el centro."""
     players = []
     for team, setups in ((Team.HOME, home), (Team.AWAY, away)):
-        if sorted(s.role.number for s in setups) != sorted(r.number for r in Role):
+        if sorted(s.role.number for s in setups) != sorted(r.number for r in C.STARTER_ROLES):
             raise ValueError(f"{team.value}: se necesita un defensa, un medio y un delantero")
         for setup in sorted(setups, key=lambda s: s.role.number):
             players.append(

@@ -157,21 +157,21 @@ def test_invalid_team_is_the_last_400(auth_api):
     assert resp.json()["code"] == "matchDurationOutOfRange"
 
 
-def test_400_has_priority_over_409(auth_api, fake_repo):
-    fake_repo.owns_all = False
+def test_400_has_priority_over_409(auth_api, fake_players):
+    fake_players.owned = set()
     resp = post(auth_api, payload(members=TEAM[:5]))
     assert resp.status_code == 400
 
 
 # --- 409 / 401 / body raro ----------------------------------------------------------------
 
-def test_not_owned_returns_409(auth_api, fake_repo):
-    fake_repo.owns_all = False
+def test_not_owned_returns_409(auth_api, fake_repo, fake_players):
+    fake_players.owned = set()
     resp = post(auth_api, payload())
     assert resp.status_code == 409
     assert resp.json()["code"] == "playerOrBehaviorNotOwned"
     assert fake_repo.created == []
-
+    
 
 def test_no_session_returns_401_even_with_broken_body(api):
     resp = api.post("/leagues", content="{", headers={"Content-Type": "application/json"})

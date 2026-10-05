@@ -6,7 +6,13 @@ import pytest
 
 import app.simulation as simulation_pkg
 from app.simulation.actions import GoTo, Kick, MoveInDirection, PlayerActions
-from app.simulation.constants import FIELD_LENGTH, FIELD_WIDTH
+from app.simulation.constants import (
+    FIELD_LENGTH, 
+    FIELD_WIDTH, 
+    NO_KICK_COOLDOWN, 
+    NOT_REGAIN_BLOCKED, 
+    STARTER_ROLES
+)
 from app.simulation.geometry import Vec
 from app.simulation.physics import (
     PlayerSetup,
@@ -14,14 +20,12 @@ from app.simulation.physics import (
     reset_positions,
     step,
 )
-from app.simulation.state import NO_KICK_COOLDOWN, NOT_REGAIN_BLOCKED, Role
+from app.domain.team_member import MemberRole
 from app.tests.unit.simulation_helpers import AWAY, HOME, stats
-
-ROLES = (Role.DEFENSE, Role.MIDFIELD, Role.FORWARD)
 
 
 def team(first_id):
-    return [PlayerSetup(player_id=first_id + i, role=r, stats=stats()) for i, r in enumerate(ROLES)]
+    return [PlayerSetup(player_id=first_id + i, role=r, stats=stats()) for i, r in enumerate(STARTER_ROLES)]
 
 
 def initial(seed=1):
@@ -59,7 +63,7 @@ def test_both_forwards_are_at_the_same_distance_from_the_ball():
 
 
 def test_a_team_needs_one_player_per_role():
-    bad = [PlayerSetup(1, Role.FORWARD, stats()) for _ in range(3)]
+    bad = [PlayerSetup(1, MemberRole.forward, stats()) for _ in range(3)]
     with pytest.raises(ValueError):
         create_initial_state(bad, team(11), seed=1)
 

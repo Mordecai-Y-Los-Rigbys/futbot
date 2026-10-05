@@ -1,10 +1,10 @@
 import pytest
-from sqlalchemy.exc import DataError, IntegrityError
+from sqlalchemy.exc import IntegrityError
 
-from app.models.league_participant_member import MemberRole
-from app.models.match import Match, MatchStatus
-from app.models.match_member import MatchMember
+from app.domain.team_member import MemberRole
+from app.models.match import Match
 from app.models.player import Player
+from app.models.team_member import TeamMember
 
 pytestmark = pytest.mark.integration
 
@@ -34,34 +34,38 @@ def new_match(db_session, **fields):
     return match
 
 
-def add_member(db_session, match_id, user_id, player_id, behavior_id,
-               role=MemberRole.forward):
-    db_session.add(MatchMember(
+def add_member(db_session, match_id, user_id, player_id, behavior_id, role=MemberRole.forward):
+    db_session.add(TeamMember(
         match_id=match_id, user_id=user_id, player_id=player_id,
         behavior_id=behavior_id, role=role,
     ))
     db_session.commit()
 
 
-def test_member_is_persisted_with_its_match(db_session, users, team):
+def test_friendly_member_is_persisted_with_its_match(db_session, users, team):
     match = new_match(db_session, user_1_id=users[0].id, name="Amistoso")
     add_member(db_session, match.id, users[0].id, *team)
-    member = db_session.query(MatchMember).one()
-    assert member.match_id == match.id and member.role == MemberRole.forward
+
+    member = db_session.query(TeamMember).one()
+    assert member.match_id == match.id
+    assert member.league_id is None
+    assert member.role == MemberRole.forward
 
 
 def test_deleting_the_match_deletes_its_team(db_session, users, team):
     match = new_match(db_session, user_1_id=users[0].id)
     add_member(db_session, match.id, users[0].id, *team)
+
     db_session.delete(match)
     db_session.commit()
-    assert db_session.query(MatchMember).count() == 0
+
+    assert db_session.query(TeamMember).count() == 0
 
 
-def test_same_player_twice_in_same_match_is_rejected(db_session, users, team):
+def test_same_player_twice_in_the_same_match_is_rejected(db_session, users, team):
     match = new_match(db_session, user_1_id=users[0].id)
     add_member(db_session, match.id, users[0].id, *team)
-    db_session.add(MatchMember(
+    db_session.add(TeamMember(
         match_id=match.id, user_id=users[0].id, player_id=team[0],
         behavior_id=team[1], role=MemberRole.defense,
     ))
@@ -70,18 +74,9 @@ def test_same_player_twice_in_same_match_is_rejected(db_session, users, team):
     db_session.rollback()
 
 
-def test_cancelled_friendly_without_rival_is_valid(db_session, users):
-    new_match(db_session, user_1_id=users[0].id, status=MatchStatus.cancelled)
-    assert db_session.query(Match).one().user_2_id is None
-
-
-def test_name_longer_than_20_chars_is_rejected(db_session, users):
-    db_session.add(Match(user_1_id=users[0].id, name="x" * 21))
-    with pytest.raises((DataError, IntegrityError)):
-        db_session.commit()
-    db_session.rollback()
-
-
-def test_created_at_is_filled_by_the_database(db_session, users):
-    match = new_match(db_session, user_1_id=users[0].id)
-    assert match.created_at is not None
+def test_same_player_can_play_two_different_friendlies(db_session, users, team):
+    first = new_match(db_session, user_1_id=users[0].id)
+    second = new_match(db_session, user_1_id=users[0].id)
+    add_member(db_session, first.id, users[0].id, *team)
+    add_member(db_session, second.id, users[0].id, *team)  # no debe lanzar
+    assert db_session.query(TeamMember).count() == 2

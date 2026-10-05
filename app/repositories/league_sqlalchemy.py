@@ -4,10 +4,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.league import LeagueStatus
+from app.domain.team_member import MemberRole
 from app.models.behavior import Behavior
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
-from app.models.league_participant_member import LeagueParticipantMember
+from app.models.team_member import TeamMember
 from app.models.player import Player
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
@@ -85,20 +86,6 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             total=total,
         )
 
-    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        rows = self.db.scalars(
-            select(Player.id).where(Player.user_id == user_id, Player.id.in_(ids))
-        )
-        return set(rows)
-
-    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        rows = self.db.scalars(
-            select(Behavior.id).where(
-                Behavior.user_id == user_id, Behavior.id.in_(ids)
-            )
-        )
-        return set(rows)
-
     def create(self, data: CreateLeagueData) -> LeagueListItemData:
         league = League(
             name=data.name,
@@ -116,8 +103,9 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             self.db.add(LeagueParticipant(league_id=league.id, user_id=data.creator_id))
             self.db.flush()  # el participante debe existir antes que sus miembros (FK)
             self.db.add_all(
-                LeagueParticipantMember(
+                TeamMember(
                     league_id=league.id,
+                    match_id=None,          # el CHECK exige que exactamente uno esté seteado
                     user_id=data.creator_id,
                     player_id=m.player_id,
                     behavior_id=m.behavior_id,
@@ -132,3 +120,9 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
 
         self.db.refresh(league)
         return _to_data(league, participants_count=1)
+
+    def get_match_duration_minutes(self, league_id: int) -> int | None:
+        # scalar() devuelve None si la liga no existe
+        return self.db.scalar(
+            select(League.match_duration).where(League.id == league_id)
+        )

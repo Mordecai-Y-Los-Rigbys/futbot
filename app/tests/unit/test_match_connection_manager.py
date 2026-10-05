@@ -155,3 +155,80 @@ def test_close_match_does_not_touch_other_matches(manager):
     assert mine.closed == (1000, "waitExpired")
     assert other.closed is None  # el otro partido no se toca
     assert manager.subscribers(2) == [(other, 7)]
+
+# --- evict ---------------------------------------------------------------------
+
+
+def test_evict_frees_the_slot_and_the_subscription_immediately(manager):
+    ws = object()
+    manager.reserve(1, 7)
+    manager.subscribe(1, 7, ws)
+
+    manager.evict(1, 7, ws)
+
+    assert manager.count(1, 7) == 0
+    assert manager.subscribers(1) == []
+
+
+def test_release_after_evict_does_not_free_another_connections_slot(manager):
+    # Dos conexiones vivas del mismo usuario: si el release() del endpoint se
+    # sumara al evict(), el cupo de la segunda se descontaría por error.
+    a, b = object(), object()
+    for ws in (a, b):
+        manager.reserve(1, 7)
+        manager.subscribe(1, 7, ws)
+
+    manager.evict(1, 7, a)
+    manager.release(1, 7, a)  # el finally del endpoint
+
+    assert manager.count(1, 7) == 1
+    assert manager.subscribers(1) == [(b, 7)]
+
+
+def test_evict_twice_is_idempotent(manager):
+    a, b = object(), object()
+    for ws in (a, b):
+        manager.reserve(1, 7)
+        manager.subscribe(1, 7, ws)
+
+    manager.evict(1, 7, a)
+    manager.evict(1, 7, a)
+
+    assert manager.count(1, 7) == 1
+
+
+def test_evicted_slot_can_be_reused_right_away(manager):
+    sockets = [object() for _ in range(5)]
+    for ws in sockets:
+        manager.reserve(1, 7)
+        manager.subscribe(1, 7, ws)
+
+    manager.evict(1, 7, sockets[0])
+    manager.reserve(1, 7)  # no debe lanzar 429
+
+    assert manager.count(1, 7) == 5
+
+
+def test_evict_then_release_leaves_no_residue(manager):
+    ws = object()
+    manager.reserve(1, 7)
+    manager.subscribe(1, 7, ws)
+
+    manager.evict(1, 7, ws)
+    manager.release(1, 7, ws)
+
+    assert manager._reserved == {} and manager._subscribers == {}
+    assert manager._evicted == set()  # sin fuga de memoria
+
+def test_evict_after_the_endpoint_already_released_is_a_noop(manager):
+    a, b = object(), object()
+    for ws in (a, b):
+        manager.reserve(1, 7)
+        manager.subscribe(1, 7, ws)
+
+    manager.release(1, 7, a)   # el endpoint se adelantó
+    manager.evict(1, 7, a)     # el broadcast llega tarde
+
+    assert manager.count(1, 7) == 1
+    assert manager.subscribers(1) == [(b, 7)]
+    assert manager._evicted == set()  # sin fuga

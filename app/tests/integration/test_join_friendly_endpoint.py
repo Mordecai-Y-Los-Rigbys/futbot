@@ -8,17 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry
 from app.main import app
 from app.models.match import Match, MatchStatus
-from app.models.match_member import MatchMember
 from app.models.player import Player
+from app.models.team_member import TeamMember
 from app.repositories.friendly_abstract import CreateFriendlyMemberData, JoinFriendlyData
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
-from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.schemas.errors import Error, JoinFriendlyMatchBadRequest, JoinFriendlyMatchConflict
-from app.services.friendly_start import FriendlyStartService
 
 pytestmark = pytest.mark.integration
 
@@ -43,22 +41,12 @@ class FakeExpiry:
         self.unscheduled.append(match_id)
 
 
-class FakeStart:
-    def __init__(self):
-        self.scheduled = []
-
-    def schedule(self, match_id):
-        self.scheduled.append(match_id)
-
-
 @pytest.fixture()
 def schedulers():
-    expiry, start = FakeExpiry(), FakeStart()
+    expiry = FakeExpiry()
     app.dependency_overrides[get_friendly_expiry] = lambda: expiry
-    app.dependency_overrides[get_friendly_start] = lambda: start
-    yield expiry, start
+    yield expiry
     app.dependency_overrides.pop(get_friendly_expiry, None)
-    app.dependency_overrides.pop(get_friendly_start, None)
 
 
 @pytest.fixture()
@@ -142,8 +130,8 @@ def match_row(db_session, match_id) -> Match:
 def members_of(db_session, match_id, user_id):
     db_session.expire_all()
     return db_session.scalars(
-        select(MatchMember).where(
-            MatchMember.match_id == match_id, MatchMember.user_id == user_id
+        select(TeamMember).where(
+            TeamMember.match_id == match_id, TeamMember.user_id == user_id
         )
     ).all()
 
@@ -181,7 +169,7 @@ def test_join_keeps_the_same_match_and_registers_the_rival(
     login_as, db_session, creator, joiner, friendly, joiner_team, schedulers
 ):
     created, creator_members = friendly
-    expiry, start = schedulers
+    expiry = schedulers
     resp = login_as(joiner).post(url(created["id"]), json={"members": joiner_team})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -200,7 +188,6 @@ def test_join_keeps_the_same_match_and_registers_the_rival(
     assert db_session.query(Match).count() == 1  # no se crea otro partido
 
     assert expiry.unscheduled == [created["id"]]
-    assert start.scheduled == [created["id"]]
 
 
 def test_both_teams_are_persisted_and_the_creators_is_kept(
@@ -238,13 +225,11 @@ def test_second_join_is_not_joinable_and_keeps_the_first_rival(
     login_as, db_session, joiner, late, friendly, joiner_team, late_team, schedulers
 ):
     created, _ = friendly
-    _, start = schedulers
     assert login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
     resp = login_as(late).post(url(created["id"]), json={"members": late_team})
     assert resp.status_code == 409 and resp.json()["code"] == "notJoinable"
     assert match_row(db_session, created["id"]).user_2_id == joiner.id
     assert members_of(db_session, created["id"], late.id) == []
-    assert start.scheduled == [created["id"]]  # solo la primera unión arrancó la cuenta
 
 
 # --- autenticación y ids de ruta -------------------------------------------------------------------------
@@ -610,65 +595,15 @@ def status_of(db_session, match_id):
     return db_session.scalar(select(Match.status).where(Match.id == match_id))
 
 
-def test_match_stays_scheduled_during_the_countdown_and_then_starts(
-    login_as, db_session, joiner, friendly, joiner_team
-):
-    created, _ = friendly
-    assert login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
-    assert status_of(db_session, created["id"]) == MatchStatus.scheduled
-
-    @contextmanager
-    def scope():
-        yield SqlAlchemyMatchStartRepository(db_session)
-
-    service = FriendlyStartService(scope, countdown=timedelta(milliseconds=400))
-
-    async def scenario():
-        service.schedule(created["id"])
-        await asyncio.sleep(0.05)
-        during = status_of(db_session, created["id"])  # todavía en cuenta regresiva
-        await asyncio.sleep(1.0)
-        return during
-
-    during = asyncio.run(scenario())
-    assert during == MatchStatus.scheduled
-    assert status_of(db_session, created["id"]) == MatchStatus.started
-
-
 # --- repositorio de arranque ---------------------------------------------------------------------------------------------------
-
-def test_start_if_ready_only_starts_a_friendly_with_a_rival(
-    db_session, creator, other, make_league
-):
-    repo = SqlAlchemyMatchStartRepository(db_session)
-    ready = add_match(db_session, user_1_id=creator.id, user_2_id=other.id, name="Listo")
-    waiting = add_match(db_session, user_1_id=creator.id, name="Esperando")
-    cancelled = add_match(db_session, user_1_id=creator.id, status=MatchStatus.cancelled)
-    league = make_league(creator, "Liga")
-    league_match = add_match(
-        db_session, league_id=league.id, user_1_id=creator.id, user_2_id=other.id,
-        scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
-    )
-
-    assert repo.list_pending_start() == [ready.id]
-    assert repo.start_if_ready(waiting.id) is False
-    assert repo.start_if_ready(cancelled.id) is False
-    assert repo.start_if_ready(league_match.id) is False
-    assert repo.start_if_ready(ready.id) is True
-    assert repo.start_if_ready(ready.id) is False  # idempotente
-    assert status_of(db_session, ready.id) == MatchStatus.started
-    assert status_of(db_session, waiting.id) == MatchStatus.scheduled
-    assert repo.list_pending_start() == []
-    
     
 def test_nonexistent_behavior_rejects_join_without_side_effects(
     login_as, db_session, joiner, friendly, joiner_team, schedulers
 ):
     created, creator_members = friendly
-    expiry, start = schedulers
+    expiry = schedulers
 
     expiry_before = list(expiry.unscheduled)
-    start_before = list(start.scheduled)
 
     # Crear y eliminar un behavior para obtener un ID que sabemos inexistente.
     from app.models.behavior import Behavior
@@ -693,7 +628,6 @@ def test_nonexistent_behavior_rejects_join_without_side_effects(
     ) == expected_team(creator_members)
 
     assert expiry.unscheduled == expiry_before
-    assert start.scheduled == start_before
 
 
 def test_same_owned_behavior_can_be_persisted_for_all_six_players(
@@ -718,62 +652,3 @@ def test_same_owned_behavior_can_be_persisted_for_all_six_players(
     assert len(persisted) == 6
     assert team_of(persisted) == expected_team(members)
     assert {member.behavior_id for member in persisted} == {behavior_id}
-
-
-def test_start_callback_sees_committed_match_and_both_teams(
-    login_as, db_session, joiner, friendly, joiner_team
-):
-    created, creator_members = friendly
-    match_id = created["id"]
-
-    response = login_as(joiner).post(
-        url(match_id),
-        json={"members": joiner_team},
-    )
-    assert response.status_code == 200, response.text
-
-    # Cada operación usa una sesión propia.
-    factory = sessionmaker(bind=db_session.get_bind())
-    observations = []
-
-    @contextmanager
-    def scope():
-        with factory() as session:
-            yield SqlAlchemyMatchStartRepository(session)
-
-    async def on_start(started_id):
-        # Leer desde otra sesión verifica que el estado ya se confirmó.
-        with factory() as session:
-            match = session.get(Match, started_id)
-            observations.append({
-                "id": match.id,
-                "status": match.status,
-                "creator_id": match.user_1_id,
-                "rival_id": match.user_2_id,
-                "creator_team": team_of(
-                    members_of(session, started_id, created["club1"]["id"])
-                ),
-                "rival_team": team_of(
-                    members_of(session, started_id, joiner.id)
-                ),
-            })
-
-    service = FriendlyStartService(scope, on_start)
-
-    async def scenario():
-        first = await service.start(match_id)
-        second = await service.start(match_id)
-        return first, second
-
-    first, second = asyncio.run(scenario())
-
-    assert first is True
-    assert second is False
-    assert observations == [{
-        "id": match_id,
-        "status": MatchStatus.started,
-        "creator_id": created["club1"]["id"],
-        "rival_id": joiner.id,
-        "creator_team": expected_team(creator_members),
-        "rival_team": expected_team(joiner_team),
-    }]

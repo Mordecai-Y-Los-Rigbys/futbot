@@ -14,6 +14,10 @@ from app.repositories.friendly_abstract import (
 from app.schemas.errors import Error, ListPageBadRequest
 from app.schemas.friendly import MatchPage
 from app.services.friendly_service import PAGE_SIZE, FriendlyService
+from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
+
+def svc(repo):
+    return FriendlyService(repo, FakePlayers(), FakeBehaviors())
 
 NOW = datetime(2026, 10, 3, 18, 0, tzinfo=timezone.utc)
 USER_ID = 7  # el usuario de la sesión "valid-session" del conftest
@@ -39,7 +43,7 @@ def repo():
 @pytest.fixture()
 def friendlies_api(api, repo):
     """Cliente sin sesión. `api` limpia los overrides al terminar."""
-    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo)
+    app.dependency_overrides[get_friendly_service] = lambda: svc(repo)
     return api
 
 
@@ -55,7 +59,7 @@ def test_service_builds_the_match_page(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(
         items=[match_data(id=100), match_data(id=101)], total=2
     )
-    out = FriendlyService(repo).list_waiting_friendlies(USER_ID, None, 1)
+    out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     assert isinstance(out, MatchPage)
     assert (out.page, out.page_size, out.total) == (1, 50, 2)
     assert [i.id for i in out.items] == [100, 101]
@@ -63,7 +67,7 @@ def test_service_builds_the_match_page(repo):
 
 def test_service_items_follow_the_match_schema(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(items=[match_data()], total=1)
-    out = FriendlyService(repo).list_waiting_friendlies(USER_ID, None, 1)
+    out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     dumped = out.model_dump(by_alias=True)["items"][0]
     assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico"}
     for k in ("leagueId", "club2", "scheduledAt", "result"):
@@ -75,13 +79,13 @@ def test_service_accepts_a_match_without_name(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(
         items=[match_data(name=None)], total=1
     )
-    out = FriendlyService(repo).list_waiting_friendlies(USER_ID, None, 1)
+    out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     assert out.items[0].name is None
 
 
 @pytest.mark.parametrize("page, offset", [(1, 0), (2, 50), (3, 100), (10, 450)])
 def test_service_offset_is_page_minus_one_times_page_size(repo, page, offset):
-    out = FriendlyService(repo).list_waiting_friendlies(USER_ID, None, page)
+    out = svc(repo).list_waiting_friendlies(USER_ID, None, page)
     repo.list_waiting_page.assert_called_once_with(
         exclude_user_id=USER_ID, name=None, offset=offset, limit=PAGE_SIZE
     )
@@ -89,18 +93,18 @@ def test_service_offset_is_page_minus_one_times_page_size(repo, page, offset):
 
 
 def test_service_empty_name_is_treated_as_absent(repo):
-    FriendlyService(repo).list_waiting_friendlies(USER_ID, "", 1)
+    svc(repo).list_waiting_friendlies(USER_ID, "", 1)
     assert repo.list_waiting_page.call_args.kwargs["name"] is None
 
 
 def test_service_passes_name_to_the_repository(repo):
-    FriendlyService(repo).list_waiting_friendlies(USER_ID, "boca", 1)
+    svc(repo).list_waiting_friendlies(USER_ID, "boca", 1)
     assert repo.list_waiting_page.call_args.kwargs["name"] == "boca"
 
 
 def test_service_page_beyond_last_keeps_the_real_total(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(items=[], total=120)
-    out = FriendlyService(repo).list_waiting_friendlies(USER_ID, None, 4)
+    out = svc(repo).list_waiting_friendlies(USER_ID, None, 4)
     assert out.items == [] and out.total == 120 and out.page == 4
 
 

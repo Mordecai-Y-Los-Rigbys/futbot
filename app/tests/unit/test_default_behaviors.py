@@ -8,7 +8,7 @@ import ast
 
 import pytest
 
-from app.services.default_behaviors import DEFAULT_BEHAVIORS
+from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 
 PRIMITIVES = {
     "move_in_direction", "go_to", "kick", "kick_to",

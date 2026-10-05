@@ -5,7 +5,7 @@ las importa. Los valores son iniciales.
 
 Unidades: distancias en "unidades de cancha" (u), tiempo en ticks.
 """
-
+from app.domain.team_member import MemberRole
 # --- Tiempo ------------------------------------------------------------------
 
 TICKS_PER_SECOND = 20
@@ -80,6 +80,19 @@ INITIAL_POSITIONS = {
 KICKOFF_BALL_POSITION = (FIELD_LENGTH / 2, FIELD_WIDTH / 2)
 
 # --- Ejecución de comportamientos ---------------------------------------------------
+
+STARTER_ROLES = (MemberRole.defense, MemberRole.midfield, MemberRole.forward)
+
+# Estructura de períodos: hoy 1. Con 4 tiempos + pausas solo cambia esto y la
+# lógica de la pausa dentro de MatchSession.advance(); el reloj ya trabaja por período.
+PERIODS = 1
+COUNTDOWN_SECONDS = 10
+FRIENDLY_MATCH_DURATION = 3  # minutos
+
+# Estructura de estado de jugador.
+NO_KICK_COOLDOWN = 0          # puede patear desde el primer tick
+NOT_REGAIN_BLOCKED = -1       # nunca bloqueado: todos los ticks son > -1
+NOT_PROTECTED = -1            # nunca protegida: todos los ticks son > -1
 
 # Tiempo por tick para los comportamientos (segundos). Deja el resto del tick
 # para la física y el envío.

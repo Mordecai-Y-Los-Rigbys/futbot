@@ -88,7 +88,6 @@ def test_create_does_not_swallow_unexpected_errors(repo, db):
         repo.create("messi", "messi@test.com", "hash", "Inter", 2)
 
     db.refresh.assert_not_called()
-
 # ---------- create: email duplicado ----------
 
 def test_create_duplicate_email_raises_409(repo, db):

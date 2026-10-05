@@ -13,6 +13,7 @@ from app.repositories.league_abstract import (
     LeaguePageData,
 )
 from app.services.league_service import LeagueService
+from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers, FakeTeams
 
 
 class FakeLeagueRepository(AbstractLeagueRepository):
@@ -21,18 +22,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def __init__(self):
         self.calls = []
         self.page = LeaguePageData(items=[], total=0)
-        self.owns_all = True  # False: ningún jugador/behavior es del usuario
         self.created: list[CreateLeagueData] = []
+        self.durations: dict[int, int] = {}
 
     def list_page(self, name, offset, limit):
         self.calls.append({"name": name, "offset": offset, "limit": limit})
         return self.page
-
-    def owned_player_ids(self, user_id, ids):
-        return set(ids) if self.owns_all else set()
-
-    def owned_behavior_ids(self, user_id, ids):
-        return set(ids) if self.owns_all else set()
 
     def create(self, data):
         self.created.append(data)
@@ -48,6 +43,9 @@ class FakeLeagueRepository(AbstractLeagueRepository):
             private=data.private,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
+
+    def get_match_duration_minutes(self, league_id):
+        return self.durations.get(league_id)
 
 
 class FakeSessionService:
@@ -66,8 +64,13 @@ def fake_repo():
 
 
 @pytest.fixture()
-def service(fake_repo):
-    return LeagueService(fake_repo)
+def fake_teams():
+    return FakeTeams()
+
+
+@pytest.fixture()
+def service(fake_repo, fake_players, fake_behaviors):
+    return LeagueService(fake_repo, fake_players, fake_behaviors)
 
 
 @pytest.fixture()
@@ -98,19 +101,26 @@ def make_item():
 
 
 @pytest.fixture()
-def api(fake_repo):
-    """Cliente HTTP sin sesión. Se reemplazan el service de sesiones y el de
-    ligas, así que no se toca ninguna base (ni se usa get_db)."""
-    app.dependency_overrides[get_session_service] = lambda: FakeSessionService(
-        {"valid-session": 7}
-    )
-    app.dependency_overrides[get_league_service] = lambda: LeagueService(fake_repo)
-    yield TestClient(app)
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture()
 def auth_api(api):
     """Mismo cliente, con cookie de una sesión válida."""
     api.cookies.set("session_id", "valid-session")
     return api
+
+@pytest.fixture()
+def fake_players():
+    return FakePlayers()
+
+
+@pytest.fixture()
+def fake_behaviors():
+    return FakeBehaviors()
+
+
+@pytest.fixture()
+def api(fake_repo, fake_players, fake_behaviors):
+    app.dependency_overrides[get_session_service] = lambda: FakeSessionService({"valid-session": 7})
+    app.dependency_overrides[get_league_service] = lambda: LeagueService(
+        fake_repo, fake_players, fake_behaviors
+    )
+    yield TestClient(app)
+    app.dependency_overrides.clear()

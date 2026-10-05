@@ -1,7 +1,14 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session, aliased
 
+from app.domain.match import MatchStatus
 from app.models.match import Match
-from app.repositories.match_abstract import AbstractMatchRepository, MatchStateData
+from app.models.user import User
+from app.repositories.match_abstract import (
+    AbstractMatchRepository,
+    MatchSetupData,
+    MatchStateData,
+)
 
 
 class SqlAlchemyMatchRepository(AbstractMatchRepository):
@@ -12,5 +19,55 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
         record = self.db.get(Match, match_id)
         if record is None:
             return None
+        return MatchStateData(id=record.id, status=record.status.value)
 
-        return MatchStateData(id=record.id, status=record.status) 
+    def get_setup_data(self, match_id: int) -> MatchSetupData | None:
+        user_1 = aliased(User)
+        user_2 = aliased(User)
+
+        row = self.db.execute(
+            select(
+                Match.id,
+                Match.league_id,
+                Match.user_1_id,
+                Match.user_2_id,
+                user_1.club_name.label("club_1_name"),
+                user_2.club_name.label("club_2_name"),
+            )
+            .join(user_1, user_1.id == Match.user_1_id)
+            .outerjoin(user_2, user_2.id == Match.user_2_id)  # outer: puede no haber rival
+            .where(Match.id == match_id)
+        ).one_or_none()
+
+        if row is None:
+            return None
+
+        return MatchSetupData(
+            id=row.id,
+            league_id=row.league_id,
+            user_1_id=row.user_1_id,
+            user_2_id=row.user_2_id,
+            club_1_name=row.club_1_name,
+            club_2_name=row.club_2_name,
+        )
+
+    def mark_started(self, match_id: int) -> None:
+        self.db.execute(
+            update(Match)
+            .where(Match.id == match_id, Match.status == MatchStatus.scheduled)
+            .values(status=MatchStatus.started)
+        )
+        self.db.commit()
+
+    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
+        self.db.execute(
+            update(Match)
+            .where(Match.id == match_id)
+            .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
+        )
+        self.db.commit()
+    
+    def save_seed(self, match_id: int, seed: int) -> None:
+        self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
+        self.db.commit()
+

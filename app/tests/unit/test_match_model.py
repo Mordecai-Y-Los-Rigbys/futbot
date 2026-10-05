@@ -45,3 +45,17 @@ def test_friendly_waiting_for_a_rival_can_be_built_with_only_the_creator():
     assert match.league_id is None
     assert match.user_2_id is None
     assert match.score_1 is None and match.score_2 is None
+
+
+def test_match_has_nullable_name_of_at_most_20_chars():
+    assert TABLE.c.name.type.length == 20
+    assert TABLE.c.name.nullable is True
+
+
+def test_match_has_created_at_with_server_default():
+    assert TABLE.c.created_at.nullable is False
+    assert TABLE.c.created_at.server_default is not None
+
+
+def test_friendly_can_be_built_with_a_name():
+    assert Match(user_1_id=1, name="Partido amistoso 1").name == "Partido amistoso 1"

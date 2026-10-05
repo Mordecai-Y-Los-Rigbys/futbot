@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
-from app.domain.league_participant_member import MemberRole
+from app.domain.team_member import MemberRole
 
 
 class LeagueCreatorData(BaseModel):
@@ -61,17 +61,6 @@ class AbstractLeagueRepository(ABC):
         tratando %, _ y \\ de forma literal. `total` es la cantidad de
         ligas que matchean el filtro, sin offset/limit.
         """
-        pass
-
-    @abstractmethod
-    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        """Subconjunto de `ids` que son jugadores del usuario."""
-        pass
-
-    @abstractmethod
-    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        """Subconjunto de `ids` que son behaviors del usuario."""
-        pass
 
     @abstractmethod
     def create(self, data: CreateLeagueData) -> LeagueListItemData:
@@ -79,4 +68,11 @@ class AbstractLeagueRepository(ABC):
         Crea la liga en estado `preparation`, inscribe al creador y guarda su
         equipo, todo en una única transacción (o nada).
         """
-        pass
+
+    @abstractmethod
+    def get_match_duration_minutes(self, league_id: int) -> int | None:
+        """Duración de cada partido de la liga, en minutos.
+
+        Es el valor `match_duration` que definió el creador al crear la liga
+        (entre 1 y 10). Devuelve None si la liga no existe.
+        """
