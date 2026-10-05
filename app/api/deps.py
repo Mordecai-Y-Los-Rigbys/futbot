@@ -8,13 +8,15 @@ from app.database import get_db
 from app.errors import ApiError
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
-from app.repositories.user_repository import UserRepository
+from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
+from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.player_service import PlayerService
 from app.services.behavior_service import BehaviorService
@@ -22,6 +24,8 @@ from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
 from app.services.session_service import SessionService
 from app.services.friendly_service import FriendlyService
+from app.services.match_connection_service import MatchConnectionService
+from app.services.user_service import UserService
 
 
 
@@ -53,12 +57,8 @@ def get_auth_service(
     session_service: SessionService = Depends(get_session_service),
     behavior_service: BehaviorService = Depends(get_behavior_service),
 ) -> AuthService:
-    user_repo = UserRepository(db)
-    return AuthService(
-        user_repo=user_repo,
-        session_service=session_service,
-        behavior_service=behavior_service,
-    )
+    user_repo = SqlAlchemyUserRepository(db)
+    return AuthService(user_repo=user_repo, session_service=session_service)
 
 
 def get_current_user_id(
@@ -100,3 +100,9 @@ async def get_json_body(
 
 def get_friendly_service(db: Session = Depends(get_db)) -> FriendlyService:
     return FriendlyService(SqlAlchemyFriendlyRepository(db))
+
+def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
+    return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
+
+def get_user_service(db: Session = Depends(get_db)) -> UserService:
+    return UserService(SqlAlchemyUserRepository(db))

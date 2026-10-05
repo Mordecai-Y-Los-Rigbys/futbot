@@ -69,7 +69,7 @@ DISTANCE_EPSILON = 1e-9  # dos distancias más cercanas que esto se consideran i
 
 # --- Posiciones iniciales ----------------------------------------------------------
 
-# Relativas al equipo (el visitante se espeja). 
+# Relativas al equipo (el visitante se rota 180°). 
 # número del jugador: (1 = defensa, 2 = medio, 3 = delantero), 
 # todos en fila sobre el eje central.
 INITIAL_POSITIONS = {
@@ -106,3 +106,7 @@ NO_KICK_COOLDOWN = 0          # puede patear desde el primer tick
 NOT_REGAIN_BLOCKED = -1       # nunca bloqueado: todos los ticks son > -1
 NOT_PROTECTED = -1            # nunca protegida: todos los ticks son > -1
 
+# Tiempo por tick para los comportamientos (segundos). Deja el resto del tick
+# para la física y el envío.
+BEHAVIORS_TIME_BUDGET = 0.6 * SECONDS_PER_TICK
+TEAM_TIME_BUDGET = BEHAVIORS_TIME_BUDGET / 2

@@ -68,7 +68,7 @@ class PlayerSetup:
 
 
 def _absolute(team: Team, x: float, y: float) -> Vec:
-    """Coordenadas relativas al equipo -> absolutas (el visitante se espeja)."""
+    """Coordenadas relativas al equipo -> absolutas (el visitante se rota 180°)."""
     if team is Team.HOME:
         return Vec(x, y)
     return Vec(C.FIELD_LENGTH - x, C.FIELD_WIDTH - y)
@@ -220,8 +220,27 @@ def _separate(player_a: PlayerState, player_b: PlayerState) -> bool:
     total = player_a.stats.strength + player_b.stats.strength
     push_by_a = push_direction * (overlap * player_a.stats.strength / total)
     push_by_b = push_direction * (overlap * player_b.stats.strength / total)
-    player_a.position = _clamp_player(player_a.position - push_by_b)
-    player_b.position = _clamp_player(player_b.position + push_by_a)
+    
+    # A donde queria ir cada uno
+    wanted_a = player_a.position - push_by_b
+    wanted_b = player_b.position + push_by_a
+    
+    # A donde puede ir cada uno sin salirse del campo
+    new_a = _clamp_player(wanted_a)
+    new_b = _clamp_player(wanted_b)
+    
+    # Si la pared frenó a uno, el otro absorbe lo que falta
+    gap = new_b - new_a
+    missing = min_distance - gap.length()
+    if missing > 0:
+        direction = gap.normalized() if gap.length() > 0 else push_direction
+        if new_a != wanted_a:
+            new_b = _clamp_player(new_b + direction * missing)
+        elif new_b != wanted_b:
+            new_a = _clamp_player(new_a - direction * missing)
+   
+    player_a.position = new_a
+    player_b.position = new_b
     return True
 
 # --- Pelota ----------------------------------------------------------------------------------

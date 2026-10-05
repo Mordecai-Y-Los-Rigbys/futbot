@@ -16,7 +16,7 @@ TABLE = Match.__table__
 def test_status_values_match_the_openapi_contract():
     enum_type = TABLE.c.status.type
     assert enum_type.name == "match_status"
-    assert list(enum_type.enums) == [MatchStatus.scheduled, MatchStatus.started, MatchStatus.finished, MatchStatus.cancelled]
+    assert list(enum_type.enums) == ["scheduled", "started", "finished", "cancelled"]
 
 
 def test_mappers_configure_without_ambiguity():

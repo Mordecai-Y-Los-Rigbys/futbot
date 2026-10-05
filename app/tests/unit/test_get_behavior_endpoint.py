@@ -3,7 +3,7 @@ from unittest.mock import create_autospec
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.behaviors import MAX_ID, parse_path_id
+from app.helpers.ids import MAX_ID, parse_path_id
 from app.api.deps import get_behavior_service, get_session_service
 from app.errors import ApiError
 from app.main import app
@@ -107,7 +107,7 @@ def test_invalid_id_returns_404_not_400_or_422(as_user, behavior_service, bad_id
 
 def test_empty_id_is_404():
     with pytest.raises(ApiError) as exc:
-        parse_path_id("")
+        parse_path_id("", "no existe")
 
     assert exc.value.status_code == 404
     assert exc.value.code is None

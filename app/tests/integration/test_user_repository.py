@@ -1,14 +1,14 @@
 import pytest
 
 from app.errors import ApiError
-from app.repositories.user_repository import UserRepository
+from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 def repo(db_session):
-    return UserRepository(db_session)
+    return SqlAlchemyUserRepository(db_session)
 
 
 def test_create_persists_and_assigns_an_id(repo):

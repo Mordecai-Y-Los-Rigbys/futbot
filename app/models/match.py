@@ -8,7 +8,6 @@ from app.models.league import League
 from app.models.user import User
 from app.database import Base
 
-
 class Match(Base):
     """Un partido, de liga o amistoso.
 

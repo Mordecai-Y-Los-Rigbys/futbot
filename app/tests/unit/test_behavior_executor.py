@@ -69,9 +69,47 @@ def test_a_timeout_discards_the_actions():
         counter[0] += 1
         return counter[0]  # cada consulta "tarda" 1 segundo
 
-    actions = actions_of({H: "go_to(1, 1)\ngo_to(2, 2)"}, time_limit=0.5, timer=slow_timer)
+    actions = actions_of({H: "go_to(1, 1)\ngo_to(2, 2)"}, team_budget=0.5, timer=slow_timer)
     assert actions[H] == PlayerActions()
 
+def counting_timer():
+    """Reloj falso: cada consulta "tarda" 1 segundo. Así el tiempo que gasta
+    un behavior depende de cuántas veces se consulta el reloj, no de la máquina."""
+    now = [0]
+
+    def timer():
+        now[0] += 1
+        return now[0]
+
+    return timer
+
+
+def test_a_team_shares_its_time_budget_and_does_not_touch_the_other_team(caplog):
+    # Un go_to consulta el reloj unas 30 veces. 
+    # 200 asignaciones lo consultan más de 200: se pasan del presupuesto.
+    s = state(
+        player(HOME, 1, x=20.0),
+        player(HOME, 2, x=30.0),
+        player(AWAY, 1, x=80.0),
+        ball=(50.0, 30.0),
+    )
+    sources = {
+        (HOME, 1): "x = 1\n" * 200,
+        (HOME, 2): "go_to(1, 1)",
+        (AWAY, 1): "go_to(2, 2)",
+    }
+
+    with caplog.at_level(logging.WARNING):
+        actions = actions_of(sources, s=s, team_budget=60, timer=counting_timer())
+
+    # El primero del local se pasó del presupuesto: se descartan sus acciones.
+    assert actions[(HOME, 1)] == PlayerActions()
+    # Su compañero ni se ejecuta, porque el equipo ya no tiene tiempo.
+    assert actions[(HOME, 2)] == PlayerActions()
+    assert "Sin tiempo para el comportamiento de" in caplog.text
+    # El visitante tiene su propio presupuesto y se ejecuta normal.
+    # go_to(2, 2) en coordenadas del visitante es (98, 58) en absolutas.
+    assert actions[(AWAY, 1)] == PlayerActions(move=GoTo(98.0, 58.0))
 
 def test_a_failure_does_not_affect_the_other_players():
     actions = actions_of({H: "x = 1 / 0", A: "kick_to(0, 30)"})

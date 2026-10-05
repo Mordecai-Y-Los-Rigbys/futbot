@@ -13,7 +13,7 @@ from app.simulation.behaviors.primitives import (
     build_primitives,
 )
 from app.simulation.behaviors.sandbox import CompiledBehavior, run_behavior
-from app.simulation.state import MatchState, PlayerKey
+from app.simulation.state import MatchState, PlayerKey, Team
 
 logger = logging.getLogger(__name__)
 
@@ -26,24 +26,45 @@ def run_behaviors(
     state: MatchState,
     behaviors: Mapping[PlayerKey, CompiledBehavior],
     clock: MatchClock,
-    time_limit: float = C.BEHAVIOR_TIME_LIMIT,
+    team_budget: float = C.TEAM_TIME_BUDGET,
     timer: Callable[[], float] = time.perf_counter,
 ) -> dict[PlayerKey, PlayerActions]:
     """Ejecuta el comportamiento de cada jugador y devuelve sus acciones en
     coordenadas absolutas.
+    
+    Cada equipo tiene `team_budget` segundos por tick para sus tres behaviors:
+    cada jugador puede usar lo que sus compañeros anteriores no gastaron.
     """
     missing = [p.key for p in state.players if p.key not in behaviors]
     if missing:
         raise MissingBehaviorError(f"jugadores sin comportamiento: {missing}")
 
     constants = behavior_constants()
-    return {
-        player.key: _run_player(
-            state, player.key, behaviors[player.key], clock, constants, time_limit, timer
-        )
-        for player in state.players
-    }
-
+    actions: dict[PlayerKey, PlayerActions] = {}
+    
+    for team in (Team.HOME, Team.AWAY):
+        remaining = team_budget
+        for player in state.players:
+            if player.team is not team:
+                continue
+            
+            if remaining <= 0:
+                # El equipo ya gastó su presupuesto en este tick: el jugador
+                # no se ejecuta y sigue con su último movimiento.
+                logger.warning(
+                    "Sin tiempo para el comportamiento de %s en el tick %s", 
+                    player.key, state.tick
+                )
+                actions[player.key] = PlayerActions()
+                continue
+            
+            started = timer()
+            actions[player.key] = _run_player(
+                state, player.key, behaviors[player.key], clock, constants, remaining, timer
+            )
+            remaining -= timer() - started
+    
+    return actions
 
 def _run_player(state, key, behavior, clock, constants, time_limit, timer) -> PlayerActions:
     recorder = ActionRecorder()

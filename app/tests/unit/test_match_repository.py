@@ -25,7 +25,7 @@ def test_returns_none_when_the_match_does_not_exist(repo, db):
 
 
 @pytest.mark.parametrize(
-    "status", [MatchStatus.scheduled, MatchStatus.started, MatchStatus.finished]
+    "status", [MatchStatus.scheduled, MatchStatus.started, MatchStatus.finished, MatchStatus.cancelled]
 )
 def test_state(repo, db, status):
     db.get.return_value = SimpleNamespace(id=5, status=status)
