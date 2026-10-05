@@ -22,9 +22,8 @@ class FriendlyStartService:
     """Arranca un amistoso `countdown` después de que se une el rival.
 
     Una tarea asyncio por partido, en memoria del proceso (igual que
-    FriendlyExpiryService; el despliegue es de 1 worker). Al vencer la cuenta
-    regresiva hace un UPDATE condicional a `started` y, si lo logró, llama a
-    `on_start(match_id)`: el gancho donde se engancha la simulación.
+    FriendlyExpiryService; el despliegue es de 1 worker). Chequea si
+    el partido está listo para arrancar y, si lo está, llama al runner.
 
     Si la app se reinicia, `recover()` reprograma la cuenta de los partidos con
     rival que siguen `scheduled` (la cuenta reinicia desde cero: no se guarda
@@ -65,7 +64,7 @@ class FriendlyStartService:
 
         def mark() -> bool:
             with self._repo_scope() as repo:
-                return repo.is_ready_to_start(match_id)   # antes: start_if_ready
+                return repo.is_ready_to_start(match_id)
 
         started = await run_in_threadpool(mark)
         if started and self._on_start is not None:
