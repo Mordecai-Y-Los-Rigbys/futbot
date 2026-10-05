@@ -135,7 +135,7 @@ def auth_cookies(db_session):
         return {"session_id": session.id}
 
     return _make
-  
+
 @pytest.fixture
 def session_service(db_session):
     return SessionService(SqlAlchemySessionRepository(db_session))

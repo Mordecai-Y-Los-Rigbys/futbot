@@ -12,7 +12,7 @@ from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 @pytest.fixture
 def db():
     mock = create_autospec(Session, instance=True)
-    mock.begin_nested.return_value.__exit__.return_value = False 
+    mock.begin_nested.return_value.__exit__.return_value = False
     return mock
 
 
