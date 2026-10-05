@@ -9,7 +9,12 @@ from app.services.session_service import SessionService
 
 
 class AuthService:
-    def __init__(self, user_repo: AbstractUserRepository, session_service: SessionService):
+    def __init__(
+        self,
+        user_repo: AbstractUserRepository,
+        session_service: SessionService,
+        behavior_service: BehaviorService,
+    ):
         self.user_repo = user_repo
         self.session_service = session_service
         self.behavior_service = behavior_service
