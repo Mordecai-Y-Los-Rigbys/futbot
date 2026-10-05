@@ -3,7 +3,6 @@ import asyncio
 
 from app.errors import ApiError
 from app.services.match_connection_manager import (
-    MAX_CONNECTIONS_PER_USER_AND_MATCH,
     MatchConnectionManager,
 )
 
@@ -11,10 +10,6 @@ from app.services.match_connection_manager import (
 @pytest.fixture()
 def manager():
     return MatchConnectionManager()
-
-
-def test_limit_is_five():
-    assert MAX_CONNECTIONS_PER_USER_AND_MATCH == 5
 
 
 def test_allows_up_to_five_connections_per_user_and_match(manager):

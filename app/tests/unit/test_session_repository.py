@@ -26,7 +26,6 @@ def record(expires_at=NOW + timedelta(hours=1)):
 
 
 def test_create_adds_commits_and_refreshes(repo, db):
-    # refresh normally loads the row; here the record is already populated
     data = CreateSessionData(id="sid", user_id=1, created_at=NOW, expires_at=NOW + timedelta(hours=1))
 
     result = repo.create(data)

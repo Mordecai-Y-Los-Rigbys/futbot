@@ -768,6 +768,4 @@ def test_start_callback_sees_committed_match_and_both_teams(
         "creator_team": expected_team(creator_members),
         "rival_team": expected_team(joiner_team),
     }
-    # start() no longer changes the match state, so each call triggers on_start;
-    # the real idempotency lives in MatchRunner.start().
     assert observations == [snapshot, snapshot]

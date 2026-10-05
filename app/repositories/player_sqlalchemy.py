@@ -44,7 +44,6 @@ class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
             select(func.count()).select_from(Player).where(*filters)
         ) or 0
         
-        # --- ESQUELETO DE DELETABLE ---
         # TODO: Reemplazar literal(True) por subconsultas EXISTS en el tercer
         # sprint, chequear si esta en un partido en juego, 
         # o si esta en una liga no finalizada.

@@ -12,8 +12,6 @@ from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnecti
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.league_abstract import AbstractLeagueRepository
-from app.repositories.team_abstract import AbstractTeamRepository
-from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.repositories.behavior_abstract import AbstractBehaviorRepository

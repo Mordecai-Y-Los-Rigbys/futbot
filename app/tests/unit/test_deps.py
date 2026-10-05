@@ -39,7 +39,6 @@ def test_missing_cookie_does_not_query_the_service(service, cookie):
 
 
 def test_unknown_or_expired_session_raises_401(service):
-    # the service returns None both for nonexistent and expired sessions
     service.get_user_id.return_value = None
 
     with pytest.raises(ApiError) as exc:
@@ -51,7 +50,7 @@ def test_unknown_or_expired_session_raises_401(service):
 
 
 def test_user_id_zero_is_not_treated_as_missing(service):
-    # `is None` check: a falsy but valid id must not produce 401
+    # Se chequea con `is None`: un id válido pero falsy (0) no tiene que dar 401
     service.get_user_id.return_value = 0
 
     assert get_current_user_id(session_id="sid", service=service) == 0

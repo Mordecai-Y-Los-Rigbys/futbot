@@ -23,7 +23,6 @@ def names(r):
 @pytest.fixture
 def session_service():
     mock = create_autospec(SessionService, instance=True)
-    # "sid-N" -> user N; anything else -> no valid session
     mock.get_user_id.side_effect = (
         lambda sid: int(sid.removeprefix("sid-")) if sid.startswith("sid-") else None
     )
@@ -102,7 +101,6 @@ def test_response_body_uses_service_result(as_user, behavior_service):
 
 
 def test_items_only_have_id_and_name(as_user, behavior_service):
-    # BehaviorData also carries user_id; the endpoint must not expose it
     behavior_service.list_behaviors.return_value = ([behavior(1, "a")], 1)
 
     r = as_user(1).get(URL)
@@ -119,7 +117,6 @@ def test_empty_result(as_user):
 
 
 def test_total_is_independent_of_items_returned(as_user, behavior_service):
-    # e.g. a page out of range: no items, but the total is preserved
     behavior_service.list_behaviors.return_value = ([], 2)
 
     r = as_user(1).get(URL, params={"page": 5})

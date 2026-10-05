@@ -31,28 +31,14 @@ def test_parse_create_player_invalid_json(invalid_body):
         parse_create_player(invalid_body)
     assert exc.value.status_code == 400
     assert exc.value.code == "invalidFieldType"
-
+    
 @pytest.mark.parametrize("field,bad_value", [
     ("name", 123),
-    ("name", None),          
+    ("name", None),
     ("power", "sesenta"),
-    ("power", None),         
+    ("power", None),
     ("agility", True),
     ("control", 10.5),
-])
-def test_parse_create_player_invalid_field_type(field, bad_value):
-    payload = valid_payload()
-    payload[field] = bad_value
-    
-    with pytest.raises(ApiError) as exc:
-        parse_create_player(payload)
-    assert exc.value.code == "invalidFieldType"
-    
-@pytest.mark.parametrize("field,bad_value", [
-    ("name", 123),         
-    ("power", "sesenta"),  
-    ("agility", True),     
-    ("control", 10.5),     
 ])
 
 def test_parse_create_player_invalid_field_type(field, bad_value):

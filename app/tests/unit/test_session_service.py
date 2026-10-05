@@ -22,7 +22,6 @@ def frozen_now(monkeypatch):
 @pytest.fixture
 def repo():
     mock = create_autospec(AbstractSessionRepository, instance=True)
-    # By default, create() echoes back what it receives (like a real repo would)
     mock.create.side_effect = lambda data: SessionData(**data.model_dump())
     return mock
 
@@ -135,7 +134,7 @@ def test_get_user_id_expired_session_is_deleted(service, repo):
 
 
 def test_get_user_id_exactly_at_the_limit_is_expired(service, repo):
-    repo.get_by_id.return_value = stored_session(NOW)  # the code uses <=
+    repo.get_by_id.return_value = stored_session(NOW) 
 
     assert service.get_user_id("sid") is None
     repo.delete.assert_called_once_with("sid")

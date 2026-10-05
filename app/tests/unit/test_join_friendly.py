@@ -405,13 +405,6 @@ def expiry():
 
 
 @pytest.fixture()
-def join_api(api, repo, players, behaviors, expiry):
-    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo, players, behaviors)
-    app.dependency_overrides[get_friendly_expiry] = lambda: expiry
-    return api
-
-
-@pytest.fixture()
 def auth_join_api(join_api):
     join_api.cookies.set("session_id", "valid-session")  # usuario 7
     return join_api
@@ -421,7 +414,7 @@ def nothing_scheduled(expiry):
     return expiry.unscheduled == []
 
 
-def test_endpoint_success_full_structure(auth_join_api, repo, expiry):
+def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
@@ -437,7 +430,7 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry):
     }
     assert repo.join_friendly.call_args.args[0].user_id == 7  # el usuario de la sesión
     assert expiry.unscheduled == [100]  # se cancela el vencimiento de 15 min
-    assert start.scheduled == [100]     # arranca la cuenta regresiva de 3 s
+    assert start.scheduled == [100]     # arranca la cuenta regresiva
 
 
 @pytest.mark.parametrize(
@@ -482,7 +475,7 @@ def test_invalid_route_id_beats_invalid_body(auth_join_api):
     assert auth_join_api.post("/friendlies/abc/members").status_code == 404
 
 
-def test_nonexistent_match_is_404(auth_join_api, repo, expiry):
+def test_endpoint_nonexistent_match_is_404(auth_join_api, repo, expiry):
     repo.get_friendly_state.return_value = None
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 404

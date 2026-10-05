@@ -29,10 +29,6 @@ def auth_service(mock_user_repo, mock_session_service):
     )
 
 
-# ==============================================================================
-# PRUEBAS UNITARIAS: AuthService (Lógica de Negocio con Mocks)
-# ==============================================================================
-
 def test_auth_service_login_success(auth_service, mock_user_repo, mock_session_service):
     """Verifica login exitoso, llamada al repositorio y creación de sesión con mocks."""
     raw_password = "Password123!"
