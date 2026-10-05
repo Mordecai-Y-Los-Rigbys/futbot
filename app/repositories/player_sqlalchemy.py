@@ -2,15 +2,14 @@ from sqlalchemy import func, select, literal
 from sqlalchemy.orm import Session
 
 from app.models.player import Player
-from app.repositories.player_abstract import AbstractPlayerRepository, PlayerData
-from app.services.player_validation import CreatePlayerInput
+from app.repositories.player_abstract import AbstractPlayerRepository, CreatePlayerData, PlayerData
 
 
 class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def create(self, user_id: int, data: CreatePlayerInput) -> PlayerData:
+    def create(self, user_id: int, data: CreatePlayerData) -> PlayerData:
         player = Player(
             user_id=user_id,
             name=data.name,

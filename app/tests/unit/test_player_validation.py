@@ -1,6 +1,6 @@
 import pytest
 from app.errors import ApiError
-from app.services.player_validation import INVALID_JSON, parse_create_player, CreatePlayerInput
+from app.services.player_validation import INVALID_JSON, parse_create_player, CreatePlayerData
 
 
 def valid_payload():
@@ -18,7 +18,7 @@ def test_parse_create_player_success():
     payload = valid_payload()
     result = parse_create_player(payload)
 
-    assert isinstance(result, CreatePlayerInput)
+    assert isinstance(result, CreatePlayerData)
     assert result.name == "Lionel Messi"
     assert result.power == 60
     assert result.speed == 50

@@ -1,6 +1,15 @@
 from abc import ABC, abstractmethod
+
 from pydantic import BaseModel
-from app.services.player_validation import CreatePlayerInput
+
+
+class CreatePlayerData(BaseModel):
+    name: str
+    power: int
+    agility: int
+    control: int
+    strength: int
+    speed: int
 
 
 class PlayerData(BaseModel):
@@ -20,7 +29,7 @@ class PlayerData(BaseModel):
 
 class AbstractPlayerRepository(ABC):
     @abstractmethod
-    def create(self, user_id: int, data: CreatePlayerInput) -> PlayerData:
+    def create(self, user_id: int, data: CreatePlayerData) -> PlayerData:
         """Crea un nuevo jugador y lo asocia al usuario."""
 
     @abstractmethod

@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 from typing import Any
 
 from app.errors import ApiError
+from app.repositories.player_abstract import CreatePlayerData
 
 INVALID_JSON = object()  # sentinel: el body no se pudo parsear
 
@@ -9,16 +9,6 @@ MAX_NAME_LEN = 20
 MIN_STAT, MAX_STAT = 20, 100
 EXPECTED_SUM = 300
 STATS = ("power", "agility", "control", "strength", "speed")
-
-
-@dataclass(frozen=True)
-class CreatePlayerInput:
-    name: str
-    power: int
-    agility: int
-    control: int
-    strength: int
-    speed: int
 
 
 def _bad(code: str, message: str) -> ApiError:
@@ -29,7 +19,7 @@ def _is_int(v: Any) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def parse_create_player(body: Any) -> CreatePlayerInput:
+def parse_create_player(body: Any) -> CreatePlayerData:
     if body is INVALID_JSON or (body is not None and not isinstance(body, dict)):
         raise _bad("invalidFieldType", "El body debe ser un objeto JSON válido.")
 
@@ -70,7 +60,7 @@ def parse_create_player(body: Any) -> CreatePlayerInput:
             "statSumMismatch", f"La suma de las estadísticas debe ser exactamente {EXPECTED_SUM}."
         )
 
-    return CreatePlayerInput(
+    return CreatePlayerData(
         name=name,
         power=body["power"],
         agility=body["agility"],
