@@ -11,6 +11,9 @@ class BehaviorData(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class CreateBehaviorData(BaseModel):
+    name: str
+    code: str
 
 class AbstractBehaviorRepository(ABC):
     @abstractmethod
@@ -25,3 +28,9 @@ class AbstractBehaviorRepository(ABC):
     @abstractmethod
     def get_by_id(self, behavior_id: int) -> BehaviorData | None:
         """Devuelve el behavior con ese id (de cualquier usuario) o None si no existe."""
+    
+    @abstractmethod
+    def create_many(
+        self, user_id: int, behaviors: list[CreateBehaviorData]
+    ) -> list[BehaviorData]:
+        """Crea los behaviors para el usuario. No confirma la transacción."""
