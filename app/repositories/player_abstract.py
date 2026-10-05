@@ -30,3 +30,7 @@ class AbstractPlayerRepository(ABC):
         """Devuelve la plantilla de jugadores pertenecientes al usuario."""
         pass
     
+    @abstractmethod
+    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        """Subconjunto de `ids` que son jugadores del usuario."""
+    
