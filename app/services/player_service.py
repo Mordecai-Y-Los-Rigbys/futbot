@@ -7,7 +7,7 @@ PAGE_SIZE = 50
 
 
 class PlayerService:
-    def __init__(self, repository: AbstractPlayerRepository):
+    def __init__(self, repository: AbstractPlayerRepository) -> None:
         self.repository = repository
 
     def create_player(self, user_id: int, body: Any) -> PlayerResponse:

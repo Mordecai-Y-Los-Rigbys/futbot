@@ -44,7 +44,7 @@ def get_handshake_service_scope() -> Callable[[], ContextManager[MatchHandshakeS
 
 
 @contextmanager
-def _expiry_repo_scope():
+def _expiry_repo_scope() -> Iterator[SqlAlchemyMatchExpiryRepository]:
     with SessionLocal() as db:
         yield SqlAlchemyMatchExpiryRepository(db)
 
@@ -57,13 +57,13 @@ def get_friendly_expiry() -> FriendlyExpiryService:
 
 
 @contextmanager
-def _start_repo_scope():
+def _start_repo_scope() -> Iterator[SqlAlchemyMatchStartRepository]:
     with SessionLocal() as db:
         yield SqlAlchemyMatchStartRepository(db)
 
 
 @contextmanager
-def _match_repo_scope():
+def _match_repo_scope() -> Iterator[SqlAlchemyMatchRepository]:
     with SessionLocal() as db:
         yield SqlAlchemyMatchRepository(db)
 

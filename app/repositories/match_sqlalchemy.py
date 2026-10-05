@@ -12,7 +12,7 @@ from app.repositories.match_abstract import (
 
 
 class SqlAlchemyMatchRepository(AbstractMatchRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def get_state(self, match_id: int) -> MatchStateData | None:

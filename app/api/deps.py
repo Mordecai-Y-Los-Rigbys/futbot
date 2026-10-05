@@ -27,7 +27,7 @@ from app.services.match_connection_service import MatchConnectionService
 from app.services.user_service import UserService
 
 
-def get_league_repository(db=Depends(get_db)) -> AbstractLeagueRepository:
+def get_league_repository(db: Session = Depends(get_db)) -> AbstractLeagueRepository:
     return SqlAlchemyLeagueRepository(db)
 
 
@@ -48,17 +48,17 @@ def get_session_service(db: Session = Depends(get_db)) -> SessionService:
 
 
 def get_league_service(
-    leagues=Depends(get_league_repository),
-    players=Depends(get_player_repository),
-    behaviors=Depends(get_behavior_repository),
+    leagues: AbstractLeagueRepository = Depends(get_league_repository),
+    players: AbstractPlayerRepository = Depends(get_player_repository),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
 ) -> LeagueService:
     return LeagueService(leagues, players, behaviors)
 
 
 def get_friendly_service(
     db: Session = Depends(get_db),
-    players=Depends(get_player_repository),
-    behaviors=Depends(get_behavior_repository),
+    players: AbstractPlayerRepository = Depends(get_player_repository),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
 ) -> FriendlyService:
     return FriendlyService(SqlAlchemyFriendlyRepository(db), players, behaviors)
 

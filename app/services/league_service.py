@@ -38,7 +38,7 @@ class LeagueService:
         repo: AbstractLeagueRepository,
         players: AbstractPlayerRepository,
         behaviors: AbstractBehaviorRepository,
-    ):
+    ) -> None:
         self.repo = repo
         self.players = players
         self.behaviors = behaviors

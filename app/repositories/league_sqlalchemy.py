@@ -46,7 +46,7 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
 
 
 class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def list_page(self, name: str | None, offset: int, limit: int) -> LeaguePageData:

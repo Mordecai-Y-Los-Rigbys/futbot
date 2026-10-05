@@ -24,7 +24,7 @@ def list_behaviors(
     page: str = Query(default="1"),
     user_id: int = Depends(get_current_user_id),  # se resuelve antes: 401 gana sobre 400
     service: BehaviorService = Depends(get_behavior_service),
-):
+) -> BehaviorPage:
     page_number = parse_page(page)
     items, total = service.list_behaviors(user_id, name, page_number)
     return BehaviorPage(
@@ -49,7 +49,7 @@ def get_behavior(
     behavior_id: str,  # str y no int: un "abc" daría 422 antes de llegar acá
     user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
     service: BehaviorService = Depends(get_behavior_service),
-):
+) -> BehaviorDetail:
     behavior = service.get_owned_behavior(
         user_id, _parse_id(behavior_id, "Comportamiento no encontrado.")
     )

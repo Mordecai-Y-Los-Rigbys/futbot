@@ -1,4 +1,4 @@
-from sqlalchemy import and_, select
+from sqlalchemy import ColumnElement, and_, select
 from sqlalchemy.orm import Session
 
 from app.domain.match import MatchStatus
@@ -7,11 +7,11 @@ from app.repositories.match_start_abstract import AbstractMatchStartRepository
 
 
 class SqlAlchemyMatchStartRepository(AbstractMatchStartRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     @staticmethod
-    def ready_condition():
+    def ready_condition() -> ColumnElement[bool]:
         """Amistoso (sin liga) con rival que todavía no arrancó."""
         return and_(
             Match.league_id.is_(None),

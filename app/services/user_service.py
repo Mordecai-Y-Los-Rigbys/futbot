@@ -4,7 +4,7 @@ from app.repositories.user_abstract import AbstractUserRepository
 
 
 class UserService:
-    def __init__(self, user_repo: AbstractUserRepository):
+    def __init__(self, user_repo: AbstractUserRepository) -> None:
         self.user_repo = user_repo
 
     def get_by_id(self, user_id: int) -> User:

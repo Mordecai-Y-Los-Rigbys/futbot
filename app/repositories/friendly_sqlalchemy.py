@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.domain.team_member import MemberRole
 from app.models.match import Match, MatchStatus
 from app.models.team_member import TeamMember
+from app.models.user import User
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
@@ -42,17 +43,17 @@ def _friendly_team(
     ]
 
 
-def _utc(created_at):
+def _utc(created_at: datetime) -> datetime:
     # DateTime naive -> UTC, como en los otros repos.
     return created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at
 
 
-def _club(user) -> FriendlyClubData:
+def _club(user: User) -> FriendlyClubData:
     return FriendlyClubData(id=user.id, username=user.username, club_name=user.club_name)
 
 
 class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def user_is_playing(self, user_id: int) -> bool:

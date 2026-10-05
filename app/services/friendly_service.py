@@ -46,7 +46,7 @@ class FriendlyService:
         repo: AbstractFriendlyRepository,
         players: AbstractPlayerRepository,
         behaviors: AbstractBehaviorRepository,
-    ):
+    ) -> None:
         self.repo = repo
         self.players = players
         self.behaviors = behaviors

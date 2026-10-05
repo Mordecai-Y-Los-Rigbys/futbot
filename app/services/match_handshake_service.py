@@ -33,7 +33,7 @@ class MatchHandshakeService:
         self,
         tokens: AbstractMatchWsTokenRepository,
         matches: AbstractMatchRepository,
-    ):
+    ) -> None:
         self.tokens = tokens
         self.matches = matches
 

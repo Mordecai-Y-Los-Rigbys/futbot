@@ -10,7 +10,7 @@ from app.repositories.behavior_abstract import (
 
 
 class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def list_by_user(

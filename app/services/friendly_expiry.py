@@ -6,7 +6,10 @@ from typing import Awaitable, Callable
 
 from starlette.concurrency import run_in_threadpool
 
-from app.repositories.match_expiry_abstract import AbstractMatchExpiryRepository
+from app.repositories.match_expiry_abstract import (
+    AbstractMatchExpiryRepository,
+    WaitingFriendlyData,
+)
 from app.services.match_timing import MAX_FRIENDLY_WAIT
 
 
@@ -86,7 +89,7 @@ class FriendlyExpiryService:
         """Al arrancar: reprograma los amistosos en espera. Los que ya vencieron
         se cancelan enseguida (delay 0); al resto les queda su tiempo real."""
 
-        def waiting():
+        def waiting() -> list[WaitingFriendlyData]:
             with self._repo_scope() as repo:
                 return repo.list_waiting_friendlies()
 

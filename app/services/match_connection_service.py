@@ -17,7 +17,7 @@ def _utcnow() -> datetime:
 
 
 class MatchConnectionService:
-    def __init__(self, repo: AbstractMatchConnectionRepository):
+    def __init__(self, repo: AbstractMatchConnectionRepository) -> None:
         self.repo = repo
 
     def connect(self, user_id: int, match_id: int, body: Any) -> str:

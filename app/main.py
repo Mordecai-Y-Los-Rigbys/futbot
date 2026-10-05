@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -32,7 +33,7 @@ Base.metadata.create_all(bind=engine)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     expiry = get_friendly_expiry()
     start = get_friendly_start()
     await expiry.recover()

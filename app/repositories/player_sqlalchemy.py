@@ -6,7 +6,7 @@ from app.repositories.player_abstract import AbstractPlayerRepository, CreatePla
 
 
 class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def create(self, user_id: int, data: CreatePlayerData) -> PlayerData:

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from app.helpers.ids import MAX_ID
 from app.services.league_validation import (
@@ -24,7 +24,7 @@ class CreateFriendlyInput:
 def _check_types(body: dict) -> None:
     """invalidFieldType: tipos incorrectos o IDs fuera de rango."""
 
-    def fail(msg: str):
+    def fail(msg: str) -> NoReturn:
         raise _bad("invalidFieldType", msg)
 
     if "name" in body and not isinstance(body["name"], str):
@@ -80,7 +80,7 @@ class JoinFriendlyInput:
 def _check_members_types(body: dict) -> None:
     """invalidFieldType para `members` (sin mirar `name`, que acá se ignora)."""
 
-    def fail(msg: str):
+    def fail(msg: str) -> NoReturn:
         raise _bad("invalidFieldType", msg)
 
     if "members" in body:

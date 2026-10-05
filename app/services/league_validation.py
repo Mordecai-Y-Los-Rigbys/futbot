@@ -1,6 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from app.errors import ApiError
 from app.helpers.ids import MAX_ID
@@ -53,7 +53,7 @@ def _is_id(v: Any) -> bool:
 def _check_types(body: dict) -> None:
     """Regla (a): invalidFieldType. `password` solo se evalúa si private es true."""
 
-    def fail(msg: str):
+    def fail(msg: str) -> NoReturn:
         raise _bad("invalidFieldType", msg)
 
     if "name" in body and not isinstance(body["name"], str):

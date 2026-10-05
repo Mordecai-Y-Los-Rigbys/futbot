@@ -42,7 +42,7 @@ def get_my_players(
     page: str = Query(default="1"),
     user_id: int = Depends(get_current_user_id),
     service: PlayerService = Depends(get_player_service),
-):
+) -> PlayerPage:
     page_number = parse_page(page)
     items, total = service.get_user_players(user_id, name, page_number)
     return PlayerPage(

@@ -8,7 +8,7 @@ from app.repositories.team_abstract import AbstractTeamRepository, StarterData
 
 
 class SqlAlchemyTeamRepository(AbstractTeamRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:

@@ -14,7 +14,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from types import CodeType
+from types import CodeType, FrameType
 from typing import Any
 
 FORBIDDEN_NAME_PREFIX = "__"
@@ -116,7 +116,7 @@ def run_behavior(
     namespace["__builtins__"] = {}  # Sacamos los builtins de Python
     deadline = timer() + time_limit
 
-    def check_time(frame, event, arg):
+    def check_time(frame: FrameType, event: str, arg: Any) -> Callable[..., Any]:
         if timer() > deadline:
             raise BehaviorTimeout(f"superó el límite de {time_limit} s")
         return check_time

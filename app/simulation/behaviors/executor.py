@@ -3,6 +3,7 @@
 import logging
 import time
 from collections.abc import Callable, Mapping
+from typing import Any
 
 from app.simulation import constants as C
 from app.simulation.actions import PlayerActions
@@ -66,7 +67,15 @@ def run_behaviors(
     return actions
 
 
-def _run_player(state, key, behavior, clock, constants, time_limit, timer) -> PlayerActions:
+def _run_player(
+    state: MatchState,
+    key: PlayerKey,
+    behavior: CompiledBehavior,
+    clock: MatchClock,
+    constants: dict[str, Any],
+    time_limit: float,
+    timer: Callable[[], float],
+) -> PlayerActions:
     recorder = ActionRecorder()
     # Namespace nuevo en cada tick: las variables no se conservan entre ticks.
     namespace = {**constants, **build_primitives(state, key, clock, recorder)}

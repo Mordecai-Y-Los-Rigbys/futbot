@@ -14,7 +14,7 @@ class AuthService:
         user_repo: AbstractUserRepository,
         session_service: SessionService,
         behavior_service: BehaviorService,
-    ):
+    ) -> None:
         self.user_repo = user_repo
         self.session_service = session_service
         self.behavior_service = behavior_service

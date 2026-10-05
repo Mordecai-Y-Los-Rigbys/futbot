@@ -15,7 +15,7 @@ def _utcnow() -> datetime:
 
 
 class SessionService:
-    def __init__(self, repository: AbstractSessionRepository):
+    def __init__(self, repository: AbstractSessionRepository) -> None:
         self.repository = repository
 
     def create(self, user_id: int, ttl: timedelta = SESSION_TTL) -> SessionData:

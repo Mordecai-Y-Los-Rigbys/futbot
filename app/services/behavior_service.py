@@ -10,7 +10,7 @@ PAGE_SIZE = 50
 
 
 class BehaviorService:
-    def __init__(self, repository: AbstractBehaviorRepository):
+    def __init__(self, repository: AbstractBehaviorRepository) -> None:
         self.repository = repository
 
     def list_behaviors(

@@ -35,7 +35,7 @@ class MatchSetupService:
         matches: AbstractMatchRepository,
         leagues: AbstractLeagueRepository,
         teams: AbstractTeamRepository,
-    ):
+    ) -> None:
         self.matches = matches
         self.leagues = leagues
         self.teams = teams
