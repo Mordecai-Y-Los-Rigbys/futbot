@@ -79,6 +79,13 @@ def _load_setup(match_id: int) -> MatchSetup:
 async def _start_simulation(match_id: int) -> None:
     _match_runner.start(match_id)   # start() es sync y devuelve la Task
 
+@contextmanager
+def _match_repo_scope():
+    with SessionLocal() as db:
+        yield SqlAlchemyMatchRepository(db)
+
+_match_runner = MatchRunner(_connection_manager, _load_setup, _match_repo_scope)
+
 _friendly_start = FriendlyStartService(_start_repo_scope, _start_simulation)
 
 def get_match_runner() -> MatchRunner:

@@ -33,7 +33,9 @@ Base.metadata.create_all(bind=engine)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     expiry = get_friendly_expiry()
+    start = get_friendly_start()
     await expiry.recover()
+    await start.recover()
     yield
     start.shutdown()
     await get_match_runner().shutdown()

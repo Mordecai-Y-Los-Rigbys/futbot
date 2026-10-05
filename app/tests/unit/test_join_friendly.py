@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.api.deps import get_friendly_service
-from app.api.ws_deps import get_friendly_expiry
+from app.api.ws_deps import get_friendly_expiry, get_friendly_start
 from app.errors import ApiError
 from app.main import app
 from app.repositories.friendly_abstract import (
@@ -44,6 +44,23 @@ class SpyBehaviors(FakeBehaviors):
         return super().owned_behavior_ids(user_id, ids)
 
 
+class FakeStart:
+    def __init__(self):
+        self.scheduled = []
+
+    def schedule(self, match_id):
+        self.scheduled.append(match_id)
+
+@pytest.fixture()
+def start():
+    return FakeStart()
+
+@pytest.fixture()
+def join_api(api, repo, players, behaviors, expiry, start):
+    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo, players, behaviors)
+    app.dependency_overrides[get_friendly_expiry] = lambda: expiry
+    app.dependency_overrides[get_friendly_start] = lambda: start
+    return api
 # --- helpers ----------------------------------------------------------------------------
 
 def members():

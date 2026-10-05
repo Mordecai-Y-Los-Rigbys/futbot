@@ -17,7 +17,9 @@ from app.models.player import Player
 from app.repositories.friendly_abstract import CreateFriendlyMemberData, JoinFriendlyData
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
+from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.schemas.errors import Error, JoinFriendlyMatchBadRequest, JoinFriendlyMatchConflict
+from app.services.friendly_start import FriendlyStartService
 
 pytestmark = pytest.mark.integration
 
