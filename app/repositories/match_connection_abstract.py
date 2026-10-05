@@ -3,10 +3,12 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.domain.match import MatchStatus
+
 
 class MatchAccessData(BaseModel):
     id: int
-    status: str
+    status: MatchStatus
     league_id: int | None = None
     league_creator_id: int | None = None
     league_private: bool = False

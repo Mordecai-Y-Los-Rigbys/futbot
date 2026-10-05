@@ -1,7 +1,7 @@
 from typing import Any
-import re
 
 from app.errors import ApiError
+from app.helpers.ids import parse_path_id
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
@@ -33,21 +33,9 @@ def _to_response(m: FriendlyMatchData) -> MatchResponse:
     )
 
 
-MAX_ID = 2147483647
-_ID_RE = re.compile(r"[0-9]{1,10}")
-
-
 def _not_found() -> ApiError:
     return ApiError(404, None, "Partido amistoso no encontrado.")
 
-
-def _parse_match_id(raw: str) -> int:
-    """Un id de ruta que no es entero o está fuera de rango es un 404."""
-    if _ID_RE.fullmatch(raw):
-        value = int(raw)
-        if 1 <= value <= MAX_ID:
-            return value
-    raise _not_found()
 
 
 class FriendlyService:
@@ -102,7 +90,7 @@ class FriendlyService:
         )
         
     def join_friendly(self, user_id: int, raw_match_id: str, body: Any) -> MatchResponse:
-        match_id = _parse_match_id(raw_match_id)  # 404
+        match_id = parse_path_id(raw_match_id, "Partido amistoso no encontrado.") # 404
         state = self.repo.get_friendly_state(match_id)
         if state is None:
             raise _not_found()

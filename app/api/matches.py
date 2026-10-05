@@ -1,4 +1,3 @@
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -8,7 +7,7 @@ from app.api.deps import (
     get_json_body,
     get_match_connection_service,
 )
-from app.errors import ApiError
+from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
     Error,
     JoinMatchBadRequest,
@@ -19,18 +18,6 @@ from app.schemas.match_connection import JoinMatchResponse
 from app.services.match_connection_service import MatchConnectionService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
-
-MAX_ID = 2147483647
-_ID_RE = re.compile(r"[0-9]{1,10}")
-
-
-def parse_match_id(raw: str) -> int:
-    """Un id que no puede identificar ningún partido es un partido inexistente (404)."""
-    if _ID_RE.fullmatch(raw):
-        value = int(raw)
-        if 1 <= value <= MAX_ID:
-            return value
-    raise ApiError(404, None, "El partido no existe.")
 
 
 @router.post(
@@ -53,5 +40,5 @@ def join_match(
     body: Any = Depends(get_json_body),
     service: MatchConnectionService = Depends(get_match_connection_service),
 ) -> JoinMatchResponse:
-    token = service.connect(user_id, parse_match_id(match_id), body)
+    token = service.connect(user_id, parse_path_id(match_id, "El partido no existe."), body)
     return JoinMatchResponse(token_ws=token)

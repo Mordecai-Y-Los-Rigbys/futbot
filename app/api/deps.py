@@ -12,6 +12,7 @@ from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnecti
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
+from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.player_service import PlayerService
@@ -87,9 +88,8 @@ async def get_json_body(
 def get_friendly_service(db: Session = Depends(get_db)) -> FriendlyService:
     return FriendlyService(SqlAlchemyFriendlyRepository(db))
 
-
 def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
     return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
-    
+
 def get_user_service(db: Session = Depends(get_db)) -> UserService:
     return UserService(SqlAlchemyUserRepository(db))

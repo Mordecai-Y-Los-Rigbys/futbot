@@ -1,8 +1,9 @@
 import re
 
 from app.errors import ApiError
+from app.helpers.ids import MAX_ID
 
-MAX_PAGE = 2147483647
+MAX_PAGE = MAX_ID
 _INT_RE = re.compile(r"-?[0-9]+")
 
 

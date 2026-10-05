@@ -33,7 +33,7 @@ class SqlAlchemyMatchConnectionRepository(AbstractMatchConnectionRepository):
             return None
         return MatchAccessData(
             id=row.id,
-            status=row.status.value,
+            status=row.status,
             league_id=row.league_id,
             league_creator_id=row.creator_id,
             league_private=bool(row.private),
