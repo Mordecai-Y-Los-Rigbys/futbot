@@ -1,4 +1,3 @@
-import pytest
 from app.models.player import Player
 
 def valid_payload():

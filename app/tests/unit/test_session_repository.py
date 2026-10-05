@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, create_autospec
+from unittest.mock import create_autospec
 
 import pytest
 from sqlalchemy.orm import Session

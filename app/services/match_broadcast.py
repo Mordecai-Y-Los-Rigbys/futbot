@@ -4,7 +4,6 @@ import asyncio
 import json
 from dataclasses import dataclass
 
-from app.services.match_connection_manager import MatchConnectionManager
 from app.simulation.match_rules import Event, TickResult
 from app.simulation.state import Team
 

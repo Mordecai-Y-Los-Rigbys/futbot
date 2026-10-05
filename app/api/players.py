@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_current_user_id, get_player_service, get_json_body
 from app.api.pagination import parse_page

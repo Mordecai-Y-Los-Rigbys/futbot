@@ -1,10 +1,8 @@
 from unittest.mock import create_autospec
 
 import pytest
-from sqlalchemy.orm import Session
 
-from app.api import deps
-from app.api.deps import get_current_user_id, get_session_service
+from app.api.deps import get_current_user_id
 from app.errors import ApiError
 from app.services.session_service import SessionService
 

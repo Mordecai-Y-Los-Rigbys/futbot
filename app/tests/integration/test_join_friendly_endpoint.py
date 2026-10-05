@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry
 from app.domain.match import MatchStatus
 from app.main import app
 from app.models.match import Match

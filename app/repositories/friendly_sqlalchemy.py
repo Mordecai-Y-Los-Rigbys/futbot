@@ -4,9 +4,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.team_member import MemberRole
-from app.models.behavior import Behavior
 from app.models.match import Match, MatchStatus
-from app.models.player import Player
 from app.models.team_member import TeamMember
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,

@@ -66,13 +66,13 @@ class FriendlyStartService:
             with self._repo_scope() as repo:
                 return repo.is_ready_to_start(match_id)
 
-        started = await run_in_threadpool(mark)
-        if started and self._on_start is not None:
+        ready = await run_in_threadpool(mark)
+        if ready and self._on_start is not None:
             try:
                 await self._on_start(match_id)
             except Exception:
                 logger.exception("Falló el arranque de la simulación del partido %s", match_id)
-        return started
+        return ready
 
     async def recover(self) -> None:
         def pending() -> list[int]:

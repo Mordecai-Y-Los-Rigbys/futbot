@@ -1,6 +1,5 @@
 from typing import Any
 
-from app.errors import ApiError
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,

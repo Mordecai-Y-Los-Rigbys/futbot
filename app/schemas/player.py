@@ -22,11 +22,3 @@ class PlayerPage(CamelModel):
     page: int
     page_size: int 
     total: int
-    
-class CreatePlayerRequest(CamelModel):
-    name: str
-    power: int
-    agility: int
-    control: int
-    strength: int
-    speed: int

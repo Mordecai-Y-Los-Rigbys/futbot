@@ -41,7 +41,7 @@ def main() -> None:
     args = parser.parse_args()
 
     result = simulate_match(
-        default_team(0, ), default_team(10, ), args.duration, args.seed, args.countdown
+        default_team(0), default_team(10), args.duration, args.seed, args.countdown
     )
     for t in result.ticks:
         if t.event is Event.GOAL:

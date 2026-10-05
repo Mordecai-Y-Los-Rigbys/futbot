@@ -4,7 +4,6 @@ import pytest
 
 from app.domain.team_member import MemberRole
 from app.repositories.league_abstract import AbstractLeagueRepository
-from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData
 from app.repositories.team_abstract import AbstractTeamRepository, StarterData
 from app.services.match_setup_service import MatchSetupService
 from app.simulation.constants import STARTER_ROLES, FRIENDLY_MATCH_DURATION

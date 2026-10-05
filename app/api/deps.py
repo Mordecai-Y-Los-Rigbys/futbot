@@ -33,9 +33,6 @@ from app.services.user_service import UserService
 def get_league_repository(db=Depends(get_db)) -> AbstractLeagueRepository:
     return SqlAlchemyLeagueRepository(db)
 
-def get_team_repository(db=Depends(get_db)) -> AbstractTeamRepository:
-    return SqlAlchemyTeamRepository(db)
-
 def get_player_repository(db: Session = Depends(get_db)) -> AbstractPlayerRepository:
     return SqlAlchemyPlayerRepository(db)
 
@@ -54,7 +51,6 @@ def get_league_service(
     behaviors=Depends(get_behavior_repository),
 ) -> LeagueService:
     return LeagueService(leagues, players, behaviors)
-
 
 def get_friendly_service(
     db: Session = Depends(get_db),
@@ -101,7 +97,6 @@ def get_current_user_id(
         raise ApiError(401, None, "Sin sesión válida.")
 
     return user_id
-
 
 async def get_json_body(
     request: Request,

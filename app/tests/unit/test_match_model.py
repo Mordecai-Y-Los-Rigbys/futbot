@@ -7,7 +7,6 @@ from sqlalchemy.orm import configure_mappers
 from sqlalchemy.schema import CreateTable
 
 from app import models  # noqa: F401  (registra todos los modelos)
-from app.domain.match import MatchStatus
 from app.models.match import Match
 
 TABLE = Match.__table__
