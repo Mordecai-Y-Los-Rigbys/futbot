@@ -2,7 +2,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any
 
-from app.models.match import MatchStatus
+from app.domain.match import MatchStatus
 from app.errors import ApiError
 from app.repositories.match_connection_abstract import (
     AbstractMatchConnectionRepository,
