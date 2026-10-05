@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import ApiError
 from app.models.user import User
-from app.repositories.user_repository import UserRepository
+from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def db():
 
 @pytest.fixture
 def repo(db):
-    return UserRepository(db)
+    return SqlAlchemyUserRepository(db)
 
 
 def a_user(**over):
