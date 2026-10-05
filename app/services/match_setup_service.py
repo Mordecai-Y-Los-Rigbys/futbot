@@ -5,17 +5,16 @@ El service decide y valida; los repositories solo traen datos planos.
 
 from dataclasses import dataclass
 
-from app.domain.team_member import MemberRole
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.simulation.behaviors.sandbox import compile_behavior
-from app.simulation.constants import STARTER_ROLES
-from app.simulation.match_rules import (
+from app.simulation.constants import (
+    STARTER_ROLES,
     COUNTDOWN_SECONDS,
     FRIENDLY_MATCH_DURATION,
-    TeamSetup,
 )
+from app.simulation.match_rules import TeamSetup
 from app.simulation.physics import PlayerSetup
 from app.simulation.state import Stats
 
@@ -25,10 +24,9 @@ class MatchSetup:
     team_1: TeamSetup  # club1 = user_1
     team_2: TeamSetup  # club2 = user_2
     duration_seconds: float
-    countdown_seconds: float = COUNTDOWN_SECONDS
-    club_1_name: str = "Club 1"
-    club_2_name: str = "Club 2"
-
+    countdown_seconds: float
+    club_1_name: str
+    club_2_name: str
 
 class MatchSetupService:
     def __init__(
@@ -52,6 +50,7 @@ class MatchSetupService:
             team_1=self._build_team(match, match.user_1_id),
             team_2=self._build_team(match, match.user_2_id),
             duration_seconds=minutes * 60,
+            countdown_seconds=COUNTDOWN_SECONDS,
             club_1_name=match.club_1_name,
             club_2_name=match.club_2_name,
         )
@@ -76,7 +75,7 @@ class MatchSetupService:
         players: list[PlayerSetup] = []
         behaviors = {}
         for row in rows:
-            role = MemberRole(row.role)
+            role = row.role
             if role not in STARTER_ROLES:
                 raise ValueError(
                     f"el usuario {user_id} tiene un {role.value} entre los "

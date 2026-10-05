@@ -5,7 +5,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user_id, get_friendly_service, get_json_body
 from app.api.pagination import parse_page
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry
 from app.schemas.errors import (
     CreateFriendlyMatchBadRequest,
     CreateFriendlyMatchConflict,
@@ -16,7 +16,6 @@ from app.schemas.errors import (
 )
 from app.schemas.friendly import MatchPage, MatchResponse
 from app.services.friendly_expiry import FriendlyExpiryService
-from app.services.friendly_start import FriendlyStartService
 from app.services.friendly_service import FriendlyService
 
 router = APIRouter(prefix="/friendlies", tags=["friendlies"])
@@ -86,10 +85,8 @@ async def join_friendly(
     body: Any = Depends(get_json_body),
     service: FriendlyService = Depends(get_friendly_service),
     expiry: FriendlyExpiryService = Depends(get_friendly_expiry),
-    start: FriendlyStartService = Depends(get_friendly_start),
 ) -> MatchResponse:
     match = await run_in_threadpool(service.join_friendly, user_id, id, body)
     # Ya confirmada la unión: se cancela el vencimiento y arranca la cuenta regresiva.
     expiry.unschedule(match.id)
-    start.schedule(match.id)
     return match

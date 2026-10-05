@@ -17,9 +17,7 @@ from app.models.player import Player
 from app.repositories.friendly_abstract import CreateFriendlyMemberData, JoinFriendlyData
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
-from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.schemas.errors import Error, JoinFriendlyMatchBadRequest, JoinFriendlyMatchConflict
-from app.services.friendly_start import FriendlyStartService
 
 pytestmark = pytest.mark.integration
 
@@ -44,22 +42,12 @@ class FakeExpiry:
         self.unscheduled.append(match_id)
 
 
-class FakeStart:
-    def __init__(self):
-        self.scheduled = []
-
-    def schedule(self, match_id):
-        self.scheduled.append(match_id)
-
-
 @pytest.fixture()
 def schedulers():
-    expiry, start = FakeExpiry(), FakeStart()
+    expiry = FakeExpiry()
     app.dependency_overrides[get_friendly_expiry] = lambda: expiry
-    app.dependency_overrides[get_friendly_start] = lambda: start
-    yield expiry, start
+    yield expiry
     app.dependency_overrides.pop(get_friendly_expiry, None)
-    app.dependency_overrides.pop(get_friendly_start, None)
 
 
 @pytest.fixture()
@@ -182,7 +170,7 @@ def test_join_keeps_the_same_match_and_registers_the_rival(
     login_as, db_session, creator, joiner, friendly, joiner_team, schedulers
 ):
     created, creator_members = friendly
-    expiry, start = schedulers
+    expiry = schedulers
     resp = login_as(joiner).post(url(created["id"]), json={"members": joiner_team})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -201,7 +189,6 @@ def test_join_keeps_the_same_match_and_registers_the_rival(
     assert db_session.query(Match).count() == 1  # no se crea otro partido
 
     assert expiry.unscheduled == [created["id"]]
-    assert start.scheduled == [created["id"]]
 
 
 def test_both_teams_are_persisted_and_the_creators_is_kept(
@@ -239,13 +226,11 @@ def test_second_join_is_not_joinable_and_keeps_the_first_rival(
     login_as, db_session, joiner, late, friendly, joiner_team, late_team, schedulers
 ):
     created, _ = friendly
-    _, start = schedulers
     assert login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
     resp = login_as(late).post(url(created["id"]), json={"members": late_team})
     assert resp.status_code == 409 and resp.json()["code"] == "notJoinable"
     assert match_row(db_session, created["id"]).user_2_id == joiner.id
     assert members_of(db_session, created["id"], late.id) == []
-    assert start.scheduled == [created["id"]]  # solo la primera unión arrancó la cuenta
 
 
 # --- autenticación y ids de ruta -------------------------------------------------------------------------
@@ -671,10 +656,9 @@ def test_nonexistent_behavior_rejects_join_without_side_effects(
     login_as, db_session, joiner, friendly, joiner_team, schedulers
 ):
     created, creator_members = friendly
-    expiry, start = schedulers
+    expiry = schedulers
 
     expiry_before = list(expiry.unscheduled)
-    start_before = list(start.scheduled)
 
     # Crear y eliminar un behavior para obtener un ID que sabemos inexistente.
     from app.models.behavior import Behavior
@@ -699,7 +683,6 @@ def test_nonexistent_behavior_rejects_join_without_side_effects(
     ) == expected_team(creator_members)
 
     assert expiry.unscheduled == expiry_before
-    assert start.scheduled == start_before
 
 
 def test_same_owned_behavior_can_be_persisted_for_all_six_players(

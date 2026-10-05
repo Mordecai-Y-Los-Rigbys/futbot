@@ -1,3 +1,4 @@
+import time
 import itertools
 import sys
 
@@ -42,12 +43,50 @@ def test_escape_routes_are_rejected_when_compiling(source):
     with pytest.raises(BehaviorCompileError):
         compile_behavior(source)
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "while True:\n    pass",
+        "for i in (1, 2):\n    pass",
+        "try:\n    x = 1\nexcept:\n    pass",
+        "try:\n    while True:\n        pass\nexcept:\n    pass\nwhile True:\n    pass",
+        "x = [i for i in (1, 2)]",
+        "x = {i: i for i in (1, 2)}",
+        "x = {i for i in (1, 2)}",
+        "x = (i for i in (1, 2))",
+        "f = lambda: 1",
+        "def f():\n    pass",
+        "class A:\n    pass",
+    ],
+)
+def test_structures_outside_the_whitelist_are_rejected(source):
+    with pytest.raises(BehaviorCompileError):
+        compile_behavior(source)
+
+def test_everything_allowed_compiles_and_runs():
+    source = (
+        "a, b = (1, 2)\n"
+        "a += 1\n"
+        "if a > 1 and not b is None:\n"
+        "    c = a if b else 0\n"
+        "elif a == 0 or b != 2:\n"
+        "    c = -a\n"
+        "else:\n"
+        "    pass\n"
+        "d = (a, b)[0] // 2 % 3 * 1.5 - 1 / 2 + 2 ** 2\n"
+        "record(d, force=50)\n"
+    )
+    calls = []
+    run(source, {"record": lambda *args, **kwargs: calls.append((args, kwargs))})
+    assert calls == [((5.0,), {"force": 50})]
 
 # --- ejecución sin builtins ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "source", ["open('/etc/passwd')", "globals()", "abs(-1)", "print(1)", "eval('1')"]
+    "source", ["open('/etc/passwd')", "globals()", "abs(-1)", "print(1)", "eval('1')",
+        "getattr(1, 'real')", "type(1)", "exec('x = 1')", "compile('1', '', 'eval')",
+        "vars()", "dir()",]
 )
 def test_builtins_do_not_exist(source):
     with pytest.raises(NameError):
@@ -101,3 +140,13 @@ def test_the_previous_trace_function_is_restored():
     with pytest.raises(ZeroDivisionError):
         run("x = 1 / 0")
     assert sys.gettrace() is before
+
+
+@pytest.mark.slow
+def test_the_time_limit_works_with_the_real_clock():
+    behavior = compile_behavior("x = 1\n" * 100_000)
+    started = time.perf_counter()
+    with pytest.raises(BehaviorTimeout):
+        run_behavior(behavior, {}, time_limit=0.005)
+    # Se corta cerca del límite, no al terminar el código.
+    assert time.perf_counter() - started < 0.1

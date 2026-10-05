@@ -1,13 +1,21 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, String
+from sqlalchemy import (
+    CheckConstraint, 
+    DateTime, 
+    Enum, 
+    ForeignKey, 
+    Integer, 
+    func, 
+    String,
+    BigInteger,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.match import MatchStatus
 from app.models.league import League
 from app.models.user import User
 from app.database import Base
-
 
 class Match(Base):
     """Un partido, de liga o amistoso.
@@ -98,3 +106,4 @@ class Match(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

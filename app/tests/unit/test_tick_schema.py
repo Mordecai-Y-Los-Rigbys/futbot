@@ -10,7 +10,7 @@ from app.simulation.match_rules import Event, Phase, TickResult
 from app.simulation.physics import create_initial_state
 from app.simulation.simulate import simulate_match
 from app.simulation.state import Team
-from app.tests.unit.simulation_fakes import make_team
+from app.simulation.run import default_team as make_team
 from app.tests.unit.tick_schema import TickPayload
 
 CTX = TickContext(club_1="Club Uno", club_2="Club Dos", countdown_seconds=1)

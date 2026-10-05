@@ -23,13 +23,12 @@ class CreateSessionData(BaseModel):
 class AbstractSessionRepository(ABC):
     @abstractmethod
     def create(self, session: CreateSessionData) -> SessionData:
-        pass
+        """Crea una sesión"""
 
     @abstractmethod
     def get_by_id(self, session_id: str) -> SessionData | None:
-        pass
+        """Obtiene una sesión por id"""
 
     @abstractmethod
     def delete(self, session_id: str) -> None:
         """Elimina la sesión. No falla si no existe."""
-        pass

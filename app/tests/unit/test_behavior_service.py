@@ -5,7 +5,7 @@ import pytest
 from app.errors import ApiError
 from app.repositories.behavior_abstract import AbstractBehaviorRepository, BehaviorData, CreateBehaviorData
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
-from app.services.default_behaviors import DEFAULT_BEHAVIORS
+from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 
 @pytest.fixture
 def repo():

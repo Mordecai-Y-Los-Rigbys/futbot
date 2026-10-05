@@ -4,12 +4,14 @@ from app.errors import ApiError
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
-    CreateLeagueMemberData,   # <- falta en tu import; sin esto create_league falla con NameError
+    CreateLeagueMemberData,
     LeagueListItemData,
 )
-from app.repositories.team_abstract import AbstractTeamRepository
+from app.repositories.behavior_abstract import AbstractBehaviorRepository
+from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.league import LeagueCreator, LeaguePage, LeagueSummary
 from app.services.league_validation import parse_create_league
+from app.services.team_ownership import ensure_owned_team
 
 PAGE_SIZE = 50
 
@@ -32,9 +34,15 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
 
 
 class LeagueService:
-    def __init__(self, repo: AbstractLeagueRepository, teams: AbstractTeamRepository):
+    def __init__(
+        self,
+        repo: AbstractLeagueRepository,
+        players: AbstractPlayerRepository,
+        behaviors: AbstractBehaviorRepository,
+    ):
         self.repo = repo
-        self.teams = teams
+        self.players = players
+        self.behaviors = behaviors
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
         data = self.repo.list_page(
@@ -53,13 +61,7 @@ class LeagueService:
         data = parse_create_league(body)  # todos los 400, en orden
 
         # 409: solo si no falló ningún 400
-        player_ids = [m.player_id for m in data.members]
-        behavior_ids = list({m.behavior_id for m in data.members})
-        if (
-            self.teams.owned_player_ids(creator_id, player_ids) != set(player_ids)
-            or self.teams.owned_behavior_ids(creator_id, behavior_ids) != set(behavior_ids)
-        ):
-            raise ApiError(409, "playerOrBehaviorNotOwned", "Algún jugador o behavior no pertenece al usuario.")
+        ensure_owned_team(self.players, self.behaviors, creator_id, data.members)
 
         created = self.repo.create(
             CreateLeagueData(

@@ -87,11 +87,15 @@ class MatchRunner:
         try:
             setup = await run_in_threadpool(self._load_setup, match_id)
             # La semilla se genera al iniciar y entra al estado inicial del motor.
+            seed = self._seed_factory()
+            # Se loguea antes de guardarla: si falla la base, igual queda en el log.
+            logger.info("Partido %s arranca con seed=%s", match_id, seed)
+            await self._persist_seed(match_id, seed)
             session = build_session(
                 setup.team_1,
                 setup.team_2,
                 setup.duration_seconds,
-                self._seed_factory(),
+                seed,
                 setup.countdown_seconds,
             )
             context = TickContext(
@@ -103,9 +107,21 @@ class MatchRunner:
         except asyncio.CancelledError:
             raise
         except Exception:
-            # El partido queda en `started` (la recuperación es de los checkpoints).
+            # El partido queda en `scheduled` (la recuperación es de los checkpoints).
             logger.exception("Falló el partido %s", match_id)
             await self._manager.close_match(match_id, ERROR_CODE, ERROR_REASON)
+
+    async def _persist_seed(self, match_id: int, seed: int) -> None:
+        """Guardar la semilla es para poder investigar el partido después: si
+        falla, el partido se juega igual (la semilla ya quedó en el log)."""
+        try:
+            await run_in_threadpool(self._save_seed, match_id, seed)
+        except Exception:
+            logger.exception("No se pudo guardar la seed del partido %s", match_id)
+
+    def _save_seed(self, match_id: int, seed: int) -> None:
+        with self._repo_scope() as repo:
+            repo.save_seed(match_id, seed)
 
     async def _play(self, match_id: int, session: MatchSession, context: TickContext) -> None:
         loop = asyncio.get_running_loop()

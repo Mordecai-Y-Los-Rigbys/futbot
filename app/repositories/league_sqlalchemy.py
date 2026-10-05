@@ -109,7 +109,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
                     user_id=data.creator_id,
                     player_id=m.player_id,
                     behavior_id=m.behavior_id,
-                    role=MemberRole(m.role),
+                    role=m.role,
                 )
                 for m in data.members
             )

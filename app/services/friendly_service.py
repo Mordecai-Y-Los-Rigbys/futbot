@@ -1,7 +1,7 @@
 from typing import Any
-import re
 
 from app.errors import ApiError
+from app.helpers.ids import parse_path_id
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
@@ -9,8 +9,11 @@ from app.repositories.friendly_abstract import (
     FriendlyMatchData,
     JoinFriendlyData,
 )
+from app.repositories.behavior_abstract import AbstractBehaviorRepository
+from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.friendly import MatchClub, MatchPage, MatchResponse
 from app.services.friendly_validation import parse_create_friendly, parse_join_friendly
+from app.services.team_ownership import ensure_owned_team
 
 PAGE_SIZE = 50
        
@@ -33,26 +36,21 @@ def _to_response(m: FriendlyMatchData) -> MatchResponse:
     )
 
 
-MAX_ID = 2147483647
-_ID_RE = re.compile(r"[0-9]{1,10}")
-
-
 def _not_found() -> ApiError:
     return ApiError(404, None, "Partido amistoso no encontrado.")
 
 
-def _parse_match_id(raw: str) -> int:
-    """Un id de ruta que no es entero o está fuera de rango es un 404."""
-    if _ID_RE.fullmatch(raw):
-        value = int(raw)
-        if 1 <= value <= MAX_ID:
-            return value
-    raise _not_found()
-
 
 class FriendlyService:
-    def __init__(self, repo: AbstractFriendlyRepository):
+    def __init__(
+        self,
+        repo: AbstractFriendlyRepository,
+        players: AbstractPlayerRepository,
+        behaviors: AbstractBehaviorRepository,
+    ):
         self.repo = repo
+        self.players = players
+        self.behaviors = behaviors
 
     def create_friendly(self, creator_id: int, body: Any) -> MatchResponse:
         data = parse_create_friendly(body)  # todos los 400, en orden
@@ -61,17 +59,7 @@ class FriendlyService:
         if self.repo.user_is_playing(creator_id):
             raise ApiError(409, "alreadyPlaying", "Ya estás jugando otro partido.")
 
-        player_ids = [m.player_id for m in data.members]
-        behavior_ids = list({m.behavior_id for m in data.members})
-        if (
-            self.repo.owned_player_ids(creator_id, player_ids) != set(player_ids)
-            or self.repo.owned_behavior_ids(creator_id, behavior_ids) != set(behavior_ids)
-        ):
-            raise ApiError(
-                409,
-                "playerOrBehaviorNotOwned",
-                "Uno o más jugadores o comportamientos no te pertenecen.",
-            )
+        ensure_owned_team(self.players, self.behaviors, creator_id, data.members)
 
         created = self.repo.create_with_team(
             CreateFriendlyData(
@@ -102,7 +90,7 @@ class FriendlyService:
         )
         
     def join_friendly(self, user_id: int, raw_match_id: str, body: Any) -> MatchResponse:
-        match_id = _parse_match_id(raw_match_id)  # 404
+        match_id = parse_path_id(raw_match_id, "Partido amistoso no encontrado.") # 404
         state = self.repo.get_friendly_state(match_id)
         if state is None:
             raise _not_found()
@@ -116,17 +104,7 @@ class FriendlyService:
         if self.repo.user_is_playing(user_id):
             raise ApiError(409, "alreadyPlaying", "Ya estás jugando otro partido.")
 
-        player_ids = [m.player_id for m in data.members]
-        behavior_ids = list({m.behavior_id for m in data.members})
-        if (
-            self.repo.owned_player_ids(user_id, player_ids) != set(player_ids)
-            or self.repo.owned_behavior_ids(user_id, behavior_ids) != set(behavior_ids)
-        ):
-            raise ApiError(
-                409,
-                "playerOrBehaviorNotOwned",
-                "Uno o más jugadores o comportamientos no te pertenecen.",
-            )
+        ensure_owned_team(self.players, self.behaviors, user_id, data.members)
 
         joined = self.repo.join_friendly(
             JoinFriendlyData(

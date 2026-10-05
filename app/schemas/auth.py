@@ -12,7 +12,7 @@ class RegisterUserRequest(BaseModel):
     avatar: int = Field(strict=True, ge=1, le=5)
 
 
-class UserResponse(BaseModel):
+class User(BaseModel):
 
     id: int
     username: str

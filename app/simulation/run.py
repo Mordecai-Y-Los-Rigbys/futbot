@@ -5,23 +5,33 @@
 
 import argparse
 
+from app.domain.team_member import MemberRole
+from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 from app.simulation.behaviors.sandbox import compile_behavior
-from app.simulation.constants import STARTER_ROLES, CHASE_AND_SHOOT, COUNTDOWN_SECONDS
+from app.simulation.constants import COUNTDOWN_SECONDS, STARTER_ROLES
 from app.simulation.match_rules import Event, TeamSetup
 from app.simulation.physics import PlayerSetup
 from app.simulation.simulate import simulate_match
 from app.simulation.state import Stats
-from app.domain.team_member import MemberRole
+
+BEHAVIOR_NAME_BY_ROLE = {
+    MemberRole.forward: "Delantero",
+    MemberRole.midfield: "Mediocampista",
+    MemberRole.defense: "Defensor",
+}
 
 
-def default_team(first_id: int) -> TeamSetup:
-    behavior = compile_behavior(CHASE_AND_SHOOT)
+def default_team(first_id: int = 0) -> TeamSetup:
+    code_by_name = {b["name"]: b["code"] for b in DEFAULT_BEHAVIORS}
     stats = Stats(power=60, agility=60, control=60, strength=60, speed=60)
-    return TeamSetup(
-        players=[PlayerSetup(first_id + r.number, r, stats) for r in STARTER_ROLES],
-        behaviors={r: behavior for r in STARTER_ROLES},
-    )
 
+    return TeamSetup(
+        players=[PlayerSetup(first_id + role.number, role, stats) for role in STARTER_ROLES],
+        behaviors={
+            role: compile_behavior(code_by_name[BEHAVIOR_NAME_BY_ROLE[role]])
+            for role in STARTER_ROLES
+        },
+    )
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simula un partido de Futbot")
@@ -31,7 +41,7 @@ def main() -> None:
     args = parser.parse_args()
 
     result = simulate_match(
-        default_team(0), default_team(10), args.duration, args.seed, args.countdown
+        default_team(0, ), default_team(10, ), args.duration, args.seed, args.countdown
     )
     for t in result.ticks:
         if t.event is Event.GOAL:

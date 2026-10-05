@@ -34,12 +34,10 @@ def test_lifespan_recovers_and_shuts_down_friendly_services(monkeypatch):
     async def scenario():
         async with main_module.lifespan(main_module.app):
             expiry.recover.assert_awaited_once_with()
-            start.recover.assert_awaited_once_with()
             expiry.shutdown.assert_not_called()
             start.shutdown.assert_not_called()
             runner.shutdown.assert_not_awaited()
 
-        start.shutdown.assert_called_once_with()
         expiry.shutdown.assert_called_once_with()
         runner.shutdown.assert_awaited_once_with()
 

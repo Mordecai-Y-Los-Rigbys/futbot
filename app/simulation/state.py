@@ -8,7 +8,7 @@ from app.simulation.constants import (
     NOT_PROTECTED
 )
 from app.simulation.geometry import ZERO, Vec
-from app.domain.team_member import MemberRole, _ROLE_NUMBERS
+from app.domain.team_member import MemberRole
 
 class Team(str, enum.Enum):
     HOME = "home"  # club1: ataca hacia x = FIELD_LENGTH

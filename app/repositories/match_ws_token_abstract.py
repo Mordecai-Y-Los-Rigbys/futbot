@@ -16,4 +16,4 @@ class MatchWsTokenData(BaseModel):
 class AbstractMatchWsTokenRepository(ABC):
     @abstractmethod
     def get_by_token(self, token: str) -> MatchWsTokenData | None:
-        pass
+        """Obtiene un match por token"""

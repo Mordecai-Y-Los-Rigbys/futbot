@@ -33,6 +33,9 @@ class FakePlayerRepository(AbstractPlayerRepository):
         paginated = filtered[offset : offset + limit]
         
         return paginated, total
+    
+    def owned_player_ids(self, user_id, ids):
+        return {p.id for p in self.players if p.user_id == user_id and p.id in ids}
 
 
 def test_get_my_players_returns_user_players():

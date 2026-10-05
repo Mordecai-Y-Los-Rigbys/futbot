@@ -20,7 +20,6 @@ class AbstractMatchRepository(ABC):
     @abstractmethod
     def get_state(self, match_id: int) -> MatchStateData | None:
         """Devuelve el estado mínimo del partido, o None si no existe."""
-        pass
     
     @abstractmethod
     def get_setup_data(self, match_id: int) -> MatchSetupData | None:
@@ -33,3 +32,8 @@ class AbstractMatchRepository(ABC):
     @abstractmethod
     def finish(self, match_id: int, score_1: int, score_2: int) -> None:
         """Guarda el resultado y pasa el partido a finished."""
+    
+    # match_abstract.py
+    @abstractmethod
+    def save_seed(self, match_id: int, seed: int) -> None:
+        """Guarda la semilla con la que se juega el partido (para reproducirlo)."""

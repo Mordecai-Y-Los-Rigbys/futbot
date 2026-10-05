@@ -53,15 +53,6 @@ class AbstractFriendlyRepository(ABC):
     def user_is_playing(self, user_id: int) -> bool:
         """True si el usuario participa de un partido `started`, o de un
         amistoso `scheduled` (esperando rival o por arrancar)."""
-
-    @abstractmethod
-    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        """Subconjunto de `ids` que son jugadores del usuario."""
-
-    @abstractmethod
-    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        """Subconjunto de `ids` que son behaviors del usuario."""
-
     @abstractmethod
     def create_with_team(self, data: CreateFriendlyData) -> FriendlyMatchData:
         """Crea el partido `scheduled` y el equipo del creador en una única

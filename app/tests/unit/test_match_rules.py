@@ -10,9 +10,9 @@ from app.simulation.match_rules import Event, Phase, build_session
 from app.simulation.physics import create_initial_state
 from app.simulation.simulate import simulate_match
 from app.simulation.state import Goal, StepResult, Team
-from app.tests.unit.simulation_fakes import make_team
+from app.simulation.run import default_team as make_team
 
-CT = round(match_rules.COUNTDOWN_SECONDS * C.TICKS_PER_SECOND)
+CT = round(C.COUNTDOWN_SECONDS * C.TICKS_PER_SECOND)
 
 
 def test_duration_is_play_ticks_plus_countdown():

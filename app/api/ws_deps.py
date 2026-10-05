@@ -15,6 +15,7 @@ from app.services.friendly_start import FriendlyStartService
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup, MatchSetupService
 
+
 # Único registro de conexiones del proceso.
 _connection_manager = MatchConnectionManager()
 
@@ -56,7 +57,6 @@ _friendly_expiry = FriendlyExpiryService(
 def get_friendly_expiry() -> FriendlyExpiryService:
     return _friendly_expiry
 
-
 @contextmanager
 def _start_repo_scope():
     with SessionLocal() as db:
@@ -87,3 +87,4 @@ def get_match_runner() -> MatchRunner:
 
 def get_friendly_start() -> FriendlyStartService:
     return _friendly_start
+    

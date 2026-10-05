@@ -74,20 +74,6 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
         )
         return self.db.scalar(stmt) is not None
 
-    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        rows = self.db.scalars(
-            select(Player.id).where(Player.user_id == user_id, Player.id.in_(ids))
-        )
-        return set(rows)
-
-    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        rows = self.db.scalars(
-            select(Behavior.id).where(
-                Behavior.user_id == user_id, Behavior.id.in_(ids)
-            )
-        )
-        return set(rows)
-
     def create_with_team(self, data: CreateFriendlyData) -> FriendlyMatchData:
         match = Match(
             user_1_id=data.creator_id,

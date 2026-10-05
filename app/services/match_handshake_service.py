@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-# app/services/match_handshake_service.py
 from app.domain.match import MatchStatus
 from app.errors import ApiError
 from app.repositories.match_abstract import AbstractMatchRepository

@@ -8,7 +8,7 @@ import ast
 
 import pytest
 
-from app.services.default_behaviors import DEFAULT_BEHAVIORS
+from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 
 PRIMITIVES = {
     "move_in_direction", "go_to", "kick", "kick_to",
@@ -26,6 +26,7 @@ FORBIDDEN = (
     ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
     ast.Lambda, ast.For, ast.AsyncFor, ast.While, ast.ListComp, ast.SetComp,
     ast.DictComp, ast.GeneratorExp, ast.Attribute,
+    ast.Try, ast.TryStar,
 )
 MAX_LINES = 250
 

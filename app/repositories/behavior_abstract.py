@@ -34,3 +34,7 @@ class AbstractBehaviorRepository(ABC):
         self, user_id: int, behaviors: list[CreateBehaviorData]
     ) -> list[BehaviorData]:
         """Crea los behaviors para el usuario. No confirma la transacción."""
+    
+    @abstractmethod
+    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        """Subconjunto de `ids` que son behaviors del usuario."""

@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from typing import Any
 
+from app.helpers.ids import MAX_ID
 from app.services.league_validation import (
     INVALID_JSON,
-    MAX_INT,
     MAX_NAME_LEN,
     MEMBER_KEYS,
     MemberInput,
@@ -37,7 +37,7 @@ def _check_types(body: dict) -> None:
                 fail("Cada elemento de `members` debe ser un objeto.")
             for f in ("playerId", "behaviorId"):
                 if f in m and not _is_id(m[f]):
-                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_INT}.")
+                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_ID}.")
             if "role" in m and not isinstance(m["role"], str):
                 fail("`role` debe ser un string.")
 
@@ -93,7 +93,7 @@ def _check_members_types(body: dict) -> None:
                 fail("Cada elemento de `members` debe ser un objeto.")
             for f in ("playerId", "behaviorId"):
                 if f in m and not _is_id(m[f]):
-                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_INT}.")
+                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_ID}.")
             if "role" in m and not isinstance(m["role"], str):
                 fail("`role` debe ser un string.")
 

@@ -1,5 +1,6 @@
 import pytest
 
+from app.domain.team_member import MemberRole
 from app.models.match import Match
 from app.models.team_member import TeamMember
 from app.models.player import Player
@@ -8,7 +9,13 @@ from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 
 pytestmark = pytest.mark.integration
 
-ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
+ROLES = [
+    MemberRole.forward, 
+    MemberRole.midfield, 
+    MemberRole.defense, 
+    MemberRole.substitute, 
+    MemberRole.substitute, 
+    MemberRole.substitute]
 
 
 def test_failure_while_saving_the_team_leaves_no_match(db_session, make_user, make_behaviors):

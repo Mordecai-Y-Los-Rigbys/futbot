@@ -65,3 +65,8 @@ class SqlAlchemyPlayerRepository(AbstractPlayerRepository):
             result.append(data)
     
         return result, total
+    
+    def owned_player_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        return set(self.db.scalars(
+            select(Player.id).where(Player.user_id == user_id, Player.id.in_(ids))
+        ))
