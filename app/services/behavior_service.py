@@ -2,7 +2,9 @@ from app.errors import ApiError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    CreateBehaviorData,
 )
+from app.services.default_behaviors import DEFAULT_BEHAVIORS
 
 PAGE_SIZE = 50
 
@@ -31,3 +33,9 @@ class BehaviorService:
         if behavior.user_id != user_id:
             raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
         return behavior
+    
+    def create_default_behaviors(self, user_id: int) -> list[BehaviorData]:
+        """Crea para el usuario una copia propia de los behaviors iniciales."""
+        return self.repository.create_many(
+            user_id, [CreateBehaviorData(**b) for b in DEFAULT_BEHAVIORS]
+        )

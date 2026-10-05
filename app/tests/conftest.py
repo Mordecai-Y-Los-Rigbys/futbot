@@ -76,8 +76,11 @@ def make_user(db_session):
 @pytest.fixture()
 def client(db_session):
     def override_get_db():
-        yield db_session
-
+        try:
+            yield db_session
+        finally:
+            # Lo que la app no commiteó se descarta al terminar el request.
+            db_session.rollback()
     app.dependency_overrides[get_db] = override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -132,7 +135,7 @@ def auth_cookies(db_session):
         return {"session_id": session.id}
 
     return _make
-  
+
 @pytest.fixture
 def session_service(db_session):
     return SessionService(SqlAlchemySessionRepository(db_session))
