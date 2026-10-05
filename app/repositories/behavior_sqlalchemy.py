@@ -50,3 +50,8 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
         self.db.add_all(records)
         self.db.flush() 
         return [BehaviorData.model_validate(r) for r in records]
+    
+    def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
+        return set(self.db.scalars(
+            select(Behavior.id).where(Behavior.user_id == user_id, Behavior.id.in_(ids))
+        ))

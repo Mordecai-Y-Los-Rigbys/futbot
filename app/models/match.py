@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, func, String
+from sqlalchemy import (
+    CheckConstraint, 
+    DateTime, 
+    Enum, 
+    ForeignKey, 
+    Integer, 
+    func, 
+    String,
+    BigInteger,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.match import MatchStatus
@@ -97,3 +106,4 @@ class Match(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

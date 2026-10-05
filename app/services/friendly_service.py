@@ -9,8 +9,11 @@ from app.repositories.friendly_abstract import (
     FriendlyMatchData,
     JoinFriendlyData,
 )
+from app.repositories.behavior_abstract import AbstractBehaviorRepository
+from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.friendly import MatchClub, MatchPage, MatchResponse
 from app.services.friendly_validation import parse_create_friendly, parse_join_friendly
+from app.services.team_ownership import ensure_owned_team
 
 PAGE_SIZE = 50
        
@@ -39,8 +42,15 @@ def _not_found() -> ApiError:
 
 
 class FriendlyService:
-    def __init__(self, repo: AbstractFriendlyRepository):
+    def __init__(
+        self,
+        repo: AbstractFriendlyRepository,
+        players: AbstractPlayerRepository,
+        behaviors: AbstractBehaviorRepository,
+    ):
         self.repo = repo
+        self.players = players
+        self.behaviors = behaviors
 
     def create_friendly(self, creator_id: int, body: Any) -> MatchResponse:
         data = parse_create_friendly(body)  # todos los 400, en orden
@@ -49,17 +59,7 @@ class FriendlyService:
         if self.repo.user_is_playing(creator_id):
             raise ApiError(409, "alreadyPlaying", "Ya estás jugando otro partido.")
 
-        player_ids = [m.player_id for m in data.members]
-        behavior_ids = list({m.behavior_id for m in data.members})
-        if (
-            self.repo.owned_player_ids(creator_id, player_ids) != set(player_ids)
-            or self.repo.owned_behavior_ids(creator_id, behavior_ids) != set(behavior_ids)
-        ):
-            raise ApiError(
-                409,
-                "playerOrBehaviorNotOwned",
-                "Uno o más jugadores o comportamientos no te pertenecen.",
-            )
+        ensure_owned_team(self.players, self.behaviors, creator_id, data.members)
 
         created = self.repo.create_with_team(
             CreateFriendlyData(
@@ -104,17 +104,7 @@ class FriendlyService:
         if self.repo.user_is_playing(user_id):
             raise ApiError(409, "alreadyPlaying", "Ya estás jugando otro partido.")
 
-        player_ids = [m.player_id for m in data.members]
-        behavior_ids = list({m.behavior_id for m in data.members})
-        if (
-            self.repo.owned_player_ids(user_id, player_ids) != set(player_ids)
-            or self.repo.owned_behavior_ids(user_id, behavior_ids) != set(behavior_ids)
-        ):
-            raise ApiError(
-                409,
-                "playerOrBehaviorNotOwned",
-                "Uno o más jugadores o comportamientos no te pertenecen.",
-            )
+        ensure_owned_team(self.players, self.behaviors, user_id, data.members)
 
         joined = self.repo.join_friendly(
             JoinFriendlyData(

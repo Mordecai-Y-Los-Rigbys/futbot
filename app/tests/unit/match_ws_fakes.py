@@ -38,6 +38,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.setups: dict[int, MatchSetupData] = {}
         self.results: dict[int, tuple[int, int]] = {}
         self.history: list[str] = []
+        self.seeds: dict[int, int] = {}
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
         self.states[match_id] = MatchStateData(
@@ -63,3 +64,6 @@ class FakeMatchRepo(AbstractMatchRepository):
         # Algunos tests no llaman a add(): en ese caso solo se registra el historial.
         if match_id in self.states:
             self.states[match_id] = MatchStateData(id=match_id, status=status.value)
+    
+    def save_seed(self, match_id, seed):
+        self.seeds[match_id] = seed

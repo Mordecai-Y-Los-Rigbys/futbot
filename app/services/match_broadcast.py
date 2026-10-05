@@ -74,30 +74,34 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     }
 
 
-async def _send(websocket, text: str, timeout: float) -> None:
-    """Nunca lanza: un suscriptor caído o lento no puede frenar a los demás."""
+_closing: set[asyncio.Task] = set()   # referencia fuerte: si no, el GC puede matar la tarea
+
+async def _close(websocket, timeout: float) -> None:
     try:
-        await asyncio.wait_for(websocket.send_text(text), timeout)
-        return
-    except Exception:
-        pass
-    try:
-        # El endpoint recibe el disconnect y hace release() del cupo.
         await asyncio.wait_for(
             websocket.close(code=SLOW_CLIENT_CODE, reason=SLOW_CLIENT_REASON), timeout
         )
     except Exception:
         pass
 
+async def _send(manager, match_id, user_id, websocket, text, timeout) -> None:
+    """Nunca lanza: un suscriptor caído o lento no puede frenar a los demás."""
+    try:
+        await asyncio.wait_for(websocket.send_text(text), timeout)
+        return
+    except Exception:
+        pass
+    manager.evict(match_id, user_id, websocket)          # cupo libre al toque
+    task = asyncio.create_task(_close(websocket, timeout))  # sin esperar dentro del gather
+    _closing.add(task)
+    task.add_done_callback(_closing.discard)
 
-async def broadcast_tick(
-    manager: MatchConnectionManager,
-    match_id: int,
-    payload: dict,
-    timeout: float = SEND_TIMEOUT,
-) -> None:
-    subscribers = manager.subscribers(match_id)  # copia: puede cambiar mientras se envía
+
+async def broadcast_tick(manager, match_id, payload, timeout=SEND_TIMEOUT) -> None:
+    subscribers = manager.subscribers(match_id)
     if not subscribers:
         return
     text = json.dumps(payload, separators=(",", ":"))
-    await asyncio.gather(*(_send(ws, text, timeout) for ws, _user_id in subscribers))
+    await asyncio.gather(
+        *(_send(manager, match_id, uid, ws, text, timeout) for ws, uid in subscribers)
+    )

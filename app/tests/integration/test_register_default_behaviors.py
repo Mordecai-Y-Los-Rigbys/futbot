@@ -5,7 +5,7 @@ from app.models.user import User
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.session_service import SessionService
 from app.services.behavior_service import BehaviorService
-from app.services.default_behaviors import DEFAULT_BEHAVIORS
+from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 
 pytestmark = pytest.mark.integration
 

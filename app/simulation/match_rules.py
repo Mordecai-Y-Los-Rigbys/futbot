@@ -18,8 +18,7 @@ from app.simulation import constants as C
 from app.simulation.behaviors.primitives import MatchClock
 from app.simulation.behaviors.executor import run_behaviors
 from app.simulation.behaviors.sandbox import CompiledBehavior
-from app.simulation.constants import PERIODS, COUNTDOWN_SECONDS, FRIENDLY_MATCH_DURATION
-from app.simulation.physics import (  # ajustar al nombre real del módulo
+from app.simulation.physics import (
     PlayerSetup,
     create_initial_state,
     reset_positions,
@@ -75,8 +74,8 @@ class MatchSession:
         state: MatchState,
         behaviors: Mapping[PlayerKey, CompiledBehavior],
         duration_seconds: float,
-        countdown_seconds: float = COUNTDOWN_SECONDS,
-        periods: int = PERIODS,
+        countdown_seconds: float = C.COUNTDOWN_SECONDS,
+        periods: int = C.PERIODS,
     ) -> None:
         self._state = state
         self._behaviors = behaviors
@@ -127,14 +126,14 @@ class MatchSession:
             actions = run_behaviors(self._state, self._behaviors, clock)
             result = step(self._state, actions)
             self._state = result.state
-            for goal in result.events:
-                if isinstance(goal, Goal):
-                    if goal.scoring_team is Team.HOME:
+            for result_event in result.events:
+                if isinstance(result_event, Goal):
+                    if result_event.scoring_team is Team.HOME:
                         self._score_1 += 1
                     else:
                         self._score_2 += 1
                     event = Event.GOAL
-                    scorer = goal.scoring_team
+                    scorer = result_event.scoring_team
                     self._pending_reset = True
 
         phase = Phase.PLAYING
@@ -183,7 +182,7 @@ def build_session(
     team_2: TeamSetup,
     duration_seconds: float,
     seed: int,
-    countdown_seconds: float = COUNTDOWN_SECONDS,
+    countdown_seconds: float = C.COUNTDOWN_SECONDS,
 ) -> MatchSession:
     """Crea el estado inicial (la semilla entra acá) y la sesión del partido."""
     state = create_initial_state(team_1.players, team_2.players, seed)
