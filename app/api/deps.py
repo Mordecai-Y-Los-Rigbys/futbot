@@ -8,6 +8,7 @@ from app.database import get_db
 from app.errors import ApiError
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
