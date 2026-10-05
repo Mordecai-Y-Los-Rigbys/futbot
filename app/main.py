@@ -12,7 +12,7 @@ from app.api.leagues import router as leagues_router
 from app.api.players import router as players_router
 from app.api.ws_matches import router as ws_matches_router
 from app.api.friendlies import router as friendlies_router
-from app.api.ws_deps import get_friendly_expiry
+from app.api.ws_deps import get_friendly_expiry, get_friendly_start, get_match_runner
 from app.api.matches import router as matches_router
 from app.api.users import router as users_router
 
@@ -33,8 +33,12 @@ Base.metadata.create_all(bind=engine)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     expiry = get_friendly_expiry()
+    start = get_friendly_start()
     await expiry.recover()
+    await start.recover()
     yield
+    start.shutdown()
+    await get_match_runner().shutdown()
     expiry.shutdown()
 
 app = FastAPI(title="Futbot API", lifespan=lifespan)

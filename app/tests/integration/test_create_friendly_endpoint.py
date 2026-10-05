@@ -1,9 +1,11 @@
 import pytest
 
 from app.api.ws_deps import get_friendly_expiry
+from app.domain.match import MatchStatus
 from app.domain.team_member import MemberRole
 from app.main import app
-from app.models.match import Match, MatchStatus
+from app.models.match import Match
+from app.models.team_member import TeamMember
 from app.models.player import Player
 from app.models.team_member import TeamMember
 

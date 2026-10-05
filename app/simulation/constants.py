@@ -86,7 +86,7 @@ STARTER_ROLES = (MemberRole.defense, MemberRole.midfield, MemberRole.forward)
 # Estructura de períodos: hoy 1. Con 4 tiempos + pausas solo cambia esto y la
 # lógica de la pausa dentro de MatchSession.advance(); el reloj ya trabaja por período.
 PERIODS = 1
-COUNTDOWN_SECONDS = 10
+COUNTDOWN_SECONDS = 5
 FRIENDLY_MATCH_DURATION = 3  # minutos
 
 # Estructura de estado de jugador.
