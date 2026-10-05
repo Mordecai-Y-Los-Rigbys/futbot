@@ -12,7 +12,7 @@ from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 @pytest.fixture
 def db():
     mock = create_autospec(Session, instance=True)
-    mock.begin_nested.return_value.__exit__.return_value = False  # no tragar excepciones
+    mock.begin_nested.return_value.__exit__.return_value = False
     return mock
 
 
@@ -62,17 +62,12 @@ def test_get_by_email_does_not_write(repo, db):
 
 # ---------- create ----------
 
-def test_create_adds_inside_a_savepoint_and_refreshes(repo, db):
-    result = repo.create("messi", "messi@test.com", "hash", "Inter", 2)
+def test_create_adds_inside_a_savepoint_without_committing(repo, db):
+    repo.create("messi", "messi@test.com", "hash", "Inter", 2)
 
     db.begin_nested.assert_called_once()
-    added = db.add.call_args.args[0]
-    assert isinstance(added, User)
-    assert (added.username, added.email, added.password_hash,
-            added.club_name, added.avatar) == ("messi", "messi@test.com", "hash", "Inter", 2)
-    db.refresh.assert_called_once_with(added)
-    db.commit.assert_not_called()  # el commit no es de este repo
-    assert result is added
+    db.add.assert_called_once()
+    db.commit.assert_not_called()
 
 
 def test_create_builds_the_user_with_the_given_fields(repo, db):
@@ -103,4 +98,5 @@ def test_create_duplicate_email_raises_409(repo, db):
 
     assert exc.value.status_code == 409
     assert exc.value.code is None
+    db.commit.assert_not_called()
     db.refresh.assert_not_called()

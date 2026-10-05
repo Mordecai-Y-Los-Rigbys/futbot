@@ -32,11 +32,13 @@ class SqlAlchemyUserRepository(AbstractUserRepository):
             avatar=avatar,
         )
         try:
-            # SAVEPOINT: si el INSERT falla, solo se deshace este insert y no lo
-            # que la transacción ya tenía pendiente. El commit lo hace quien cierra
-            # el registro (SessionRepository.create).
+            # begin_nested se usa como Savepoint: el INSERT llega a la db
+            # y se chequea el email duplicado, pero no se commitea.
+            # El commit se hace en la creación de la sesión:
+            # usuario, behaviors y sesión se guardan juntos o no se guarda nada.
+            # Si el INSERT falla, solo se deshace el savepoint y la sesión sigue usable.
             with self.db.begin_nested():
-                self.db.add(new_user)  # el flush ocurre al salir del bloque
+                self.db.add(new_user)
         except IntegrityError:
             raise ApiError(
                 status_code=409,
