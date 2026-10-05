@@ -49,15 +49,12 @@ app.include_router(behaviors_router)
 app.include_router(leagues_router)
 app.include_router(ws_matches_router)
 app.include_router(friendlies_router)
-<<<<<<< HEAD
 app.include_router(matches_router)
+app.include_router(users_router)
 app.add_exception_handler(
     RequestValidationError, validation_exception_handler
 )
-=======
-app.include_router(users_router)
 
->>>>>>> 2ba13cdb9ae962882b460d9a5dc03a9cd6e64ca0
 
 # Task 0.2: Configuración de CORS
 origins = [

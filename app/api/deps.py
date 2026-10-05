@@ -87,10 +87,8 @@ def get_friendly_service(db: Session = Depends(get_db)) -> FriendlyService:
     return FriendlyService(SqlAlchemyFriendlyRepository(db))
 
 
-<<<<<<< HEAD
 def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
     return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
-=======
+    
 def get_user_service(db: Session = Depends(get_db)) -> UserService:
     return UserService(SqlAlchemyUserRepository(db))
->>>>>>> 2ba13cdb9ae962882b460d9a5dc03a9cd6e64ca0
