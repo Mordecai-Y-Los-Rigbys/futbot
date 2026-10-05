@@ -15,8 +15,15 @@ pytestmark = pytest.mark.integration
 
 ISO_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 ITEM_FIELDS = {
-    "id", "leagueId", "name", "status", "club1", "club2",
-    "scheduledAt", "createdAt", "result",
+    "id",
+    "leagueId",
+    "name",
+    "status",
+    "club1",
+    "club2",
+    "scheduledAt",
+    "createdAt",
+    "result",
 }
 ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
 
@@ -85,7 +92,8 @@ def names(resp):
     return {i["name"] for i in resp.json()["items"]}
 
 
-# --- contrato ---
+# --- contrato -----------------------------------------------------------------
+
 
 def test_contract_with_a_friendly(api, creator, make_friendly):
     make_friendly(creator, "Partido amistoso 1")
@@ -130,7 +138,8 @@ def test_unknown_params_are_ignored(api, creator, make_friendly):
     assert len(body["items"]) == 1
 
 
-# --- qué se lista y qué no ---
+# --- qué se lista y qué no ----------------------------------------------------
+
 
 def test_own_friendlies_are_not_listed(login_as, creator, make_friendly):
     make_friendly(creator, "Mio")
@@ -158,9 +167,7 @@ def test_started_match_is_not_listed(api, creator, rival, make_friendly):
 
 
 def test_finished_match_is_not_listed(api, creator, rival, make_friendly):
-    make_friendly(
-        creator, user_2_id=rival.id, status=MatchStatus.finished, score_1=2, score_2=1
-    )
+    make_friendly(creator, user_2_id=rival.id, status=MatchStatus.finished, score_1=2, score_2=1)
     assert api.get("/friendlies").json()["items"] == []
 
 
@@ -172,7 +179,10 @@ def test_cancelled_match_is_not_listed(api, creator, make_friendly):
 def test_league_matches_are_not_listed(api, creator, rival, make_league, make_friendly):
     league = make_league(creator, "Liga")
     make_friendly(
-        creator, None, league_id=league.id, user_2_id=rival.id,
+        creator,
+        None,
+        league_id=league.id,
+        user_2_id=rival.id,
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
     body = api.get("/friendlies").json()
@@ -188,7 +198,10 @@ def test_only_the_waiting_friendly_survives_among_all_kinds(
     make_friendly(creator, "Cancelado", status=MatchStatus.cancelled)
     league = make_league(creator, "Liga")
     make_friendly(
-        creator, None, league_id=league.id, user_2_id=rival.id,
+        creator,
+        None,
+        league_id=league.id,
+        user_2_id=rival.id,
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
     resp = api.get("/friendlies")
@@ -213,7 +226,8 @@ def test_friendly_disappears_when_cancelled_by_expiry(api, db_session, creator, 
     assert body["items"] == [] and body["total"] == 0
 
 
-# --- ciclo completo con POST /friendlies ---
+# --- ciclo completo con POST /friendlies --------------------------------------
+
 
 def test_friendly_created_with_post_is_listed_for_others_only(
     login_as, create_user, make_behaviors, db_session, expiry
@@ -221,8 +235,15 @@ def test_friendly_created_with_post_is_listed_for_others_only(
     creator = create_user("poster")
     viewer = create_user("watcher")
     players = [
-        Player(user_id=creator.id, name=f"J{i}", power=60, agility=60,
-               control=60, strength=60, speed=60)
+        Player(
+            user_id=creator.id,
+            name=f"J{i}",
+            power=60,
+            agility=60,
+            control=60,
+            strength=60,
+            speed=60,
+        )
         for i in range(6)
     ]
     db_session.add_all(players)
@@ -248,7 +269,8 @@ def test_friendly_created_with_post_is_listed_for_others_only(
     assert viewer_api.get("/friendlies").json()["items"] == []
 
 
-# --- orden y paginación ---
+# --- orden y paginación -------------------------------------------------------
+
 
 def test_items_are_ordered_by_id_ascending(api, creator, make_friendlies_bulk):
     created = make_friendlies_bulk(creator, [f"Amistoso {i}" for i in range(10)])
@@ -284,7 +306,8 @@ def test_page_upper_limit_is_valid_and_empty(api, creator, make_friendly):
     assert resp.json()["items"] == [] and resp.json()["total"] == 1
 
 
-# --- total ---
+# --- total --------------------------------------------------------------------
+
 
 def names_of(body):
     return {i["name"] for i in body["items"]}
@@ -299,9 +322,7 @@ def test_total_excludes_own_matches(login_as, create_user, creator, make_friendl
     assert body["total"] == 2 and names_of(body) == {"Ajeno 1", "Ajeno 2"}
 
 
-def test_total_respects_name_filter_and_excludes_own(
-    login_as, create_user, creator, make_friendly
-):
+def test_total_respects_name_filter_and_excludes_own(login_as, create_user, creator, make_friendly):
     viewer = create_user("viewer3")
     for n in ("Alfa 1", "Alfa 2", "Beta"):
         make_friendly(creator, n)
@@ -311,7 +332,8 @@ def test_total_respects_name_filter_and_excludes_own(
     assert api.get("/friendlies").json()["total"] == 3
 
 
-# --- filtro por nombre ---
+# --- filtro por nombre --------------------------------------------------------
+
 
 @pytest.fixture()
 def named(creator, make_friendly):
@@ -378,7 +400,8 @@ def test_matches_without_name_are_not_matched_by_a_filter(api, creator, make_fri
     assert api.get("/friendlies").json()["items"][0]["name"] is None
 
 
-# --- autenticación (sesiones reales) ---
+# --- autenticación (sesiones reales) ------------------------------------------
+
 
 def test_no_cookie_returns_401(client):
     resp = client.get("/friendlies")
@@ -410,7 +433,8 @@ def test_401_has_priority_over_400(client, query):
     assert resp.status_code == 401 and resp.json()["code"] is None
 
 
-# --- validación de page ---
+# --- validación de page -------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "query, code",
@@ -431,7 +455,8 @@ def test_invalid_page_returns_400_never_422(api, query, code):
     ListPageBadRequest.model_validate(resp.json())
 
 
-# --- solo lectura y sin N+1 ---
+# --- solo lectura y sin N+1 ---------------------------------------------------
+
 
 def test_endpoint_is_read_only(api, creator, make_friendly, db_session):
     make_friendly(creator, "Amistoso")

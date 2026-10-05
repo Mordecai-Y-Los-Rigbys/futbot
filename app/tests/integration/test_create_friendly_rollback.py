@@ -10,19 +10,21 @@ from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 pytestmark = pytest.mark.integration
 
 ROLES = [
-    MemberRole.forward, 
-    MemberRole.midfield, 
-    MemberRole.defense, 
-    MemberRole.substitute, 
-    MemberRole.substitute, 
-    MemberRole.substitute]
+    MemberRole.forward,
+    MemberRole.midfield,
+    MemberRole.defense,
+    MemberRole.substitute,
+    MemberRole.substitute,
+    MemberRole.substitute,
+]
 
 
 def test_failure_while_saving_the_team_leaves_no_match(db_session, make_user, make_behaviors):
     user = make_user(1)
     players = [
-        Player(user_id=user.id, name=f"J{i}", power=60, agility=60,
-               control=60, strength=60, speed=60)
+        Player(
+            user_id=user.id, name=f"J{i}", power=60, agility=60, control=60, strength=60, speed=60
+        )
         for i in range(6)
     ]
     db_session.add_all(players)

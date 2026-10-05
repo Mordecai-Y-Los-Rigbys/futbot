@@ -16,8 +16,10 @@ from app.schemas.friendly import MatchPage
 from app.services.friendly_service import PAGE_SIZE, FriendlyService
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
 
+
 def svc(repo):
     return FriendlyService(repo, FakePlayers(), FakeBehaviors())
+
 
 NOW = datetime(2026, 10, 3, 18, 0, tzinfo=timezone.utc)
 USER_ID = 7  # el usuario de la sesión "valid-session" del conftest
@@ -53,7 +55,8 @@ def auth_friendlies_api(friendlies_api):
     return friendlies_api
 
 
-# --- servicio -------------------------------------------------------------------------
+# --- servicio -----------------------------------------------------------------
+
 
 def test_service_builds_the_match_page(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(
@@ -76,9 +79,7 @@ def test_service_items_follow_the_match_schema(repo):
 
 
 def test_service_accepts_a_match_without_name(repo):
-    repo.list_waiting_page.return_value = FriendlyPageData(
-        items=[match_data(name=None)], total=1
-    )
+    repo.list_waiting_page.return_value = FriendlyPageData(items=[match_data(name=None)], total=1)
     out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     assert out.items[0].name is None
 
@@ -108,7 +109,8 @@ def test_service_page_beyond_last_keeps_the_real_total(repo):
     assert out.items == [] and out.total == 120 and out.page == 4
 
 
-# --- endpoint: éxito --------------------------------------------------------------------
+# --- endpoint: éxito ----------------------------------------------------------
+
 
 def test_endpoint_success_full_structure(auth_friendlies_api, repo):
     repo.list_waiting_page.return_value = FriendlyPageData(items=[match_data()], total=1)
@@ -152,7 +154,8 @@ def test_endpoint_ignores_page_size_param(auth_friendlies_api, repo):
     assert repo.list_waiting_page.call_args.kwargs["limit"] == 50
 
 
-# --- endpoint: paginación -----------------------------------------------------------------
+# --- endpoint: paginación -----------------------------------------------------
+
 
 @pytest.mark.parametrize("page, offset", [(1, 0), (2, 50), (3, 100)])
 def test_endpoint_pagination_offset_and_page(auth_friendlies_api, repo, page, offset):
@@ -179,7 +182,8 @@ def test_endpoint_upper_limit_page_is_valid(auth_friendlies_api):
     assert resp.status_code == 200 and resp.json()["items"] == []
 
 
-# --- endpoint: filtro por nombre ---------------------------------------------------------------
+# --- endpoint: filtro por nombre ----------------------------------------------
+
 
 def test_endpoint_passes_name_to_the_repository(auth_friendlies_api, repo):
     auth_friendlies_api.get("/friendlies?name=boca")
@@ -201,7 +205,8 @@ def test_endpoint_name_is_never_validated(auth_friendlies_api, repo):
     assert resp.status_code == 200
 
 
-# --- endpoint: autenticación ---------------------------------------------------------------------
+# --- endpoint: autenticación --------------------------------------------------
+
 
 def test_no_cookie_returns_401_with_null_code(friendlies_api, repo):
     resp = friendlies_api.get("/friendlies")
@@ -226,7 +231,8 @@ def test_401_has_priority_over_invalid_page(friendlies_api, repo, query):
     repo.list_waiting_page.assert_not_called()
 
 
-# --- endpoint: page inválida ------------------------------------------------------------------------
+# --- endpoint: page inválida --------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "query, code",

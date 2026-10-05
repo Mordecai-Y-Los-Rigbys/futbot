@@ -2,6 +2,7 @@ import pytest
 from pathlib import Path
 from app.startup_checks import ensure_single_worker
 
+
 @pytest.mark.parametrize("value", ["2", "10"])
 def test_more_than_one_worker_aborts_startup(value):
     with pytest.raises(RuntimeError, match="1 worker"):
@@ -11,6 +12,7 @@ def test_more_than_one_worker_aborts_startup(value):
 @pytest.mark.parametrize("env", [{}, {"WEB_CONCURRENCY": "1"}, {"WEB_CONCURRENCY": "abc"}])
 def test_one_worker_or_unset_does_not_abort(env):
     ensure_single_worker(env)
+
 
 COMPOSE = Path(__file__).parents[3] / "docker-compose.yml"
 

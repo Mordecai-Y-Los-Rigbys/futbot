@@ -93,11 +93,14 @@ class FriendlyStartService:
             except Exception:
                 logger.exception(
                     "No se pudo arrancar el partido %s (intento %s/%s)",
-                    match_id, attempt, START_RETRIES,
+                    match_id,
+                    attempt,
+                    START_RETRIES,
                 )
                 if attempt < START_RETRIES:
                     await asyncio.sleep(START_RETRY_DELAY * attempt)
         logger.error(
             "Se agotaron los reintentos para arrancar el partido %s; "
-            "queda en cuenta regresiva hasta el próximo recover()", match_id,
+            "queda en cuenta regresiva hasta el próximo recover()",
+            match_id,
         )

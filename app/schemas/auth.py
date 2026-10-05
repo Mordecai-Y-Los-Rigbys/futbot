@@ -20,6 +20,7 @@ class User(BaseModel):
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+
 class RegisterUserFieldError(BaseModel):
 
     field: Literal["username", "email", "password", "clubName", "avatar"]
@@ -37,11 +38,13 @@ class ErrorResponse(BaseModel):
 
     code: str | None
     message: str
-    
+
+
 class LogInRequest(BaseModel):
-    
+
     email: EmailStr
     password: str = Field(min_length=1)
+
 
 class LogInBadRequest(BaseModel):
 

@@ -18,8 +18,13 @@ def users(make_user):
 def team(db_session, users, make_behaviors):
     """(player_id, behavior_id) del usuario 1."""
     player = Player(
-        user_id=users[0].id, name="Jugador",
-        power=60, agility=60, control=60, strength=60, speed=60,  # suma 300
+        user_id=users[0].id,
+        name="Jugador",
+        power=60,
+        agility=60,
+        control=60,
+        strength=60,
+        speed=60,  # suma 300
     )
     db_session.add(player)
     db_session.commit()
@@ -35,10 +40,15 @@ def new_match(db_session, **fields):
 
 
 def add_member(db_session, match_id, user_id, player_id, behavior_id, role=MemberRole.forward):
-    db_session.add(TeamMember(
-        match_id=match_id, user_id=user_id, player_id=player_id,
-        behavior_id=behavior_id, role=role,
-    ))
+    db_session.add(
+        TeamMember(
+            match_id=match_id,
+            user_id=user_id,
+            player_id=player_id,
+            behavior_id=behavior_id,
+            role=role,
+        )
+    )
     db_session.commit()
 
 
@@ -65,10 +75,15 @@ def test_deleting_the_match_deletes_its_team(db_session, users, team):
 def test_same_player_twice_in_the_same_match_is_rejected(db_session, users, team):
     match = new_match(db_session, user_1_id=users[0].id)
     add_member(db_session, match.id, users[0].id, *team)
-    db_session.add(TeamMember(
-        match_id=match.id, user_id=users[0].id, player_id=team[0],
-        behavior_id=team[1], role=MemberRole.defense,
-    ))
+    db_session.add(
+        TeamMember(
+            match_id=match.id,
+            user_id=users[0].id,
+            player_id=team[0],
+            behavior_id=team[1],
+            role=MemberRole.defense,
+        )
+    )
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()

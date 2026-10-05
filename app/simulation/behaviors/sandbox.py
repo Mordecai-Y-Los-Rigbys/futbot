@@ -2,8 +2,8 @@
 
 El aislamiento tiene dos partes:
 
-- Al compilar solo se aceptan las construcciones de ALLOWED_NODES y se rechazan los 
-  nombres que empiezan con `__`. Sin bucles, funciones ni try/except, el código no 
+- Al compilar solo se aceptan las construcciones de ALLOWED_NODES y se rechazan los
+  nombres que empiezan con `__`. Sin bucles, funciones ni try/except, el código no
   puede repetirse ni atrapar el corte por tiempo.
 
 - Al ejecutar, el código solo ve los nombres de las primitivas y constantes.
@@ -25,24 +25,54 @@ FORBIDDEN_NAME_PREFIX = "__"
 ALLOWED_NODES = (
     # expresiones
     # (por ejemplo, `go_to(x, y)` sin asignar) y `pass`.
-    ast.Module, ast.Expr, ast.Pass,
-    # Control de flujo: if / elif / else 
-    ast.If, ast.IfExp,
+    ast.Module,
+    ast.Expr,
+    ast.Pass,
+    # Control de flujo: if / elif / else
+    ast.If,
+    ast.IfExp,
     # Variables y asignaciones: leer (Load) y escribir (Store) nombres,
     # `x = ...` y `x += ...`.
-    ast.Name, ast.Load, ast.Store, ast.Assign, ast.AugAssign,
+    ast.Name,
+    ast.Load,
+    ast.Store,
+    ast.Assign,
+    ast.AugAssign,
     # Literales, tuplas y acceso por índice (p[0]).
-    ast.Constant, ast.Tuple, ast.Subscript,
+    ast.Constant,
+    ast.Tuple,
+    ast.Subscript,
     # Llamadas a primitivas, con argumentos por nombre: kick(force=50).
-    ast.Call, ast.keyword,
-    # Operadores aritméticos. 
-    ast.BinOp, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow,
+    ast.Call,
+    ast.keyword,
+    # Operadores aritméticos.
+    ast.BinOp,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.FloorDiv,
+    ast.Mod,
+    ast.Pow,
     # Operadores unarios: signo y negación lógica.
-    ast.UnaryOp, ast.UAdd, ast.USub, ast.Not,
+    ast.UnaryOp,
+    ast.UAdd,
+    ast.USub,
+    ast.Not,
     # Operadores lógicos: and / or.
-    ast.BoolOp, ast.And, ast.Or,
+    ast.BoolOp,
+    ast.And,
+    ast.Or,
     # Comparaciones.
-    ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Is, ast.IsNot,
+    ast.Compare,
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.Is,
+    ast.IsNot,
 )
 
 
@@ -56,7 +86,7 @@ class BehaviorTimeout(Exception):
 
 @dataclass(frozen=True)
 class CompiledBehavior:
-    
+
     code: CodeType
 
 
@@ -69,7 +99,7 @@ def compile_behavior(source: str) -> CompiledBehavior:
     for node in ast.walk(tree):
         if not isinstance(node, ALLOWED_NODES):
             raise BehaviorCompileError(f"nodo no permitido: {type(node).__name__}")
-        
+
         if isinstance(node, ast.Name) and node.id.startswith(FORBIDDEN_NAME_PREFIX):
             raise BehaviorCompileError(f"nombre no permitido: {node.id}")
 
@@ -82,8 +112,8 @@ def run_behavior(
     time_limit: float,
     timer: Callable[[], float] = time.perf_counter,
 ) -> None:
-    
-    namespace["__builtins__"] = {} # Sacamos los builtins de Python
+
+    namespace["__builtins__"] = {}  # Sacamos los builtins de Python
     deadline = timer() + time_limit
 
     def check_time(frame, event, arg):
@@ -91,10 +121,10 @@ def run_behavior(
             raise BehaviorTimeout(f"superó el límite de {time_limit} s")
         return check_time
 
-    previous = sys.gettrace()  
-    sys.settrace(check_time) # Antes de cada linea del comportamiento, ejecutamos el check_time
+    previous = sys.gettrace()
+    sys.settrace(check_time)  # Antes de cada linea del comportamiento, ejecutamos el check_time
     try:
         exec(behavior.code, namespace)
     finally:
         # Lo dejamos como estaba, para no seguir ejecutando en el resto del programa
-        sys.settrace(previous) 
+        sys.settrace(previous)

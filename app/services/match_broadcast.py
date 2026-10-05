@@ -61,8 +61,7 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     return {
         "type": "tick",
         "players": [
-            {"playerId": p.player_id, "position": _position(p.position)}
-            for p in state.players
+            {"playerId": p.player_id, "position": _position(p.position)} for p in state.players
         ],
         "ballPosition": _position(state.ball.position),
         "score1": result.score_1,
@@ -73,7 +72,8 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     }
 
 
-_closing: set[asyncio.Task] = set()   # referencia fuerte: si no, el GC puede matar la tarea
+_closing: set[asyncio.Task] = set()  # referencia fuerte: si no, el GC puede matar la tarea
+
 
 async def _close(websocket, timeout: float) -> None:
     try:
@@ -83,6 +83,7 @@ async def _close(websocket, timeout: float) -> None:
     except Exception:
         pass
 
+
 async def _send(manager, match_id, user_id, websocket, text, timeout) -> None:
     """Nunca lanza: un suscriptor caído o lento no puede frenar a los demás."""
     try:
@@ -90,7 +91,7 @@ async def _send(manager, match_id, user_id, websocket, text, timeout) -> None:
         return
     except Exception:
         pass
-    manager.evict(match_id, user_id, websocket)          # cupo libre al toque
+    manager.evict(match_id, user_id, websocket)  # cupo libre al toque
     task = asyncio.create_task(_close(websocket, timeout))  # sin esperar dentro del gather
     _closing.add(task)
     task.add_done_callback(_closing.discard)

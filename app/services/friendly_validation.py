@@ -68,9 +68,7 @@ def parse_create_friendly(body: Any) -> CreateFriendlyInput:
 
     return CreateFriendlyInput(
         name=body["name"],
-        members=[
-            MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]
-        ],
+        members=[MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]],
     )
 
 
@@ -117,7 +115,5 @@ def parse_join_friendly(body: Any) -> JoinFriendlyInput:
     _check_team(body["members"])
 
     return JoinFriendlyInput(
-        members=[
-            MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]
-        ]
+        members=[MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]]
     )

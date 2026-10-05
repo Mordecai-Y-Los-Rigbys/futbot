@@ -144,7 +144,5 @@ def parse_create_league(body: Any) -> CreateLeagueInput:
         match_duration=body["matchDuration"],
         private=private,
         password=body["password"] if private else None,
-        members=[
-            MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]
-        ],
+        members=[MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]],
     )

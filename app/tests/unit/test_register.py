@@ -184,10 +184,10 @@ def test_register_multiple_failures_are_all_reported(client):
     response = client.post(
         "/auth/register",
         json=body(
-            username="",             # required
+            username="",  # required
             email="no-es-un-email",  # invalidEmail
-            password="p" * 73,       # tooLong
-            avatar="3",              # invalidType (strict)
+            password="p" * 73,  # tooLong
+            avatar="3",  # invalidType (strict)
         ),
     )
 
@@ -210,9 +210,7 @@ def test_register_errors_list_is_never_empty(client, payload):
 
 
 def test_login_schema_accepts_300_char_password(client):
-    response = client.post(
-        "/auth/log-in", json={"email": "messi@test.com", "password": "a" * 300}
-    )
+    response = client.post("/auth/log-in", json={"email": "messi@test.com", "password": "a" * 300})
     assert response.status_code == 200
 
 

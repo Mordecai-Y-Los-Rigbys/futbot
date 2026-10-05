@@ -82,7 +82,9 @@ def test_last_movement_persists_without_a_new_action():
     s = step(state(player(x=20.0)), move(1, 0)).state
     x_after_first = s.player(KEY).position.x
     s, _ = run(s, 5)  # sin acciones
-    assert s.player(KEY).position.x == pytest.approx(x_after_first + 5 * player_speed(60) / TICKS_PER_SECOND)
+    assert s.player(KEY).position.x == pytest.approx(
+        x_after_first + 5 * player_speed(60) / TICKS_PER_SECOND
+    )
 
 
 def test_facing_follows_the_movement():

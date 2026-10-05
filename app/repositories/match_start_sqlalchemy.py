@@ -20,14 +20,10 @@ class SqlAlchemyMatchStartRepository(AbstractMatchStartRepository):
         )
 
     def is_ready_to_start(self, match_id: int) -> bool:
-        found = self.db.scalar(
-            select(Match.id).where(Match.id == match_id, self.ready_condition())
-        )
+        found = self.db.scalar(select(Match.id).where(Match.id == match_id, self.ready_condition()))
         return found is not None
 
     def list_pending_start(self) -> list[int]:
         return list(
-            self.db.scalars(
-                select(Match.id).where(self.ready_condition()).order_by(Match.id.asc())
-            )
+            self.db.scalars(select(Match.id).where(self.ready_condition()).order_by(Match.id.asc()))
         )

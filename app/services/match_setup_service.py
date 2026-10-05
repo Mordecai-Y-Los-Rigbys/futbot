@@ -28,6 +28,7 @@ class MatchSetup:
     club_1_name: str
     club_2_name: str
 
+
 class MatchSetupService:
     def __init__(
         self,
@@ -62,9 +63,7 @@ class MatchSetupService:
 
         minutes = self.leagues.get_match_duration_minutes(match.league_id)
         if minutes is None:
-            raise LookupError(
-                f"la liga {match.league_id} del partido {match.id} no existe"
-            )
+            raise LookupError(f"la liga {match.league_id} del partido {match.id} no existe")
         return minutes
 
     def _build_team(self, match: MatchSetupData, user_id: int) -> TeamSetup:

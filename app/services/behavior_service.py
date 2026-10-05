@@ -33,7 +33,7 @@ class BehaviorService:
         if behavior.user_id != user_id:
             raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
         return behavior
-    
+
     def create_default_behaviors(self, user_id: int) -> list[BehaviorData]:
         """Crea para el usuario una copia propia de los behaviors iniciales."""
         return self.repository.create_many(

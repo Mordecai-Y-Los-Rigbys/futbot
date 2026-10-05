@@ -33,6 +33,7 @@ def default_team(first_id: int = 0) -> TeamSetup:
         },
     )
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simula un partido de Futbot")
     parser.add_argument("--seed", type=int, default=1)

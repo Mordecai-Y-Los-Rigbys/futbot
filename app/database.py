@@ -15,6 +15,7 @@ Base = declarative_base()
 
 # Dependencia para inyectar la sesión en los endpoints
 
+
 def get_db():
     db = SessionLocal()
     try:

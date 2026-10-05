@@ -18,7 +18,7 @@ def kick(key, action):
     return {key: PlayerActions(kick=action)}
 
 
-# --- posesión -----------------------------------------------------------------------
+# --- posesión -----------------------------------------------------------------
 
 
 def test_player_within_reach_gets_the_ball():
@@ -107,7 +107,7 @@ def test_won_ball_moves_gradually_to_the_front_of_the_player():
     assert s.ball.position.y == pytest.approx(30.0)
 
 
-# --- patadas ------------------------------------------------------------------------
+# --- patadas ------------------------------------------------------------------
 
 
 def owned_ball(**stat_values):

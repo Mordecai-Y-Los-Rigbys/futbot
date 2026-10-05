@@ -16,8 +16,8 @@ from app.services.friendly_validation import parse_create_friendly, parse_join_f
 from app.services.team_ownership import ensure_owned_team
 
 PAGE_SIZE = 50
-       
-       
+
+
 def _to_response(m: FriendlyMatchData) -> MatchResponse:
     return MatchResponse(
         id=m.id,
@@ -38,7 +38,6 @@ def _to_response(m: FriendlyMatchData) -> MatchResponse:
 
 def _not_found() -> ApiError:
     return ApiError(404, None, "Partido amistoso no encontrado.")
-
 
 
 class FriendlyService:
@@ -88,9 +87,9 @@ class FriendlyService:
             page_size=PAGE_SIZE,
             total=data.total,
         )
-        
+
     def join_friendly(self, user_id: int, raw_match_id: str, body: Any) -> MatchResponse:
-        match_id = parse_path_id(raw_match_id, "Partido amistoso no encontrado.") # 404
+        match_id = parse_path_id(raw_match_id, "Partido amistoso no encontrado.")  # 404
         state = self.repo.get_friendly_state(match_id)
         if state is None:
             raise _not_found()
@@ -120,5 +119,4 @@ class FriendlyService:
         )
         if joined is None:  # la base decidió: otro llegó antes, o venció la espera
             raise ApiError(409, "notJoinable", "El partido ya no admite un rival.")
-        return _to_response(joined)    
-    
+        return _to_response(joined)

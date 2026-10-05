@@ -17,6 +17,7 @@ CT = round(C.COUNTDOWN_SECONDS * C.TICKS_PER_SECOND)
 WARMUP_TICKS = 5
 MEASURED_TICKS = 200
 
+
 def test_duration_is_play_ticks_plus_countdown():
     result = simulate_match(make_team(), make_team(first_id=10), 5, seed=1)
     assert len(result.ticks) == CT + 5 * C.TICKS_PER_SECOND
@@ -103,7 +104,7 @@ def test_identical_teams_play_mirrored_until_the_first_tiebreak():
 def test_ticks_take_less_than_100ms():
     session = build_session(make_team(), make_team(first_id=10), 15, seed=1, countdown_seconds=0)
 
-    for _ in range(WARMUP_TICKS):  
+    for _ in range(WARMUP_TICKS):
         session.advance()
 
     durations = []

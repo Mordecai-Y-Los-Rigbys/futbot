@@ -92,7 +92,8 @@ def stays_silent(ws, seconds=0.5) -> bool:
     return not received
 
 
-# --- handshake aceptado --------------------------------------------------------
+# --- handshake aceptado -------------------------------------------------------
+
 
 def test_valid_token_opens_the_connection(client, manager):
     with client.websocket_connect(url()):
@@ -104,7 +105,8 @@ def test_connection_is_registered_as_subscriber(client, manager):
         assert wait_until(lambda: len(manager.subscribers(1)) == 1)
 
 
-# --- handshake rechazado (HTTP antes del upgrade) --------------------------------
+# --- handshake rechazado (HTTP antes del upgrade) -----------------------------
+
 
 @pytest.mark.parametrize("token", [None, "", "no-existe", "x" * 100])
 def test_missing_or_invalid_token_is_401(client, manager, token):
@@ -143,7 +145,8 @@ def test_rejected_handshake_leaves_no_registration(client, manager):
     assert manager._reserved == {}
 
 
-# --- reconexión y conexiones múltiples ------------------------------------------------
+# --- reconexión y conexiones múltiples ----------------------------------------
+
 
 def test_same_token_can_reconnect_after_closing(client, manager):
     with client.websocket_connect(url()):
@@ -180,7 +183,8 @@ def test_limit_does_not_affect_other_users(client, tokens, manager):
             assert manager.count(1, 8) == 1
 
 
-# --- silencio y mensajes entrantes --------------------------------------------------------
+# --- silencio y mensajes entrantes --------------------------------------------
+
 
 def test_waiting_for_the_rival_the_client_stays_connected_and_receives_nothing(client, manager):
     with client.websocket_connect(url()) as ws:
@@ -199,7 +203,8 @@ def test_incoming_messages_are_ignored(client, manager, matches):
     assert matches.states == states_before
 
 
-# --- cierre y limpieza -----------------------------------------------------------------------------
+# --- cierre y limpieza --------------------------------------------------------
+
 
 def test_closing_the_connection_releases_the_subscription(client, manager):
     with client.websocket_connect(url()):
@@ -237,21 +242,21 @@ def test_match_stream_reaches_open_and_late_connections(client, manager):
             assert first.receive_json() == {"n": 2}
             assert late.receive_json() == {"n": 2}  # el 1 no se le reenvía
 
+
 def test_open_connection_survives_token_expiry(client, tokens, manager, monkeypatch):
     tokens.add("corto", user_id=7, match_id=1, expires_at=NOW + timedelta(minutes=1))
     with client.websocket_connect(url(token="corto")):
         assert wait_until(lambda: len(manager.subscribers(1)) == 1)
 
         # El reloj pasa el vencimiento: la conexión abierta no se corta.
-        monkeypatch.setattr(
-            match_handshake_service, "_utcnow", lambda: NOW + timedelta(minutes=2)
-        )
+        monkeypatch.setattr(match_handshake_service, "_utcnow", lambda: NOW + timedelta(minutes=2))
         assert manager.count(1, 7) == 1
         assert len(manager.subscribers(1)) == 1
 
         # Pero un handshake nuevo con ese token ya da 401.
         assert rejection(client, url(token="corto")) == (4401, "tokenExpired")
         assert manager.count(1, 7) == 1
+
 
 def test_cancelled_match_is_4409_match_cancelled(client, matches):
     matches.add(1, status=MatchStatus.cancelled)

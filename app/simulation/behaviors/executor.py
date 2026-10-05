@@ -31,7 +31,7 @@ def run_behaviors(
 ) -> dict[PlayerKey, PlayerActions]:
     """Ejecuta el comportamiento de cada jugador y devuelve sus acciones en
     coordenadas absolutas.
-    
+
     Cada equipo tiene `team_budget` segundos por tick para sus tres behaviors:
     cada jugador puede usar lo que sus compañeros anteriores no gastaron.
     """
@@ -41,30 +41,30 @@ def run_behaviors(
 
     constants = behavior_constants()
     actions: dict[PlayerKey, PlayerActions] = {}
-    
+
     for team in (Team.HOME, Team.AWAY):
         remaining = team_budget
         for player in state.players:
             if player.team is not team:
                 continue
-            
+
             if remaining <= 0:
                 # El equipo ya gastó su presupuesto en este tick: el jugador
                 # no se ejecuta y sigue con su último movimiento.
                 logger.warning(
-                    "Sin tiempo para el comportamiento de %s en el tick %s", 
-                    player.key, state.tick
+                    "Sin tiempo para el comportamiento de %s en el tick %s", player.key, state.tick
                 )
                 actions[player.key] = PlayerActions()
                 continue
-            
+
             started = timer()
             actions[player.key] = _run_player(
                 state, player.key, behaviors[player.key], clock, constants, remaining, timer
             )
             remaining -= timer() - started
-    
+
     return actions
+
 
 def _run_player(state, key, behavior, clock, constants, time_limit, timer) -> PlayerActions:
     recorder = ActionRecorder()

@@ -25,8 +25,15 @@ ROLES = [MemberRole.forward, MemberRole.midfield, MemberRole.defense] + [MemberR
 
 def make_players(db, user_id):
     players = [
-        Player(user_id=user_id, name=f"p{user_id}{i}", power=60, agility=60,
-               control=60, strength=60, speed=60)
+        Player(
+            user_id=user_id,
+            name=f"p{user_id}{i}",
+            power=60,
+            agility=60,
+            control=60,
+            strength=60,
+            speed=60,
+        )
         for i in range(6)
     ]
     db.add_all(players)
@@ -48,8 +55,15 @@ def add_team(db, user_id, behavior, **owner):
 @pytest.fixture()
 def league_match(db_session, make_user, make_behaviors):
     make_user(1), make_user(2)
-    league = League(name="L", creator_id=1, status=LeagueStatus.started, min_participants=3,
-                    max_participants=8, match_duration=2, private=False)
+    league = League(
+        name="L",
+        creator_id=1,
+        status=LeagueStatus.started,
+        min_participants=3,
+        max_participants=8,
+        match_duration=2,
+        private=False,
+    )
     db_session.add(league)
     db_session.flush()
     teams = {}
@@ -58,14 +72,19 @@ def league_match(db_session, make_user, make_behaviors):
         db_session.flush()
         behavior = make_behaviors(uid, ["b"], code="pass")[0]
         teams[uid] = add_team(db_session, uid, behavior, league_id=league.id)
-    match = Match(league_id=league.id, user_1_id=1, user_2_id=2,
-                  scheduled_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    match = Match(
+        league_id=league.id,
+        user_1_id=1,
+        user_2_id=2,
+        scheduled_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
     db_session.add(match)
     db_session.commit()
     return match, teams
 
 
-# -- SqlAlchemyTeamRepository.get_starters ---------------------------------
+# --- SqlAlchemyTeamRepository.get_starters ------------------------------------
+
 
 def test_league_match_returns_only_the_three_league_starters(db_session, league_match):
     match, _ = league_match
@@ -127,7 +146,8 @@ def test_reassigned_behavior_and_substitution_persist_to_the_next_match(
     assert forward.player_id not in {r.player_id for r in rows}
 
 
-# -- SqlAlchemyMatchRepository.get_setup_data ------------------------------
+# --- SqlAlchemyMatchRepository.get_setup_data ---------------------------------
+
 
 def test_setup_data_has_both_club_names(db_session, league_match):
     match, _ = league_match
@@ -151,7 +171,8 @@ def test_setup_data_of_an_unknown_match_is_none(db_session):
     assert SqlAlchemyMatchRepository(db_session).get_setup_data(999) is None
 
 
-# -- SqlAlchemyLeagueRepository.get_match_duration_minutes -----------------
+# --- SqlAlchemyLeagueRepository.get_match_duration_minutes --------------------
+
 
 def test_league_duration_in_minutes(db_session, league_match):
     match, _ = league_match
@@ -162,15 +183,25 @@ def test_duration_of_an_unknown_league_is_none(db_session):
     assert SqlAlchemyLeagueRepository(db_session).get_match_duration_minutes(999) is None
 
 
-# -- Constraint de team_members --------------------------------------------
+# --- Constraint de team_members -----------------------------------------------
+
 
 @pytest.mark.parametrize("owner", [{}, {"league_id": 1, "match_id": 1}])
-def test_a_member_belongs_to_exactly_one_of_league_or_match(db_session, make_user, make_behaviors, owner):
+def test_a_member_belongs_to_exactly_one_of_league_or_match(
+    db_session, make_user, make_behaviors, owner
+):
     make_user(1)
     player = make_players(db_session, 1)[0]
     behavior = make_behaviors(1, ["b"], code="pass")[0]
-    db_session.add(TeamMember(user_id=1, player_id=player.id, behavior_id=behavior.id,
-                              role=MemberRole.forward, **owner))
+    db_session.add(
+        TeamMember(
+            user_id=1,
+            player_id=player.id,
+            behavior_id=behavior.id,
+            role=MemberRole.forward,
+            **owner,
+        )
+    )
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()

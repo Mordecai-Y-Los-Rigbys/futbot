@@ -29,10 +29,9 @@ def ensure_owned_team(
     es del usuario (o no existe: se trata igual para no filtrar qué ids existen)."""
     player_ids = [m.player_id for m in members]
     behavior_ids = list({m.behavior_id for m in members})  # un behavior puede repetirse
-    if (
-        players.owned_player_ids(user_id, player_ids) != set(player_ids)
-        or behaviors.owned_behavior_ids(user_id, behavior_ids) != set(behavior_ids)
-    ):
+    if players.owned_player_ids(user_id, player_ids) != set(
+        player_ids
+    ) or behaviors.owned_behavior_ids(user_id, behavior_ids) != set(behavior_ids):
         raise ApiError(
             409,
             "playerOrBehaviorNotOwned",

@@ -24,6 +24,7 @@ ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitu
 NOW = datetime(2026, 10, 4, 13, 0, tzinfo=timezone.utc)
 URL = "/friendlies/100/members"
 
+
 class SpyPlayers(FakePlayers):
     def __init__(self):
         super().__init__()
@@ -51,23 +52,29 @@ class FakeStart:
     def schedule(self, match_id):
         self.scheduled.append(match_id)
 
+
 @pytest.fixture()
 def start():
     return FakeStart()
 
+
 @pytest.fixture()
 def join_api(api, repo, players, behaviors, expiry, start):
-    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(repo, players, behaviors)
+    app.dependency_overrides[get_friendly_service] = lambda: FriendlyService(
+        repo, players, behaviors
+    )
     app.dependency_overrides[get_friendly_expiry] = lambda: expiry
     app.dependency_overrides[get_friendly_start] = lambda: start
     return api
-# --- helpers ----------------------------------------------------------------------------
+
+
+# --- helpers ------------------------------------------------------------------
+
 
 def members():
     # behaviorId alterna 21/22: el mismo behavior se reutiliza en varios jugadores
     return [
-        {"playerId": 11 + i, "role": r, "behaviorId": 21 + (i % 2)}
-        for i, r in enumerate(ROLES)
+        {"playerId": 11 + i, "role": r, "behaviorId": 21 + (i % 2)} for i, r in enumerate(ROLES)
     ]
 
 
@@ -108,7 +115,8 @@ def state(**fields):
     return FriendlyJoinState(**base)
 
 
-# --- validación (parse_join_friendly) -------------------------------------------------------
+# --- validación (parse_join_friendly) -----------------------------------------
+
 
 def code_of(raw):
     with pytest.raises(ApiError) as exc:
@@ -118,29 +126,44 @@ def code_of(raw):
 
 
 INVALID_TYPE = [
-    {"members": "x"}, {"members": 5}, {"members": {}}, {"members": None},
+    {"members": "x"},
+    {"members": 5},
+    {"members": {}},
+    {"members": None},
     {"members": [5, 5, 5, 5, 5, 5]},
-    with_member(playerId="abc"), with_member(playerId=1.5), with_member(playerId=True),
-    with_member(playerId=None), with_member(playerId=0), with_member(playerId=-1),
+    with_member(playerId="abc"),
+    with_member(playerId=1.5),
+    with_member(playerId=True),
+    with_member(playerId=None),
+    with_member(playerId=0),
+    with_member(playerId=-1),
     with_member(playerId=2147483648),
-    with_member(behaviorId="abc"), with_member(behaviorId=1.5), with_member(behaviorId=0),
-    with_member(behaviorId=-1), with_member(behaviorId=2147483648),
-    with_member(role=5), with_member(role=None), with_member(role=["forward"]),
+    with_member(behaviorId="abc"),
+    with_member(behaviorId=1.5),
+    with_member(behaviorId=0),
+    with_member(behaviorId=-1),
+    with_member(behaviorId=2147483648),
+    with_member(role=5),
+    with_member(role=None),
+    with_member(role=["forward"]),
 ]
 
 INCOMPLETE = [
-    {}, {"name": "x"},
-    without_key("playerId"), without_key("role"), without_key("behaviorId"),
+    {},
+    {"name": "x"},
+    without_key("playerId"),
+    without_key("role"),
+    without_key("behaviorId"),
 ]
 
 INVALID_TEAM = [
     {"members": members()[:5]},
     {"members": members() + [{"playerId": 99, "role": "substitute", "behaviorId": 21}]},
     {"members": []},
-    with_member(index=1, playerId=11),         # playerId repetido
-    with_member(index=1, role="forward"),      # dos forwards, ningún midfield
-    with_member(index=2, role="substitute"),   # cuatro suplentes, ningún defense
-    with_member(role="goalkeeper"),            # string de rol desconocido
+    with_member(index=1, playerId=11),  # playerId repetido
+    with_member(index=1, role="forward"),  # dos forwards, ningún midfield
+    with_member(index=2, role="substitute"),  # cuatro suplentes, ningún defense
+    with_member(role="goalkeeper"),  # string de rol desconocido
     with_member(role=""),
     with_member(role="FORWARD"),
 ]
@@ -205,9 +228,10 @@ def test_type_error_beats_invalid_team():
     assert code_of(b) == "invalidFieldType"
 
 
-# --- servicio --------------------------------------------------------------------------------
+# --- servicio -----------------------------------------------------------------
 
 _BODY = object()
+
 
 @pytest.fixture()
 def players():
@@ -226,6 +250,7 @@ def repo():
     r.user_is_playing.return_value = False
     r.join_friendly.return_value = joined_match()
     return r
+
 
 def join(repo, players=None, behaviors=None, user_id=2, raw_id="100", raw_body=_BODY):
     service = FriendlyService(repo, players or FakePlayers(), behaviors or FakeBehaviors())
@@ -271,7 +296,19 @@ def test_service_checks_ownership_for_the_joining_user(repo):
 
 @pytest.mark.parametrize(
     "raw_id",
-    ["abc", "1.5", "0", "-1", "2147483648", "99999999999999999999", "", "1_0", " 1", "+1", "\uff11"],
+    [
+        "abc",
+        "1.5",
+        "0",
+        "-1",
+        "2147483648",
+        "99999999999999999999",
+        "",
+        "1_0",
+        " 1",
+        "+1",
+        "\uff11",
+    ],
 )
 def test_invalid_route_id_is_404_without_touching_the_repo(repo, raw_id):
     err = error_of(repo, raw_id=raw_id)
@@ -328,7 +365,7 @@ def test_400_codes_reach_the_caller_without_side_effects(repo, raw_body, code):
 @pytest.mark.parametrize(
     "st",
     [
-        state(rival_id=3),                        # ya tiene rival (cuenta regresiva)
+        state(rival_id=3),  # ya tiene rival (cuenta regresiva)
         state(status="started", rival_id=3),
         state(status="finished", rival_id=3),
         state(status="cancelled"),
@@ -389,7 +426,8 @@ def test_losing_the_race_in_the_database_is_not_joinable(repo):
     assert (err.status_code, err.code) == (409, "notJoinable")
 
 
-# --- endpoint ---------------------------------------------------------------------------------------------
+# --- endpoint -----------------------------------------------------------------
+
 
 class FakeExpiry:
     def __init__(self):
@@ -430,7 +468,7 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
     }
     assert repo.join_friendly.call_args.args[0].user_id == 7  # el usuario de la sesión
     assert expiry.unscheduled == [100]  # se cancela el vencimiento de 15 min
-    assert start.scheduled == [100]     # arranca la cuenta regresiva
+    assert start.scheduled == [100]  # arranca la cuenta regresiva
 
 
 @pytest.mark.parametrize(
@@ -513,15 +551,23 @@ def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, kwargs, code
 @pytest.mark.parametrize(
     "setup, code",
     [
-        (lambda r, p, b: setattr(r.get_friendly_state, "return_value", state(rival_id=3)), "notJoinable"),
-        (lambda r, p, b: setattr(r.get_friendly_state, "return_value", state(creator_id=7)), "isOwnMatch"),
+        (
+            lambda r, p, b: setattr(r.get_friendly_state, "return_value", state(rival_id=3)),
+            "notJoinable",
+        ),
+        (
+            lambda r, p, b: setattr(r.get_friendly_state, "return_value", state(creator_id=7)),
+            "isOwnMatch",
+        ),
         (lambda r, p, b: setattr(r.user_is_playing, "return_value", True), "alreadyPlaying"),
         (lambda r, p, b: setattr(p, "owned", set()), "playerOrBehaviorNotOwned"),
         (lambda r, p, b: setattr(b, "owned", set()), "playerOrBehaviorNotOwned"),
         (lambda r, p, b: setattr(r.join_friendly, "return_value", None), "notJoinable"),
     ],
 )
-def test_conflicts_are_409_and_schedule_nothing(auth_join_api, repo, players, behaviors, expiry, setup, code):
+def test_conflicts_are_409_and_schedule_nothing(
+    auth_join_api, repo, players, behaviors, expiry, setup, code
+):
     setup(repo, players, behaviors)
     resp = auth_join_api.post(URL, json=body())
     assert resp.status_code == 409

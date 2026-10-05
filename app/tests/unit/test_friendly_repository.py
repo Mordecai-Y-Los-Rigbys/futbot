@@ -42,9 +42,7 @@ def repo(db):
 
 
 def list_page(repo, name=None, offset=0, limit=50, user_id=USER_ID):
-    return repo.list_waiting_page(
-        exclude_user_id=user_id, name=name, offset=offset, limit=limit
-    )
+    return repo.list_waiting_page(exclude_user_id=user_id, name=name, offset=offset, limit=limit)
 
 
 def list_stmt(db):
@@ -55,7 +53,8 @@ def count_stmt(db):
     return db.scalar.call_args.args[0]
 
 
-# --- escape ------------------------------------------------------------------------------
+# --- escape -------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "raw, escaped",
@@ -71,7 +70,8 @@ def test_escape_like(raw, escaped):
     assert _escape_like(raw) == escaped
 
 
-# --- mapeo a DTO -----------------------------------------------------------------------------
+# --- mapeo a DTO --------------------------------------------------------------
+
 
 def test_maps_rows_to_dtos(repo, db):
     db.scalar.return_value = 1
@@ -109,7 +109,8 @@ def test_total_comes_from_the_count_query(repo, db):
     assert list_page(repo, offset=100).total == 120
 
 
-# --- SQL generado ---------------------------------------------------------------------------------
+# --- SQL generado -------------------------------------------------------------
+
 
 def test_orders_by_id_ascending(repo, db):
     list_page(repo)
@@ -157,9 +158,7 @@ def test_reuses_the_is_waiting_friendly_condition(repo, db, monkeypatch):
         calls.append(1)
         return original()
 
-    monkeypatch.setattr(
-        SqlAlchemyMatchExpiryRepository, "is_waiting_friendly", staticmethod(spy)
-    )
+    monkeypatch.setattr(SqlAlchemyMatchExpiryRepository, "is_waiting_friendly", staticmethod(spy))
     list_page(repo)
     assert calls
 

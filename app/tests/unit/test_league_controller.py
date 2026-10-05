@@ -5,12 +5,19 @@ from app.schemas.errors import ListPageBadRequest
 from app.schemas.league import LeaguePage
 
 ITEM_FIELDS = {
-    "id", "name", "creator", "status",
-    "participantsCount", "maxParticipants", "private", "createdAt",
+    "id",
+    "name",
+    "creator",
+    "status",
+    "participantsCount",
+    "maxParticipants",
+    "private",
+    "createdAt",
 }
 
 
-# --- autenticación ---------------------------------------------------------
+# --- autenticación ------------------------------------------------------------
+
 
 def test_no_cookie_returns_401(api, fake_repo):
     resp = api.get("/leagues")
@@ -34,7 +41,8 @@ def test_401_has_priority_over_invalid_page(api, fake_repo):
     assert fake_repo.calls == []
 
 
-# --- validación de page -----------------------------------------------------
+# --- validación de page -------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "query, code",
@@ -70,7 +78,8 @@ def test_page_defaults_to_1(auth_api, fake_repo):
     assert fake_repo.calls[0]["offset"] == 0
 
 
-# --- name -------------------------------------------------------------------
+# --- name ---------------------------------------------------------------------
+
 
 def test_empty_name_is_treated_as_absent(auth_api, fake_repo):
     auth_api.get("/leagues?name=")
@@ -82,7 +91,8 @@ def test_name_reaches_the_repository_untouched(auth_api, fake_repo):
     assert fake_repo.calls[0]["name"] == "100%_\\"
 
 
-# --- respuesta --------------------------------------------------------------
+# --- respuesta ----------------------------------------------------------------
+
 
 def test_response_shape(auth_api, fake_repo, make_item):
     fake_repo.page = LeaguePageData(
@@ -96,7 +106,9 @@ def test_response_shape(auth_api, fake_repo, make_item):
     assert set(body) == {"items", "page", "pageSize", "total"}
     assert set(body["items"][0]) == ITEM_FIELDS
     assert body["items"][0]["creator"] == {
-        "id": 7, "username": "mgonzalez", "name": "Boca Juniors FC",
+        "id": 7,
+        "username": "mgonzalez",
+        "name": "Boca Juniors FC",
     }
     assert body["items"][0]["createdAt"] == "2026-01-01T00:00:00Z"
     assert [i["status"] for i in body["items"]] == ["preparation", "cancelled"]

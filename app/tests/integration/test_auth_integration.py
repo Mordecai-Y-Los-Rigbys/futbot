@@ -17,6 +17,7 @@ def register_payload(**over):
     payload.update(over)
     return payload
 
+
 def test_openapi_documents_the_auth_error_schemas():
     from app.main import app
 
@@ -96,7 +97,7 @@ def test_register_invalid_payload_persists_nothing(client, db_session):
 
 
 def test_register_email_variants_invalid_formats(client):
-    """Valida diversos formatos de correo electrónico incorrectos que deben retornar invalidEmail."""
+    """Valida formatos de email incorrectos que deben devolver invalidEmail."""
     invalid_emails = ["sin-arroba.com", "test@", "@dominio.com"]
     for bad_email in invalid_emails:
         response = client.post(

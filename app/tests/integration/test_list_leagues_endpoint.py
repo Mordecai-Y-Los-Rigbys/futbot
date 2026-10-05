@@ -14,8 +14,14 @@ pytestmark = pytest.mark.integration
 STATUSES = ["preparation", "started", "cancelled", "finished"]
 ISO_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
 ITEM_FIELDS = {
-    "id", "name", "creator", "status",
-    "participantsCount", "maxParticipants", "private", "createdAt",
+    "id",
+    "name",
+    "creator",
+    "status",
+    "participantsCount",
+    "maxParticipants",
+    "private",
+    "createdAt",
 }
 
 
@@ -34,7 +40,8 @@ def ids(resp):
     return [i["id"] for i in resp.json()["items"]]
 
 
-# --- contrato ------------------------------------------------------------------
+# --- contrato -----------------------------------------------------------------
+
 
 def test_contract_with_leagues(api, owner, make_league):
     make_league(owner, "Liga Argentina")
@@ -85,7 +92,8 @@ def test_endpoint_is_read_only(api, owner, make_league, db_session):
     assert snapshot() == before
 
 
-# --- autenticación (sesiones reales) -----------------------------------------------
+# --- autenticación (sesiones reales) ------------------------------------------
+
 
 def test_no_cookie_returns_401(client):
     resp = client.get("/leagues")
@@ -123,7 +131,8 @@ def test_two_users_get_the_same_listing(login_as, create_user, owner, make_leagu
     assert a == b
 
 
-# --- validación de page (vía HTTP) -----------------------------------------------------
+# --- validación de page (vía HTTP) --------------------------------------------
+
 
 @pytest.mark.parametrize(
     "query, code",
@@ -155,7 +164,8 @@ def test_page_lower_limit_is_valid(api, owner, make_league):
     assert api.get("/leagues?page=1").status_code == 200
 
 
-# --- paginación sobre datos reales ------------------------------------------------------------
+# --- paginación sobre datos reales --------------------------------------------
+
 
 def test_three_pages_of_120_leagues(api, owner, make_leagues_bulk):
     created = make_leagues_bulk(owner, [f"Liga {i}" for i in range(120)])
@@ -178,9 +188,7 @@ def test_exactly_50_leagues(api, owner, make_leagues_bulk):
     assert api.get("/leagues?page=2").json()["items"] == []
 
 
-def test_pagination_is_stable_when_a_league_is_inserted(
-    api, owner, make_leagues_bulk, make_league
-):
+def test_pagination_is_stable_when_a_league_is_inserted(api, owner, make_leagues_bulk, make_league):
     make_leagues_bulk(owner, [f"Liga {i}" for i in range(60)])
     first = set(ids(api.get("/leagues?page=1")))
     make_league(owner, "Nueva")
@@ -188,7 +196,8 @@ def test_pagination_is_stable_when_a_league_is_inserted(
     assert first.isdisjoint(second)
 
 
-# --- filtro por nombre contra la DB real ------------------------------------------------------------
+# --- filtro por nombre contra la DB real --------------------------------------
+
 
 @pytest.fixture()
 def named(owner, make_league):
@@ -235,8 +244,8 @@ def special(owner, make_league):
 @pytest.mark.parametrize(
     "term, expected",
     [
-        ("%", {"100% Liga"}),          # no actúa como comodín
-        ("_", {"Liga_1"}),             # no matchea "Liga 1"
+        ("%", {"100% Liga"}),  # no actúa como comodín
+        ("_", {"Liga_1"}),  # no matchea "Liga 1"
         ("\\", {"Liga\\Uno"}),
     ],
 )
@@ -254,7 +263,8 @@ def test_filter_combined_with_pagination(api, owner, make_leagues_bulk):
     assert body["total"] == 75
 
 
-# --- contenido y relaciones -------------------------------------------------------------------------
+# --- contenido y relaciones ---------------------------------------------------
+
 
 def test_creator_uses_username_and_club_name(api, create_user, make_league):
     creator = create_user("mgonzalez", "Boca Juniors FC")
@@ -273,9 +283,9 @@ def test_participants_count_includes_creator_and_each_league_has_its_own(
 ):
     a, b, c = (make_league(owner, n) for n in ("A", "B", "C"))
     users = [create_user(f"p{i}") for i in range(3)]
-    for u in users:                 # A: creador + 3
+    for u in users:  # A: creador + 3
         add_participant(a, u)
-    add_participant(b, users[0])    # B: creador + 1
+    add_participant(b, users[0])  # B: creador + 1
     counts = {i["name"]: i["participantsCount"] for i in api.get("/leagues").json()["items"]}
     assert counts == {"A": 4, "B": 2, "C": 1}  # sin inflado por joins
 
@@ -292,7 +302,8 @@ def test_private_league_is_listed(api, owner, make_league):
     assert item["private"] is True
 
 
-# --- performance: sin N+1 ----------------------------------------------------------------------------
+# --- performance: sin N+1 -----------------------------------------------------
+
 
 @pytest.mark.slow
 def test_query_count_does_not_grow_with_leagues(

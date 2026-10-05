@@ -12,12 +12,13 @@ from app.models.team_member import TeamMember
 pytestmark = pytest.mark.integration
 
 ROLES = [
-    MemberRole.forward, 
-    MemberRole.midfield, 
-    MemberRole.defense, 
-    MemberRole.substitute, 
-    MemberRole.substitute, 
-    MemberRole.substitute]
+    MemberRole.forward,
+    MemberRole.midfield,
+    MemberRole.defense,
+    MemberRole.substitute,
+    MemberRole.substitute,
+    MemberRole.substitute,
+]
 
 
 class FakeExpiry:
@@ -40,8 +41,9 @@ def expiry():
 def setup(db_session, make_user, make_behaviors):
     user = make_user(1)
     players = [
-        Player(user_id=user.id, name=f"J{i}", power=60, agility=60,
-               control=60, strength=60, speed=60)
+        Player(
+            user_id=user.id, name=f"J{i}", power=60, agility=60, control=60, strength=60, speed=60
+        )
         for i in range(6)
     ]
     db_session.add_all(players)
@@ -105,8 +107,9 @@ def test_second_friendly_while_waiting_is_already_playing(client, login, setup, 
 def test_foreign_player_is_409_not_owned(client, login, db_session, make_user, setup, expiry):
     user, players, behaviors = setup
     other = make_user(2)
-    stranger = Player(user_id=other.id, name="Ajeno", power=60, agility=60,
-                      control=60, strength=60, speed=60)
+    stranger = Player(
+        user_id=other.id, name="Ajeno", power=60, agility=60, control=60, strength=60, speed=60
+    )
     db_session.add(stranger)
     db_session.commit()
     players[0] = stranger
@@ -116,7 +119,9 @@ def test_foreign_player_is_409_not_owned(client, login, db_session, make_user, s
     assert db_session.query(Match).count() == 0
 
 
-def test_foreign_behavior_is_409_not_owned(client, login, db_session, make_user, make_behaviors, setup, expiry):
+def test_foreign_behavior_is_409_not_owned(
+    client, login, db_session, make_user, make_behaviors, setup, expiry
+):
     user, players, behaviors = setup
     other = make_user(2)
     foreign = make_behaviors(other.id, ["ajeno"])[0]

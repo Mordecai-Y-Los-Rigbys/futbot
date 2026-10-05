@@ -58,7 +58,9 @@ def test_auth_service_login_success(auth_service, mock_user_repo, mock_session_s
     mock_session_service.create.assert_called_once_with(user_id=1)
 
 
-def test_auth_service_login_user_not_found_raises_401(auth_service, mock_user_repo, mock_session_service):
+def test_auth_service_login_user_not_found_raises_401(
+    auth_service, mock_user_repo, mock_session_service
+):
     """Verifica 401 si el email no existe y que no se cree sesión."""
     mock_user_repo.get_by_email.return_value = None
 
@@ -71,7 +73,9 @@ def test_auth_service_login_user_not_found_raises_401(auth_service, mock_user_re
     mock_session_service.create.assert_not_called()
 
 
-def test_auth_service_login_wrong_password_raises_401(auth_service, mock_user_repo, mock_session_service):
+def test_auth_service_login_wrong_password_raises_401(
+    auth_service, mock_user_repo, mock_session_service
+):
     """Verifica 401 si la contraseña es incorrecta y que no se cree sesión."""
     hashed = hash_password("correct_password")
     dummy_user = User(
@@ -92,7 +96,9 @@ def test_auth_service_login_wrong_password_raises_401(auth_service, mock_user_re
     mock_session_service.create.assert_not_called()
 
 
-def test_auth_service_login_password_over_72_chars_raises_401(auth_service, mock_user_repo, mock_session_service):
+def test_auth_service_login_password_over_72_chars_raises_401(
+    auth_service, mock_user_repo, mock_session_service
+):
     """Verifica que una contraseña de 73 chars sea rechazada con 401 sin consultar al repo."""
     password_73 = "a" * 73
 
@@ -106,7 +112,9 @@ def test_auth_service_login_password_over_72_chars_raises_401(auth_service, mock
     mock_session_service.create.assert_not_called()
 
 
-def test_auth_service_login_password_exact_72_chars_success(auth_service, mock_user_repo, mock_session_service):
+def test_auth_service_login_password_exact_72_chars_success(
+    auth_service, mock_user_repo, mock_session_service
+):
     """Verifica que el límite de 72 caracteres exactos sea aceptado correctamente."""
     password_72 = "a" * 72
     hashed = hash_password(password_72)
@@ -131,7 +139,9 @@ def test_auth_service_login_password_exact_72_chars_success(auth_service, mock_u
     mock_session_service.create.assert_called_once_with(user_id=2)
 
 
-def test_auth_service_login_password_with_spaces_not_trimmed(auth_service, mock_user_repo, mock_session_service):
+def test_auth_service_login_password_with_spaces_not_trimmed(
+    auth_service, mock_user_repo, mock_session_service
+):
     """Verifica que las contraseñas con espacios no se recorten ni alteren antes de verificar."""
     pass_with_spaces = "  password con espacios  "
     hashed = hash_password(pass_with_spaces)
@@ -164,6 +174,7 @@ def test_auth_service_login_password_with_spaces_not_trimmed(auth_service, mock_
 # PRUEBAS UNITARIAS: Controlador API (Mockeando AuthService)
 # ==============================================================================
 
+
 def test_endpoint_user_login_delegates_to_service_and_sets_cookie():
     """Valida que el endpoint llame a AuthService y setee la cookie en Response."""
     mock_service = MagicMock()
@@ -195,7 +206,8 @@ def test_endpoint_user_login_delegates_to_service_and_sets_cookie():
     assert result.club_name == "Api FC"
     assert not hasattr(result, "password")
     assert not hasattr(result, "password_hash")
-    
+
+
 def test_auth_service_login_300_char_password_raises_401_without_hitting_the_db(
     auth_service, mock_user_repo, mock_session_service
 ):
@@ -226,14 +238,18 @@ def test_auth_service_login_72_char_wrong_password_raises_401(
 
     assert exc_info.value.status_code == 401
     mock_session_service.create.assert_not_called()
-    
+
+
 def test_auth_service_login_72_multibyte_chars_succeeds(
     auth_service, mock_user_repo, mock_session_service
 ):
     password = "ñ" * 72
     mock_user_repo.get_by_email.return_value = User(
-        id=7, username="enie", email="enie@test.com",
-        password_hash=hash_password(password), club_name="Club Ñ",
+        id=7,
+        username="enie",
+        email="enie@test.com",
+        password_hash=hash_password(password),
+        club_name="Club Ñ",
     )
     mock_session_service.create.return_value = MagicMock(id="session-enie")
 

@@ -30,8 +30,12 @@ def repo():
 
 def private_league(status="started", creator=1):
     return MatchAccessData(
-        id=5, status=status, league_id=9, league_creator_id=creator,
-        league_private=True, league_password="secret",
+        id=5,
+        status=status,
+        league_id=9,
+        league_creator_id=creator,
+        league_private=True,
+        league_password="secret",
     )
 
 
@@ -41,7 +45,8 @@ def error_of(service, user_id=7, match_id=5, body=None):
     return e.value.status_code, e.value.code
 
 
-# --- éxito / amistoso ---
+# --- éxito / amistoso ---------------------------------------------------------
+
 
 @pytest.mark.parametrize("body", [None, {}, {"password": 123}, {"password": "x"}, [1], "x"])
 def test_friendly_ignores_body_entirely(repo, body):
@@ -68,7 +73,8 @@ def test_waiting_friendly_does_not_change_the_match(repo):
     assert [c[0] for c in repo.method_calls] == ["get_access", "create_token"]
 
 
-# --- 404 / 409 ---
+# --- 404 / 409 ----------------------------------------------------------------
+
 
 def test_nonexistent_match_is_404(repo):
     repo.get_access.return_value = None
@@ -85,7 +91,8 @@ def test_finished_or_cancelled_is_409_without_token(repo, status, code):
     repo.create_token.assert_not_called()
 
 
-# --- liga privada ---
+# --- liga privada -------------------------------------------------------------
+
 
 def test_outsider_with_non_string_password_is_400(repo):
     repo.get_access.return_value = private_league()
@@ -122,6 +129,6 @@ def test_public_league_ignores_password(repo):
 def test_precedence_400_403_409(repo):
     s = MatchConnectionService(repo)
     repo.get_access.return_value = private_league(status="finished")
-    assert error_of(s, body={"password": 5})[0] == 400      # 400 > 409
+    assert error_of(s, body={"password": 5})[0] == 400  # 400 > 409
     assert error_of(s, body={"password": "mala"})[0] == 403  # 403 > 409
     assert error_of(s, body={"password": "secret"})[0] == 409

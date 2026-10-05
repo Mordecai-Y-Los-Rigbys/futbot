@@ -21,9 +21,7 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
             escaped = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             filters.append(Behavior.name.ilike(f"%{escaped}%", escape="\\"))
 
-        total = self.db.scalar(
-            select(func.count()).select_from(Behavior).where(*filters)
-        )
+        total = self.db.scalar(select(func.count()).select_from(Behavior).where(*filters))
 
         rows = (
             self.db.execute(
@@ -38,20 +36,20 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
         )
 
         return [BehaviorData.model_validate(r) for r in rows], total or 0
-    
+
     def get_by_id(self, behavior_id: int) -> BehaviorData | None:
         record = self.db.get(Behavior, behavior_id)
         return BehaviorData.model_validate(record) if record is not None else None
-    
-    def create_many(
-        self, user_id: int, behaviors: list[CreateBehaviorData]
-    ) -> list[BehaviorData]:
+
+    def create_many(self, user_id: int, behaviors: list[CreateBehaviorData]) -> list[BehaviorData]:
         records = [Behavior(user_id=user_id, name=b.name, code=b.code) for b in behaviors]
         self.db.add_all(records)
-        self.db.flush() 
+        self.db.flush()
         return [BehaviorData.model_validate(r) for r in records]
-    
+
     def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
-        return set(self.db.scalars(
-            select(Behavior.id).where(Behavior.user_id == user_id, Behavior.id.in_(ids))
-        ))
+        return set(
+            self.db.scalars(
+                select(Behavior.id).where(Behavior.user_id == user_id, Behavior.id.in_(ids))
+            )
+        )

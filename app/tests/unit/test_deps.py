@@ -12,7 +12,8 @@ def service():
     return create_autospec(SessionService, instance=True)
 
 
-# ---------- get_current_user_id ----------
+# --- get_current_user_id ------------------------------------------------------
+
 
 def test_valid_session_returns_user_id(service):
     service.get_user_id.return_value = 7

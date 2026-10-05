@@ -30,6 +30,7 @@ ensure_single_worker()
 # Crea las tablas en la BD (para desarrollo temprano, luego usarás Alembic)
 Base.metadata.create_all(bind=engine)
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     expiry = get_friendly_expiry()
@@ -40,6 +41,7 @@ async def lifespan(_app: FastAPI):
     start.shutdown()
     await get_match_runner().shutdown()
     expiry.shutdown()
+
 
 app = FastAPI(title="Futbot API", lifespan=lifespan)
 
@@ -52,7 +54,6 @@ app.include_router(ws_matches_router)
 app.include_router(friendlies_router)
 app.include_router(matches_router)
 app.include_router(users_router)
-
 
 
 # Configuración de CORS

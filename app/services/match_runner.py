@@ -132,7 +132,9 @@ class MatchRunner:
             result = await loop.run_in_executor(self._executor, session.advance)
             compute = self._monotonic() - began
             if compute > MAX_TICK_COMPUTE:
-                logger.warning("Tick %s del partido %s tardó %.3f s", result.tick, match_id, compute)
+                logger.warning(
+                    "Tick %s del partido %s tardó %.3f s", result.tick, match_id, compute
+                )
 
             if not started and result.phase is not Phase.COUNTDOWN:
                 # Durante la cuenta regresiva el partido sigue `scheduled`.

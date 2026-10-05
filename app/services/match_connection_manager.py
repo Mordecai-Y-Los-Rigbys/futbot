@@ -34,7 +34,7 @@ class MatchConnectionManager:
 
     def __init__(self) -> None:
         self._reserved: dict[tuple[int, int], int] = {}
-        self._subscribers: dict[int, dict[WebSocket, int]] = {} 
+        self._subscribers: dict[int, dict[WebSocket, int]] = {}
         self._evicted: set[WebSocket] = set()
 
     def reserve(self, match_id: int, user_id: int) -> None:
@@ -52,7 +52,7 @@ class MatchConnectionManager:
         self._subscribers.setdefault(match_id, {})[websocket] = user_id
 
     def release(self, match_id: int, user_id: int, websocket: WebSocket) -> None:
-        if websocket in self._evicted:       # ya liberado por evict()
+        if websocket in self._evicted:  # ya liberado por evict()
             self._evicted.discard(websocket)
             return
         subs = self._subscribers.get(match_id)
@@ -76,7 +76,7 @@ class MatchConnectionManager:
     def subscribers(self, match_id: int) -> list[tuple[WebSocket, int]]:
         """Suscriptores actuales del partido como (websocket, user_id)."""
         return list(self._subscribers.get(match_id, {}).items())
-    
+
     def evict(self, match_id: int, user_id: int, websocket: WebSocket) -> None:
         subs = self._subscribers.get(match_id)
         if subs is None or websocket not in subs:

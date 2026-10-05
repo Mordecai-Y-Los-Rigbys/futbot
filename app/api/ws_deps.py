@@ -39,9 +39,7 @@ def _handshake_service_scope() -> Iterator[MatchHandshakeService]:
         )
 
 
-def get_handshake_service_scope() -> Callable[
-    [], ContextManager[MatchHandshakeService]
-]:
+def get_handshake_service_scope() -> Callable[[], ContextManager[MatchHandshakeService]]:
     return _handshake_service_scope
 
 
@@ -50,22 +48,25 @@ def _expiry_repo_scope():
     with SessionLocal() as db:
         yield SqlAlchemyMatchExpiryRepository(db)
 
-_friendly_expiry = FriendlyExpiryService(
-    _expiry_repo_scope, _connection_manager.close_match
-)
+
+_friendly_expiry = FriendlyExpiryService(_expiry_repo_scope, _connection_manager.close_match)
+
 
 def get_friendly_expiry() -> FriendlyExpiryService:
     return _friendly_expiry
+
 
 @contextmanager
 def _start_repo_scope():
     with SessionLocal() as db:
         yield SqlAlchemyMatchStartRepository(db)
 
+
 @contextmanager
 def _match_repo_scope():
     with SessionLocal() as db:
         yield SqlAlchemyMatchRepository(db)
+
 
 def _load_setup(match_id: int) -> MatchSetup:
     with SessionLocal() as db:
@@ -75,12 +76,16 @@ def _load_setup(match_id: int) -> MatchSetup:
             SqlAlchemyTeamRepository(db),
         ).load_match_setup(match_id)
 
+
 _match_runner = MatchRunner(_connection_manager, _load_setup, _match_repo_scope)
 
+
 async def _start_simulation(match_id: int) -> None:
-    _match_runner.start(match_id)   # start() es sync y devuelve la Task
+    _match_runner.start(match_id)  # start() es sync y devuelve la Task
+
 
 _friendly_start = FriendlyStartService(_start_repo_scope, _start_simulation)
+
 
 def get_match_runner() -> MatchRunner:
     return _match_runner
@@ -88,4 +93,3 @@ def get_match_runner() -> MatchRunner:
 
 def get_friendly_start() -> FriendlyStartService:
     return _friendly_start
-    

@@ -23,8 +23,8 @@ def names(r):
 @pytest.fixture
 def session_service():
     mock = create_autospec(SessionService, instance=True)
-    mock.get_user_id.side_effect = (
-        lambda sid: int(sid.removeprefix("sid-")) if sid.startswith("sid-") else None
+    mock.get_user_id.side_effect = lambda sid: (
+        int(sid.removeprefix("sid-")) if sid.startswith("sid-") else None
     )
     return mock
 
@@ -56,7 +56,8 @@ def as_user(client):
     return _as
 
 
-# ---------- autenticación ----------
+# --- autenticación ------------------------------------------------------------
+
 
 def test_no_cookie_returns_401(client, behavior_service):
     r = client.get(URL)
@@ -83,7 +84,8 @@ def test_no_cookie_with_invalid_page_returns_401(client, page):
     assert r.status_code == 401
 
 
-# ---------- respuesta ----------
+# --- respuesta ----------------------------------------------------------------
+
 
 def test_response_body_uses_service_result(as_user, behavior_service):
     behavior_service.list_behaviors.return_value = (
@@ -127,31 +129,26 @@ def test_total_is_independent_of_items_returned(as_user, behavior_service):
     assert r.json()["page"] == 5
 
 
-# ---------- qué le pasa el endpoint al servicio ----------
+# --- qué le pasa el endpoint al servicio --------------------------------------
+
 
 def test_service_receives_user_from_session(as_user, behavior_service):
     as_user(7).get(URL)
 
-    behavior_service.list_behaviors.assert_called_once_with(
-        user_id=7, name=None, page=1
-    )
+    behavior_service.list_behaviors.assert_called_once_with(user_id=7, name=None, page=1)
 
 
 def test_service_receives_name_and_page(as_user, behavior_service):
     as_user(1).get(URL, params={"name": "patrol", "page": 3})
 
-    behavior_service.list_behaviors.assert_called_once_with(
-        user_id=1, name="patrol", page=3
-    )
+    behavior_service.list_behaviors.assert_called_once_with(user_id=1, name="patrol", page=3)
 
 
 def test_max_page_is_valid(as_user, behavior_service):
     r = as_user(1).get(URL, params={"page": 2147483647})
 
     assert r.status_code == 200
-    behavior_service.list_behaviors.assert_called_once_with(
-        user_id=1, name=None, page=2147483647
-    )
+    behavior_service.list_behaviors.assert_called_once_with(user_id=1, name=None, page=2147483647)
 
 
 @pytest.mark.parametrize("size_param", ["pageSize", "size", "limit", "page_size"])
@@ -160,12 +157,11 @@ def test_size_param_has_no_effect(as_user, behavior_service, size_param):
 
     assert r.status_code == 200
     assert r.json()["pageSize"] == PAGE_SIZE
-    behavior_service.list_behaviors.assert_called_once_with(
-        user_id=1, name=None, page=1
-    )
+    behavior_service.list_behaviors.assert_called_once_with(user_id=1, name=None, page=1)
 
 
-# ---------- validación de page (400) ----------
+# --- validación de page (400) -------------------------------------------------
+
 
 @pytest.mark.parametrize("page", ["abc", "1.5", "", " ", "1e3", "+2", "١٢"])
 def test_page_not_an_integer(as_user, behavior_service, page):

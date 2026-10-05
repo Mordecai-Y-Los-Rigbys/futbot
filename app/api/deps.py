@@ -27,21 +27,25 @@ from app.services.match_connection_service import MatchConnectionService
 from app.services.user_service import UserService
 
 
-
 def get_league_repository(db=Depends(get_db)) -> AbstractLeagueRepository:
     return SqlAlchemyLeagueRepository(db)
+
 
 def get_player_repository(db: Session = Depends(get_db)) -> AbstractPlayerRepository:
     return SqlAlchemyPlayerRepository(db)
 
+
 def get_behavior_repository(db: Session = Depends(get_db)) -> AbstractBehaviorRepository:
     return SqlAlchemyBehaviorRepository(db)
+
 
 def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
     return BehaviorService(SqlAlchemyBehaviorRepository(db))
 
+
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
     return SessionService(SqlAlchemySessionRepository(db))
+
 
 def get_league_service(
     leagues=Depends(get_league_repository),
@@ -50,6 +54,7 @@ def get_league_service(
 ) -> LeagueService:
     return LeagueService(leagues, players, behaviors)
 
+
 def get_friendly_service(
     db: Session = Depends(get_db),
     players=Depends(get_player_repository),
@@ -57,8 +62,10 @@ def get_friendly_service(
 ) -> FriendlyService:
     return FriendlyService(SqlAlchemyFriendlyRepository(db), players, behaviors)
 
+
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
     return PlayerService(SqlAlchemyPlayerRepository(db))
+
 
 def get_auth_service(
     db: Session = Depends(get_db),
@@ -72,11 +79,14 @@ def get_auth_service(
         behavior_service=behavior_service,
     )
 
+
 def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
     return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
 
+
 def get_user_service(db: Session = Depends(get_db)) -> UserService:
     return UserService(SqlAlchemyUserRepository(db))
+
 
 def get_current_user_id(
     session_id: str | None = Cookie(default=None),
@@ -95,6 +105,7 @@ def get_current_user_id(
         raise ApiError(401, None, "Sin sesión válida.")
 
     return user_id
+
 
 async def get_json_body(
     request: Request,

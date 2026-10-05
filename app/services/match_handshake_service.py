@@ -59,5 +59,4 @@ class MatchHandshakeService:
         if match.status == MatchStatus.cancelled:
             raise ApiError(409, "matchCancelled", "El partido fue cancelado.")
 
-
         return HandshakeGrant(user_id=record.user_id, match_id=record.match_id)

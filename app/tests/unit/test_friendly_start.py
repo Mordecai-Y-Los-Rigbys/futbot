@@ -151,7 +151,7 @@ def test_shutdown_cancels_pending_timers():
 
     asyncio.run(scenario())
     assert repo.triggered == []
-    
+
 
 def test_countdown_waits_the_friendly_countdown_before_starting(monkeypatch):
     from types import SimpleNamespace
@@ -174,9 +174,7 @@ def test_countdown_waits_the_friendly_countdown_before_starting(monkeypatch):
             get_running_loop=asyncio.get_running_loop,
             CancelledError=asyncio.CancelledError,
         )
-        monkeypatch.setattr(
-            friendly_start, "asyncio", controlled_asyncio
-        )
+        monkeypatch.setattr(friendly_start, "asyncio", controlled_asyncio)
 
         repo = FakeStartRepo()
 

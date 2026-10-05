@@ -62,6 +62,4 @@ class MatchConnectionService:
             raise ApiError(400, "invalidFieldType", "La contraseña debe ser un string.")
         expected = (match.league_password or "").encode()
         if password is None or not secrets.compare_digest(password.encode(), expected):
-            raise ApiError(
-                403, "invalidLeaguePassword", "La contraseña de la liga es incorrecta."
-            )
+            raise ApiError(403, "invalidLeaguePassword", "La contraseña de la liga es incorrecta.")

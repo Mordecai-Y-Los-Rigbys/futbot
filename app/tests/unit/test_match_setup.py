@@ -13,13 +13,20 @@ from app.tests.unit.match_ws_fakes import FakeMatchRepo
 
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
     return StarterData(
-        player_id=player_id, role=role, power=60, agility=60, control=60,
-        strength=60, speed=60, behavior_code=code,
+        player_id=player_id,
+        role=role,
+        power=60,
+        agility=60,
+        control=60,
+        strength=60,
+        speed=60,
+        behavior_code=code,
     )
 
 
 def full_team(first_id: int) -> list[StarterData]:
     return [starter(first_id + i, r.value) for i, r in enumerate(STARTER_ROLES)]
+
 
 class FakeLeagues(AbstractLeagueRepository):
     def __init__(self, durations=None):
@@ -36,6 +43,7 @@ class FakeLeagues(AbstractLeagueRepository):
     def create(self, data):
         raise NotImplementedError
 
+
 class FakeTeams(AbstractTeamRepository):
     def __init__(self, starters=None):
         self.starters = starters or {}  # {user_id: [StarterData]}
@@ -45,12 +53,16 @@ class FakeTeams(AbstractTeamRepository):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
 
+
 def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
     return MatchSetupData(
-        id=1, league_id=league_id, user_1_id=1, user_2_id=user_2_id,
-        club_1_name="Club Uno", club_2_name=club_2,
+        id=1,
+        league_id=league_id,
+        user_1_id=1,
+        user_2_id=user_2_id,
+        club_1_name="Club Uno",
+        club_2_name=club_2,
     )
-
 
 
 def build(match=None, durations=None, starters=None):

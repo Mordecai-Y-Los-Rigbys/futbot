@@ -50,5 +50,7 @@ def get_behavior(
     user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
     service: BehaviorService = Depends(get_behavior_service),
 ):
-    behavior = service.get_owned_behavior(user_id, _parse_id(behavior_id, "Comportamiento no encontrado."))
+    behavior = service.get_owned_behavior(
+        user_id, _parse_id(behavior_id, "Comportamiento no encontrado.")
+    )
     return BehaviorDetail.model_validate(behavior)

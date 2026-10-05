@@ -1,5 +1,6 @@
 import enum
 
+
 class MemberRole(str, enum.Enum):
     forward = "forward"
     midfield = "midfield"
@@ -11,6 +12,7 @@ class MemberRole(str, enum.Enum):
         if self is MemberRole.substitute:
             raise ValueError("un suplente no tiene número de cancha")
         return _ROLE_NUMBERS[self]
+
 
 _ROLE_NUMBERS = {
     MemberRole.defense: 1,

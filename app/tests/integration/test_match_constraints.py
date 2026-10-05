@@ -38,7 +38,8 @@ def insert(db_session, **fields):
     db_session.commit()
 
 
-# --- combinaciones válidas ------------------------------------------------------------
+# --- combinaciones válidas ----------------------------------------------------
+
 
 def test_friendly_waiting_for_a_rival(db_session, users):
     insert(db_session, user_1_id=users[0].id)  # sin usuario 2, sin fecha, sin liga
@@ -51,6 +52,7 @@ def test_friendly_with_rival_in_every_status(db_session, users):
     insert(db_session, user_1_id=1, user_2_id=2, status=S)
     insert(db_session, user_1_id=1, user_2_id=2, status=ST)
     insert(db_session, user_1_id=1, user_2_id=2, status=F, score_1=2, score_2=2)
+
 
 def test_cancelled_friendly_without_rival_is_valid(db_session, users):
     insert(db_session, user_1_id=1, status=MatchStatus.cancelled)
@@ -71,20 +73,34 @@ def test_deleting_the_league_deletes_its_matches(db_session, users, league):
     assert db_session.query(Match).count() == 0
 
 
-# --- combinaciones inválidas ---------------------------------------------------------------
+# --- combinaciones inválidas --------------------------------------------------
 
 INVALID = [
     pytest.param(dict(user_1_id=1, user_2_id=1), id="juega contra sí mismo"),
     pytest.param(dict(user_1_id=1, status=ST), id="started sin rival"),
     pytest.param(dict(user_1_id=1, status=F, score_1=1, score_2=0), id="finished sin rival"),
     pytest.param(dict(user_1_id=1, user_2_id=2, status=F), id="finished sin resultado"),
-    pytest.param(dict(user_1_id=1, user_2_id=2, status=F, score_1=1), id="finished con un solo score"),
-    pytest.param(dict(user_1_id=1, user_2_id=2, status=ST, score_1=1, score_2=0), id="resultado en un partido que no terminó"),
+    pytest.param(
+        dict(user_1_id=1, user_2_id=2, status=F, score_1=1), id="finished con un solo score"
+    ),
+    pytest.param(
+        dict(user_1_id=1, user_2_id=2, status=ST, score_1=1, score_2=0),
+        id="resultado en un partido que no terminó",
+    ),
     pytest.param(dict(user_1_id=1, user_2_id=2, status=S, score_1=1), id="un solo score"),
-    pytest.param(dict(user_1_id=1, user_2_id=2, status=F, score_1=-1, score_2=0), id="score negativo"),
-    pytest.param(dict(user_1_id=1, status=MatchStatus.cancelled, score_1=1, score_2=0), id="cancelado sin rival con resultado"),
-    pytest.param(dict(user_1_id=1, user_2_id=2, status=MatchStatus.cancelled, score_1=0, score_2=0), id="cancelado con rival y resultado"),
+    pytest.param(
+        dict(user_1_id=1, user_2_id=2, status=F, score_1=-1, score_2=0), id="score negativo"
+    ),
+    pytest.param(
+        dict(user_1_id=1, status=MatchStatus.cancelled, score_1=1, score_2=0),
+        id="cancelado sin rival con resultado",
+    ),
+    pytest.param(
+        dict(user_1_id=1, user_2_id=2, status=MatchStatus.cancelled, score_1=0, score_2=0),
+        id="cancelado con rival y resultado",
+    ),
 ]
+
 
 @pytest.mark.parametrize("fields", INVALID)
 def test_invalid_combinations_are_rejected(db_session, users, fields):
@@ -106,6 +122,7 @@ def test_user_1_is_required(db_session, users):
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()
+
 
 def test_league_match_without_rival_is_rejected(db_session, users, league):
     db_session.add(Match(league_id=league.id, user_1_id=1, scheduled_at=DATE))
