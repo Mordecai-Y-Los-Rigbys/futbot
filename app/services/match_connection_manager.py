@@ -1,17 +1,27 @@
+import asyncio
+import logging
+
 from fastapi import WebSocket
 
 from app.errors import ApiError
 
+logger = logging.getLogger(__name__)
+
 MAX_CONNECTIONS_PER_USER_AND_MATCH = 5
+WAIT_EXPIRED_CODE = 1000
+WAIT_EXPIRED_REASON = "waitExpired"
 
 
 class MatchConnectionManager:
     """Registro en memoria de las conexiones abiertas a /ws/matches/{id}.
 
     Cada conexión es un suscriptor independiente de la transmisión de un
-    partido. Todos los métodos son síncronos (sin await), así que en un único
-    event loop son atómicos entre sí: dos handshakes simultáneos no pueden
-    pasarse el límite.
+    partido. reserve(), subscribe(), release(), count() y subscribers() son
+    síncronos (sin await), así que en un único event loop son atómicos entre
+    sí: dos handshakes simultáneos no pueden pasarse el límite. close_match()
+    es la excepción: es async porque espera el cierre de cada socket. Toma una
+    copia de los suscriptores antes de su primer await, así que tampoco ve
+    estados intermedios.
 
     Ciclo de vida de una conexión:
         reserve()   -> antes del accept; aplica el límite (429)
@@ -62,3 +72,30 @@ class MatchConnectionManager:
     def subscribers(self, match_id: int) -> list[tuple[WebSocket, int]]:
         """Suscriptores actuales del partido como (websocket, user_id)."""
         return list(self._subscribers.get(match_id, {}).items())
+    
+    async def close_match(
+        self,
+        match_id: int,
+        code: int = WAIT_EXPIRED_CODE,
+        reason: str = WAIT_EXPIRED_REASON,
+    ) -> None:
+        """Cierra todas las conexiones del partido (por defecto: espera vencida).
+
+        Solo toca los suscriptores de `match_id`. Los cierres se hacen de forma
+        concurrente sobre una copia de subscribers(); si un socket falla (por
+        ejemplo, ya estaba cerrado) no impide cerrar a los demás, y el error se
+        manda a un log. El release() lo hace el endpoint cuando recibe el
+        disconnect, no este método.
+        """
+        sockets = [ws for ws, _user_id in self.subscribers(match_id)]
+        results = await asyncio.gather(
+            *(ws.close(code=code, reason=reason) for ws in sockets),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                logger.debug(
+                    "No se pudo cerrar un socket del partido %s: %r",
+                    match_id,
+                    result,
+                )

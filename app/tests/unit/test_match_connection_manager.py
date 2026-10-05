@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 
 from app.errors import ApiError
 from app.services.match_connection_manager import (
@@ -116,3 +117,41 @@ def test_double_release_does_not_go_negative(manager):
 def test_subscribers_of_unknown_match_is_empty(manager):
     # Emitir a un partido sin nadie conectado no es un error.
     assert manager.subscribers(999) == []
+
+
+class FakeWs:
+    def __init__(self, fail=False):
+        self.fail, self.closed = fail, None
+
+    async def close(self, code=1000, reason=None):
+        if self.fail:
+            raise RuntimeError("ya cerrado")
+        self.closed = (code, reason)
+
+
+def test_close_match_closes_every_subscriber_even_if_one_fails(manager):
+    broken, ok = FakeWs(fail=True), FakeWs()
+    for ws in (broken, ok):
+        manager.reserve(1, 7)
+        manager.subscribe(1, 7, ws)
+
+    asyncio.run(manager.close_match(1))
+
+    assert ok.closed == (1000, "waitExpired")
+
+
+def test_close_match_without_subscribers_is_a_noop(manager):
+    asyncio.run(manager.close_match(999))
+
+def test_close_match_does_not_touch_other_matches(manager):
+    mine, other = FakeWs(), FakeWs()
+    manager.reserve(1, 7)
+    manager.subscribe(1, 7, mine)
+    manager.reserve(2, 7)
+    manager.subscribe(2, 7, other)
+
+    asyncio.run(manager.close_match(1))
+
+    assert mine.closed == (1000, "waitExpired")
+    assert other.closed is None  # el otro partido no se toca
+    assert manager.subscribers(2) == [(other, 7)]

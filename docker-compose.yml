@@ -9,6 +9,15 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      # -h 127.0.0.1 fuerza TCP: durante la inicialización Postgres levanta un
+      # servidor temporal que solo escucha en el socket unix, y sin -h el
+      # chequeo daría "listo" demasiado pronto.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
 
   api:
     build: .
@@ -20,9 +29,12 @@ services:
     volumes:
       # Sincroniza la carpeta local con el contenedor para hot-reload
       - .:/app:z
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      --ws websockets-sansio --ws-ping-interval 20 --ws-ping-timeout 20
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -40,3 +40,38 @@ class CreatePlayerBadRequest(BaseModel):
         "statSumMismatch",
     ]
     message: str
+
+
+class CreateFriendlyMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType", "incompleteForm", "nameTooLong", "invalidTeam"]
+    message: str
+
+
+class CreateFriendlyMatchConflict(BaseModel):
+    code: Literal["alreadyPlaying", "playerOrBehaviorNotOwned"]
+    message: str
+
+class JoinMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType"]
+    message: str
+
+
+class JoinMatchForbidden(BaseModel):
+    code: Literal["invalidLeaguePassword"]
+    message: str
+
+
+class JoinMatchConflict(BaseModel):
+    code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
+    message: str
+
+class JoinFriendlyMatchBadRequest(BaseModel):
+    code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]
+    message: str
+
+
+class JoinFriendlyMatchConflict(BaseModel):
+    code: Literal[
+        "notJoinable", "isOwnMatch", "alreadyPlaying", "playerOrBehaviorNotOwned"
+    ]
+    message: str
