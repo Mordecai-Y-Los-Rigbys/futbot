@@ -110,6 +110,12 @@ async def _send(
 async def broadcast_tick(
     manager: MatchConnectionManager, match_id: int, payload: dict, timeout: float = SEND_TIMEOUT
 ) -> None:
+    """Envía el tick a todos los suscriptores del partido, en paralelo.
+
+    Un suscriptor que no recibe el mensaje en `timeout` segundos se libera del
+    manager en el momento y se cierra con 1013 / slowClient, sin frenar al resto.
+    """
+
     subscribers = manager.subscribers(match_id)
     if not subscribers:
         return

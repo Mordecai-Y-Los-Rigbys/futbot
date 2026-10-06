@@ -33,6 +33,8 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
 
 
 class LeagueService:
+    """Casos de uso de las ligas: listar y crear."""
+
     def __init__(
         self,
         repo: AbstractLeagueRepository,
@@ -44,6 +46,16 @@ class LeagueService:
         self.behaviors = behaviors
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
+        """Lista paginada de las ligas.
+
+        Args:
+            name: filtro opcional por nombre. None o "" no filtran.
+            page: número de página, ya validado.
+
+        Returns:
+            La página pedida, con PAGE_SIZE ligas como máximo.
+        """
+
         data = self.repo.list_page(
             name=name or None,  # "" se trata como ausente
             offset=(page - 1) * PAGE_SIZE,
@@ -57,6 +69,20 @@ class LeagueService:
         )
 
     def create_league(self, creator_id: int, body: Any) -> LeagueSummary:
+        """Crea una liga e inscribe al creador con su equipo.
+
+        Args:
+            creator_id: usuario autenticado que crea la liga.
+            body: JSON del request, todavía sin validar.
+
+        Raises:
+            ApiError 400: el body no cumple el contrato (ver parse_create_league).
+            ApiError 409: playerOrBehaviorNotOwned.
+
+        Returns:
+            La liga creada.
+        """
+
         data = parse_create_league(body)  # todos los 400, en orden
 
         # 409: solo si no falló ningún 400

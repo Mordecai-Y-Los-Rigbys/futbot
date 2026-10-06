@@ -44,6 +44,11 @@ class MatchRunner:
         seed_factory: Callable[[], int] = lambda: secrets.randbits(63),
         send_timeout: float = SEND_TIMEOUT,
     ) -> None:
+        """Juega cada partido en tiempo real y transmite sus ticks.
+
+        Una tarea asyncio por partido. El cálculo de cada tick corre en un pool de
+        threads para no bloquear el event loop.
+        """
         self._manager = manager
         self._load_setup = load_setup
         self._repo_scope = repo_scope
@@ -69,10 +74,12 @@ class MatchRunner:
         return task
 
     def is_running(self, match_id: int) -> bool:
+        """True si el partido se está jugando en este proceso."""
         task = self._tasks.get(match_id)
         return task is not None and not task.done()
 
     async def shutdown(self) -> None:
+        """Cancela los partidos en curso y apaga el pool de threads. Se llama al apagar la app."""
         tasks = list(self._tasks.values())
         for task in tasks:
             task.cancel()

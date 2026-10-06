@@ -41,6 +41,8 @@ def _not_found() -> ApiError:
 
 
 class FriendlyService:
+    """Casos de uso de los amistosos: crear, listar los que esperan rival y unirse."""
+
     def __init__(
         self,
         repo: AbstractFriendlyRepository,
@@ -52,6 +54,20 @@ class FriendlyService:
         self.behaviors = behaviors
 
     def create_friendly(self, creator_id: int, body: Any) -> MatchResponse:
+        """Crea un amistoso con el equipo del creador y lo deja esperando rival.
+
+        Args:
+            creator_id: usuario autenticado que crea el amistoso.
+            body: JSON del request, todavía sin validar.
+
+        Raises:
+            ApiError 400: el body no cumple el contrato (en el orden de la convención 6).
+            ApiError 409: alreadyPlaying o playerOrBehaviorNotOwned.
+
+        Returns:
+            El amistoso creado, todavía sin rival.
+        """
+
         data = parse_create_friendly(body)  # todos los 400, en orden
 
         # 409: solo si no falló ningún 400
@@ -75,6 +91,17 @@ class FriendlyService:
         return _to_response(created)
 
     def list_waiting_friendlies(self, user_id: int, name: str | None, page: int) -> MatchPage:
+        """Lista paginada de los amistosos que esperan rival, sin los del propio usuario.
+
+        Args:
+            user_id: usuario autenticado. Sus propios amistosos no se listan.
+            name: filtro opcional por nombre. None o "" no filtran.
+            page: número de página, ya validado.
+
+        Returns:
+            La página pedida, con PAGE_SIZE amistosos como máximo.
+        """
+
         data = self.repo.list_waiting_page(
             exclude_user_id=user_id,
             name=name or None,  # "" se trata como ausente
@@ -89,6 +116,22 @@ class FriendlyService:
         )
 
     def join_friendly(self, user_id: int, raw_match_id: str, body: Any) -> MatchResponse:
+        """Une al usuario como rival de un amistoso que está esperando rival.
+
+        Args:
+            user_id: usuario autenticado que se une.
+            raw_match_id: id de la ruta, todavía sin validar.
+            body: JSON del request, todavía sin validar.
+
+        Raises:
+            ApiError 404: el id no es válido o el amistoso no existe.
+            ApiError 400: el body no cumple el contrato (en el orden de la convención 6).
+            ApiError 409: notJoinable, isOwnMatch, alreadyPlaying o playerOrBehaviorNotOwned.
+
+        Returns:
+            El partido con los dos clubes.
+        """
+
         match_id = parse_path_id(raw_match_id, "Partido amistoso no encontrado.")  # 404
         state = self.repo.get_friendly_state(match_id)
         if state is None:

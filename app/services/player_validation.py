@@ -20,6 +20,17 @@ def _is_int(v: Any) -> bool:
 
 
 def parse_create_player(body: Any) -> CreatePlayerData:
+    """Valida el body de POST /players y devuelve los datos para crear el jugador.
+
+    Las reglas se evalúan en este orden y se lanza solo la primera que falla
+    (convención 6): invalidFieldType > incompleteForm > nameTooLong >
+    statOutOfRange > statSumMismatch. El nombre se guarda sin espacios al
+    principio ni al final.
+
+    Raises:
+        ApiError 400: con el código de la primera regla que falla.
+    """
+
     if body is INVALID_JSON or (body is not None and not isinstance(body, dict)):
         raise _bad("invalidFieldType", "El body debe ser un objeto JSON válido.")
 

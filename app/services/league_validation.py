@@ -108,6 +108,17 @@ def _check_team(members: list[dict]) -> None:
 
 
 def parse_create_league(body: Any) -> CreateLeagueInput:
+    """Valida el body de POST /leagues y devuelve los datos de la liga.
+
+    Las reglas se evalúan en este orden y se lanza solo la primera que falla
+    (convención 6): invalidFieldType > incompleteForm > nameTooLong >
+    minParticipantsTooLow > maxLessThanMin > matchDurationOutOfRange >
+    passwordTooLong > invalidTeam. `password` solo cuenta si la liga es privada.
+
+    Raises:
+        ApiError 400: con el código de la primera regla que falla.
+    """
+
     if body is INVALID_JSON or (body is not None and not isinstance(body, dict)):
         raise _bad("invalidFieldType", "El body debe ser un objeto JSON válido.")
     body = body or {}

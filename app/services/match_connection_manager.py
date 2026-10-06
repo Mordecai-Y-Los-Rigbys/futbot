@@ -38,6 +38,12 @@ class MatchConnectionManager:
         self._evicted: set[WebSocket] = set()
 
     def reserve(self, match_id: int, user_id: int) -> None:
+        """Reserva un cupo de conexión para el usuario en el partido. Va antes del accept.
+
+        Raises:
+            ApiError 429: tooManyConnections, si ya tiene el máximo de conexiones abiertas.
+        """
+
         key = (match_id, user_id)
         current = self._reserved.get(key, 0)
         if current >= MAX_CONNECTIONS_PER_USER_AND_MATCH:
@@ -49,9 +55,15 @@ class MatchConnectionManager:
         self._reserved[key] = current + 1
 
     def subscribe(self, match_id: int, user_id: int, websocket: WebSocket) -> None:
+        """Suscribe la conexión a los ticks del partido. Va después del accept."""
         self._subscribers.setdefault(match_id, {})[websocket] = user_id
 
     def release(self, match_id: int, user_id: int, websocket: WebSocket) -> None:
+        """Libera el cupo y la suscripción de una conexión que terminó.
+
+        Lo llama siempre el endpoint al cerrar. Si la conexión ya había sido
+        expulsada con evict(), no hace nada, para no liberar el cupo dos veces.
+        """
         if websocket in self._evicted:  # ya liberado por evict()
             self._evicted.discard(websocket)
             return

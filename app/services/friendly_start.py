@@ -49,11 +49,13 @@ class FriendlyStartService:
         )
 
     def unschedule(self, match_id: int) -> None:
+        """Cancela la cuenta regresiva pendiente del partido, si la hay."""
         task = self._tasks.pop(match_id, None)
         if task is not None:
             task.cancel()
 
     def shutdown(self) -> None:
+        """Cancela todas las cuentas regresivas pendientes. Se llama al apagar la app."""
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()
@@ -75,6 +77,12 @@ class FriendlyStartService:
         return ready
 
     async def recover(self) -> None:
+        """Al arrancar la app, reprograma los amistosos con rival que siguen `scheduled`.
+
+        La cuenta regresiva vuelve a empezar de cero: no se guarda cuándo se unió
+        el rival.
+        """
+
         def pending() -> list[int]:
             with self._repo_scope() as repo:
                 return repo.list_pending_start()

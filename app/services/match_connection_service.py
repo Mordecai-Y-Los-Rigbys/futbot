@@ -17,6 +17,8 @@ def _utcnow() -> datetime:
 
 
 class MatchConnectionService:
+    """Emite los tokens para conectarse al WebSocket de un partido."""
+
     def __init__(self, repo: AbstractMatchConnectionRepository) -> None:
         self.repo = repo
 

@@ -10,6 +10,8 @@ PAGE_SIZE = 50
 
 
 class BehaviorService:
+    """Casos de uso de los behaviors de un usuario: listar, ver y crear los iniciales."""
+
     def __init__(self, repository: AbstractBehaviorRepository) -> None:
         self.repository = repository
 

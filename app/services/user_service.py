@@ -4,6 +4,8 @@ from app.repositories.user_abstract import AbstractUserRepository
 
 
 class UserService:
+    """Consulta de los datos de un usuario."""
+
     def __init__(self, user_repo: AbstractUserRepository) -> None:
         self.user_repo = user_repo
 

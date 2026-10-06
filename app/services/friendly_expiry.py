@@ -68,6 +68,7 @@ class FriendlyExpiryService:
             task.cancel()
 
     def shutdown(self) -> None:
+        """Cancela todos los vencimientos pendientes. Se llama al apagar la app."""
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()

@@ -15,6 +15,8 @@ def _utcnow() -> datetime:
 
 
 class SessionService:
+    """Crea, valida y borra las sesiones de los usuarios."""
+
     def __init__(self, repository: AbstractSessionRepository) -> None:
         self.repository = repository
 

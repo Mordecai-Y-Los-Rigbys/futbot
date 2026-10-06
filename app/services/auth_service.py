@@ -9,6 +9,8 @@ from app.services.session_service import SessionService
 
 
 class AuthService:
+    """Registro e inicio de sesión de usuarios."""
+
     def __init__(
         self,
         user_repo: AbstractUserRepository,
