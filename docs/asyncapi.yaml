@@ -1,0 +1,462 @@
+asyncapi: 3.0.0
+info:
+  title: FutBot - Tiempo real
+  version: 0.3.0
+  description: >
+    Canal WebSocket de FutBot. Complementa a `futbot-openapi.yaml`
+    (API REST).
+
+
+    Hay una sola conexión: `/ws/matches/{id}`, la transmisión de un
+    partido en particular. Es la misma para partidos de liga y
+    amistosos: el origen del partido no afecta esta transmisión.
+    Tiene un solo mensaje, `tick`: se emite en cada tick de la
+    simulación y trae siempre el estado completo del partido
+    (posiciones, marcador, tiempo transcurrido y fase, todos al mismo
+    nivel, sin sub-objetos) más, opcionalmente, un `event` con lo que
+    haya pasado puntualmente en ese tick (gol, inicio de período,
+    pausa, fin de partido).
+
+
+    ESTADOS DEL PARTIDO: un partido (de liga o amistoso) tiene un único
+    conjunto de estados: `scheduled`, `started`, `finished` y
+    `cancelled` (`MatchStatus` del OpenAPI). Un amistoso no tiene
+    estados propios: "esperando rival" es un partido `scheduled` sin
+    rival, y la cuenta regresiva es un partido `scheduled` con rival.
+
+
+    FLUJO DEL PARTIDO AMISTOSO:
+
+    1. El creador llama `POST /friendlies` (REST): se crea el partido
+    en `scheduled`, sin rival, visible en `GET /friendlies`. El amistoso
+    es el partido: la respuesta trae su `id`, el mismo que se usa en
+    todos los pasos siguientes.
+
+    2. El creador pide su `tokenWs` con `POST /matches/{id}/connections`
+    (REST) y abre `/ws/matches/{id}?token=<tokenWs>`. Mientras el rival
+    no se une, el partido no emite ningún `tick`: el creador conectado
+    no recibe nada, y ese silencio es el estado "esperando rival". La
+    espera del creador tiene un máximo de 15 minutos contados desde la
+    creación del partido (`createdAt`), no desde que abre el
+    WebSocket: si vence sin que se una nadie, el servidor pasa el
+    partido a `cancelled` y cierra la conexión con `1000` /
+    `waitExpired` (ver "Comportamiento de la conexión").
+
+    3. Otro usuario (el rival) llama `POST /friendlies/{id}/members`
+    (REST) con su equipo: queda registrado como segundo participante
+    (`club2`), el partido deja de aparecer en `GET /friendlies` y sigue
+    `scheduled`. En ese momento el servidor arranca la simulación
+    automáticamente, sin esperar a que nadie se conecte al WebSocket.
+    No existe endpoint ni acción manual para iniciarla. Si la unión
+    coincide con el vencimiento de la espera, gana el que llega primero
+    a la base: si gana el vencimiento, la unión responde 409 y no se
+    arranca nada.
+
+    4. El rival pide su `tokenWs` con `POST /matches/{id}/connections`
+    y abre el mismo canal. Antes del primer tick hay 3 segundos de silencio y el primer `tick` sale con `phase: countdown`
+    y `event: periodStart` (período 1, `countdownSeconds: 5`). La
+    cuenta regresiva es larga a propósito, para dar tiempo al rival a
+    recibir la respuesta del REST, pedir su token y conectarse antes de
+    que empiece el juego.
+
+    5. Al terminar la cuenta regresiva, los `tick` pasan a
+    `phase: playing` y el partido pasa a `started`.
+
+
+    CONEXIÓN NO OBLIGATORIA: conectarse al WebSocket no es condición
+    para que el partido se juegue. Si un participante no se conecta, o
+    se desconecta, el partido no se cancela ni se bloquea y su equipo
+    juega con los comportamientos por defecto (los behaviors asignados
+    en `members` al armar el equipo). El cierre de una conexión solo
+    libera al suscriptor: no modifica el estado del partido. Quien se
+    conecta tarde o se reconecta recibe la transmisión desde el `tick`
+    actual, sin replay de ticks anteriores; el campo `phase`, presente
+    en todos los `tick`, le indica en qué fase está. La única excepción
+    de partido sin jugarse es la espera vencida de un amistoso sin
+    rival: el servidor cancela el partido por su cuenta (no por una
+    desconexión) y cierra las conexiones.
+
+
+    Todos los nombres de propiedades y valores de enum van en camelCase.
+  x-project: "Laboratorio 2026 - Ingeniería del Software 1"
+
+servers:
+  local:
+    host: "(no definido todavía)"
+    protocol: ws
+    description: Servidor local
+
+defaultContentType: application/json
+
+# ============================================================
+# CANALES
+# ============================================================
+channels:
+  match:
+    address: /ws/matches/{id}
+    title: Transmisión de un partido
+    description: |
+      Transmisión en vivo de un partido, sea de liga o amistoso. Se
+      abre con el `tokenWs` obtenido en `POST /matches/{id}/connections`,
+      pasado en la query `token`. `{id}` es el `id` del partido, el
+      mismo que devuelven los endpoints REST (en un amistoso, el `id`
+      que devuelve `POST /friendlies`).
+
+      Un único mensaje, `tick`, con el estado completo del partido en
+      cada tick de la simulación. El servidor no emite `tick` hasta que
+      la simulación arranca (en un amistoso, hasta que el rival se une
+      por REST).
+
+      Los mensajes de aplicación son SOLO servidor -> cliente: el
+      cliente no envía nada por este canal (las acciones como
+      reasignar behavior o sustituir jugadores son REST). Si el
+      cliente envía algún mensaje, el servidor lo ignora en silencio:
+      no se procesa, no altera el partido y no cierra la conexión.
+
+      ## Handshake
+
+      El servidor siempre acepta el upgrade. Si alguna validación falla,
+      cierra la conexión inmediatamente con un código de cierre 4xxx
+      (4000 + el status HTTP equivalente) y un `reason` que identifica
+      el motivo. No se rechaza con una respuesta HTTP antes del
+      upgrade. Las validaciones se aplican en este orden y se informa
+      solo la primera que falla:
+
+      | Orden | Caso                                                    | Código | `reason`             |
+      |-------|---------------------------------------------------------|--------|----------------------|
+      | 1     | Falta el parámetro `token`, o el token no existe        | `4401` | `tokenInvalid`       |
+      | 1     | Token expirado                                          | `4401` | `tokenExpired`       |
+      | 2     | Token que no corresponde al `id` de la URL              | `4403` | `tokenMatchMismatch` |
+      | 3     | El partido no existe                                    | `4404` | `matchNotFound`      |
+      | 4     | El partido ya terminó (`finished`)                      | `4409` | `matchFinished`      |
+      | 4     | El partido fue cancelado (`cancelled`)                  | `4409` | `matchCancelled`     |
+      | 5     | Ya hay 5 conexiones abiertas del usuario en ese partido | `4429` | `tooManyConnections` |
+
+      Un partido `cancelled` es el de un amistoso cuya espera de 15
+      minutos venció sin que se uniera un rival. Reconectar a un
+      partido cancelado siempre responde `4409` / `matchCancelled`.
+
+      Si todas las validaciones pasan, la conexión queda abierta.
+
+      ## Vigencia y reutilización del token
+
+      - El token tiene una expiración finita de 35 minutos, fija (no
+        es configurable). Se deriva de la espera máxima del creador
+        (15 minutos) + la duración máxima de un partido (10 minutos)
+        + un margen (10 minutos), y alcanza para cubrir la espera del
+        creador, la cuenta regresiva y un partido completo.
+      - La expiración se valida SOLO en el handshake. Una conexión ya
+        establecida no se corta cuando el token expira.
+      - El token es reutilizable (no es de un solo uso) hasta que
+        expire, de modo que el mismo cliente puede reconectarse tras
+        una caída de red sin pedir otro token. Sigue atado a un único
+        usuario y a un único partido.
+      - Si el token expiró, el cliente pide uno nuevo con
+        `POST /matches/{id}/connections`. Si el partido está
+        cancelado o terminado, ese endpoint responde 409.
+
+      ## Conexiones múltiples
+
+      Se permiten varias conexiones simultáneas con el mismo
+      token/usuario sobre el mismo partido (por ejemplo, dos pestañas,
+      o una reconexión que llega antes de que el servidor detecte la
+      caída de la anterior). Cada conexión es un suscriptor
+      independiente y recibe la misma transmisión. El límite es de 5
+      conexiones simultáneas por usuario y partido. Si el usuario ya
+      tiene 5 conexiones abiertas sobre ese partido, se cierra con 4429
+      (tooManyConnections). Al cerrarse una conexión se libera
+      un cupo.
+
+      ## Comportamiento de la conexión
+
+      - Mientras la simulación no arranca no se envía ningún mensaje de
+        aplicación (ni `tick`, ni keep-alive con payload, ni mensajes
+        de otro tipo): en un amistoso, ese silencio es el estado
+        "esperando rival".
+      - Se permiten los frames de control del protocolo WebSocket
+        (ping/pong) para detectar conexiones muertas y liberar
+        recursos. No son mensajes de aplicación y no alteran el
+        estado de "silencio". El servidor envía un ping cada 20
+        segundos y cierra la conexión si no recibe el pong dentro de
+        otros 20 segundos, por lo que una conexión muerta libera su
+        cupo en 40 segundos como máximo.
+      - Una vez que la simulación arranca, la conexión ya abierta
+        recibe los `tick` sin necesidad de reconectar.
+      - Al desconectarse un cliente (cierre normal, caída o timeout de
+        ping/pong) se libera su suscripción.
+      - Si el creador de un amistoso espera 15 minutos sin que se una
+        un rival, el servidor pasa el partido a `cancelled` y cierra
+        TODAS las conexiones abiertas de ese partido con código
+        `1000` (cierre normal) y `reason: "waitExpired"`. El cierre
+        ocurre después de confirmar el cambio de estado, para que quien
+        reconecte justo después ya reciba `4409` / `matchCancelled`.
+        El cliente NO debe reconectarse automáticamente tras este
+        cierre: si lo hace, el handshake responde `4409` /
+        `matchCancelled`. `reason` es texto libre (máximo 123 bytes):
+        el valor `waitExpired` es el que usa el front para distinguir
+        este cierre de otros.
+      - Si el partido termina con conexiones abiertas, el servidor
+        envía el `tick` final (`matchEnd`) y cierra cada conexión con
+        código `1000` y `reason: "matchEnd"`. El cliente no debe
+        reconectarse.
+
+      ## Cierres iniciados por el servidor (resumen)
+
+      | Código | `reason`      | Cuándo                                                | ¿Reconectar? |
+      |--------|---------------|-------------------------------------------------------|--------------|
+      | `1000` | `waitExpired` | Venció la espera de 15 min del creador sin rival      | No           |
+      | `1000` | `matchEnd`    | El partido terminó                                    | No           |
+
+    parameters:
+      id:
+        $ref: "#/components/parameters/MatchId"
+    bindings:
+      ws:
+        method: GET
+        query:
+          type: object
+          properties:
+            token:
+              type: string
+              description: >
+                `tokenWs` devuelto por POST /matches/{id}/connections.
+                Vigente 35 minutos, reutilizable para reconectar,
+                válido solo para el usuario y el partido para los que
+                fue emitido. Si falta, el servidor acepta el upgrade y
+                cierra con `4401` / `tokenInvalid`.
+          required: [token]
+    messages:
+      tick:
+        $ref: "#/components/messages/Tick"
+
+# ============================================================
+# OPERACIONES
+#
+# En AsyncAPI 3 la acción se describe desde el punto de vista de la
+# aplicación documentada (el servidor): el servidor ENVÍA los `tick`.
+# ============================================================
+operations:
+  sendMatchStream:
+    action: send
+    channel:
+      $ref: "#/channels/match"
+    title: Transmitir el partido
+    description: >
+      El servidor emite un `tick` por cada paso de la simulación, con
+      el estado completo del partido (posiciones, marcador, tiempo y
+      fase, todo al mismo nivel) y, cuando corresponde, el evento
+      puntual ocurrido en ese tick. Cada conexión abierta es un
+      suscriptor independiente: un cliente que se conecta o reconecta
+      con el partido en curso recibe desde el `tick` actual, sin
+      replay. Cualquier mensaje enviado por el cliente se ignora en
+      silencio. Si el creador de un amistoso espera 15 minutos sin
+      rival, la conexión se cierra con `1000` / `waitExpired` sin
+      enviar ningún `tick`.
+    messages:
+      - $ref: "#/channels/match/messages/tick"
+
+# ============================================================
+# COMPONENTES
+# ============================================================
+components:
+  parameters:
+    MatchId:
+      description: >
+        Id del partido (el `id` devuelto por REST; en un amistoso, el
+        de `POST /friendlies`).
+      examples: ["42"]
+
+  messages:
+    Tick:
+      name: tick
+      title: Estado del partido
+      summary: >
+        Se emite en cada tick de la simulación. Trae siempre el
+        estado completo (posiciones, marcador, tiempo transcurrido,
+        fase, todo al mismo nivel) y, opcionalmente, el evento puntual
+        de ese tick (`event`, `null` si no pasó nada relevante).
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TickPayload"
+
+  schemas:
+    Position:
+      type: object
+      description: >
+       Posición en unidades de cancha, en coordenadas absolutas (no relativas a un equipo, a
+       diferencia de la API de Comportamientos). Origen (0, 0) en la esquina inferior izquierda,
+       del lado del arco de club1; x crece hacia el arco de club2 (de 0 a 100) e y hacia arriba 
+       (de 0 a 60). Los arcos están en x = 0 (club1) y x = 100 (club2), entre y = 22 e y = 38.
+       Los valores son decimales.
+       Excepción: en el tick de un gol, la pelota puede venir con x apenas menor que 0 o
+       mayor que 100, porque está dentro del arco.
+
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+      required: [x, y]
+
+    MatchPhase:
+      type: string
+      description: >
+        Fase actual del partido. Viaja en TODOS los `tick`, de modo que
+        un cliente que se conecta tarde o se reconecta sabe en qué fase
+        está sin depender de haber recibido un evento puntual.
+
+        countdown: cuenta regresiva previa al inicio de un período. El
+        primer `tick` de la cuenta trae el evento `periodStart`. El
+        partido sigue `scheduled`.
+
+        playing: el partido está en juego (`started`).
+
+        paused: el partido está en pausa (coincide con el evento
+        `pause`).
+
+        finished: el partido terminó (coincide con el evento
+        `matchEnd`).
+      enum: [countdown, playing, paused, finished]
+
+    TickPlayerPosition:
+      type: object
+      properties:
+        playerId:
+          type: integer
+        position:
+          $ref: "#/components/schemas/Position"
+      required: [playerId, position]
+
+    GoalEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          const: goal
+        scoringClub:
+          type: string
+          description: Nombre del club que convirtió. En el tick siguiente, los jugadores y la
+            pelota ya están en sus posiciones iniciales y el juego continúa (phase: playing).
+      required: [type, scoringClub]
+
+    PeriodStartEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          const: periodStart
+        periodNumber:
+          type: integer
+          minimum: 1
+          maximum: 4
+        countdownSeconds:
+          type: integer
+          examples: [5]
+          description: >
+            Cuenta regresiva previa al inicio del período. En el
+            período 1 de un amistoso es de 5 segundos, para dar tiempo
+            al rival que se une a conectarse antes de que empiece el
+            juego.
+      required: [type, periodNumber, countdownSeconds]
+
+    PauseEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          const: pause
+        reason:
+          type: string
+          enum: [hydration, halftime]
+          description: >
+            TODO: confirmar los valores exactos, o si no se distingue
+            el motivo.
+      required: [type, reason]
+
+    MatchResult:
+      type: object
+      description: Mismo formato que `MatchResult` del OpenAPI.
+      properties:
+        score1:
+          type: integer
+        score2:
+          type: integer
+      required: [score1, score2]
+
+    MatchEndEvent:
+      type: object
+      description: >
+        Último `tick` del partido (`phase: finished`). Tiene prioridad
+        sobre cualquier otro evento: si el último tick del juego coincide
+        con un gol, el `event` de ese tick es `matchEnd` y NO se emite un
+        evento `goal`. Aun así, ese gol ya está sumado en `score1`/`score2`
+        del tick y en `result`. El cliente no debe depender de recibir
+        `goal` para actualizar el marcador: el estado completo (`score1`,
+        `score2`) es la fuente de verdad en todos los ticks.
+      properties:
+        type:
+          type: string
+          const: matchEnd
+        result:
+          $ref: "#/components/schemas/MatchResult"
+      required: [type, result]
+
+    TickEvent:
+      description: >
+        Evento puntual ocurrido en este tick. Discriminado por `type`.
+        Un tick trae a lo sumo un evento. Si en un mismo tick coinciden
+        varios, `matchEnd` tiene prioridad sobre `goal` (ver
+        `MatchEndEvent`).
+      oneOf:
+        - $ref: "#/components/schemas/GoalEvent"
+        - $ref: "#/components/schemas/PeriodStartEvent"
+        - $ref: "#/components/schemas/PauseEvent"
+        - $ref: "#/components/schemas/MatchEndEvent"
+      discriminator: type
+
+    TickPayload:
+      type: object
+      description: >
+        Estado completo del partido en este tick: posiciones, marcador,
+        tiempo y fase van todos al mismo nivel (sin sub-objetos) para
+        que el mensaje sea liviano y simple de parsear, dado que se
+        emite varias veces por segundo durante todo el partido.
+      properties:
+        type:
+          type: string
+          const: tick
+        players:
+          type: array
+          items:
+            $ref: "#/components/schemas/TickPlayerPosition"
+        ballPosition:
+          $ref: "#/components/schemas/Position"
+        score1:
+          type: integer
+          description: Goles del club 1 (`club1` del partido).
+        score2:
+          type: integer
+          description: Goles del club 2 (`club2` del partido).
+        elapsedTime:
+          type: integer
+          description: Segundos transcurridos (suposición; alternativa "mm:ss" como string).
+        phase:
+          $ref: "#/components/schemas/MatchPhase"
+        event:
+          description: >
+            Evento puntual de este tick, o `null` si no ocurrió ninguno
+            (la gran mayoría de los ticks, donde solo cambian
+            posiciones y/o tiempo).
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/TickEvent"
+      required:
+        - type
+        - players
+        - ballPosition
+        - score1
+        - score2
+        - elapsedTime
+        - phase
+        - event
+
