@@ -57,7 +57,7 @@ app.include_router(users_router)
 
 # Task 0.2: Configuración de CORS
 origins = [
-    os.getenv("FRONTEND_URL", "http://localhost:3000"),
+    os.getenv("FRONTEND_URL", "http://localhost:5173"),
 ]
 
 app.add_middleware(
