@@ -14,6 +14,7 @@ Orden de un tick:
 import copy
 import random
 from collections.abc import Mapping, Sequence
+from itertools import combinations
 from dataclasses import dataclass
 
 from app.simulation import constants as C
@@ -201,10 +202,9 @@ def _resolve_collisions(players: list[PlayerState]) -> None:
 
     for _ in range(C.COLLISION_PASSES):
         any_separated = False
-        for i, player_a in enumerate(ordered):
-            for player_b in ordered[i + 1 :]:
-                if _separate(player_a, player_b):
-                    any_separated = True
+        for player_a, player_b in combinations(ordered, 2):
+            if _separate(player_a, player_b):
+                any_separated = True
         if not any_separated:
             return
 
