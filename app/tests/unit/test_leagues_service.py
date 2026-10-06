@@ -45,9 +45,9 @@ def test_maps_the_eight_fields(service, make_item, fake_repo):
         items=[make_item(id=5, name="Copa", participants_count=3, max_participants=8)],
         total=1,
     )
-    item = service.list_leagues(name=None, page=1).model_dump(
-        mode="json", by_alias=True
-    )["items"][0]
+    item = service.list_leagues(name=None, page=1).model_dump(mode="json", by_alias=True)["items"][
+        0
+    ]
     assert item == {
         "id": 5,
         "name": "Copa",

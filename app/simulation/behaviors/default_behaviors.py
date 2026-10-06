@@ -12,12 +12,12 @@ ball = ball_position()
 if i_have_ball():
     me = my_position()
     goal = opponent_goal
-    
+
     # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear
     # (de la pelota al arco).
     forward = (ball[0] - me[0], ball[1] - me[1])
     to_goal = (goal[0] - ball[0], goal[1] - ball[1])
-    
+
     # Si apuntan para lados opuestos (producto escalar negativo), el arco quedó
     # a mis espaldas y el motor patearía de costado: primero camino hacia el
     # arco para girar, y pateo en un tick siguiente.
@@ -39,12 +39,12 @@ if i_have_ball():
         target = (me[0] + 15, 0)
     else:
         target = (me[0] + 15, field_width)
-    
-    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear 
+
+    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear
     # (de la pelota al destino).
     forward = (ball[0] - me[0], ball[1] - me[1])
     to_target = (target[0] - ball[0], target[1] - ball[1])
-    
+
     # Si apuntan para lados opuestos (producto escalar negativo), el destino
     # quedó a mis espaldas y el motor patearía de costado: primero camino hacia
     # él para girar, y pateo en un tick siguiente.
@@ -70,12 +70,12 @@ if i_have_ball():
         target = (me[0] + 25, 0)
     else:
         target = (me[0] + 25, field_width)
-    
-    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear 
+
+    # Hacia dónde miro (de mí a la pelota) y hacia dónde quiero patear
     # (de la pelota al destino).
     forward = (ball[0] - me[0], ball[1] - me[1])
     to_target = (target[0] - ball[0], target[1] - ball[1])
-    
+
     # Si apuntan para lados opuestos (producto escalar negativo), el destino
     # quedó a mis espaldas y el motor patearía de costado: primero camino hacia
     # él para girar, y pateo en un tick siguiente.

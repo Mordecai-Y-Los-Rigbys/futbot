@@ -6,10 +6,13 @@ from typing import Awaitable, Callable
 
 from starlette.concurrency import run_in_threadpool
 
-from app.repositories.match_expiry_abstract import AbstractMatchExpiryRepository
+from app.repositories.match_expiry_abstract import (
+    AbstractMatchExpiryRepository,
+    WaitingFriendlyData,
+)
 from app.services.match_timing import MAX_FRIENDLY_WAIT
 
-    
+
 EXPIRY_RETRIES = 3
 EXPIRY_RETRY_DELAY = 2.0  # segundos
 
@@ -56,9 +59,7 @@ class FriendlyExpiryService:
         self.unschedule(match_id)
         deadline = (created_at or _utcnow()) + self.wait
         delay = max(0.0, (deadline - _utcnow()).total_seconds())
-        self._tasks[match_id] = asyncio.get_running_loop().create_task(
-            self._run(match_id, delay)
-        )
+        self._tasks[match_id] = asyncio.get_running_loop().create_task(self._run(match_id, delay))
 
     def unschedule(self, match_id: int) -> None:
         """Cancela el timer (por ejemplo, cuando el rival se une)."""
@@ -67,6 +68,7 @@ class FriendlyExpiryService:
             task.cancel()
 
     def shutdown(self) -> None:
+        """Cancela todos los vencimientos pendientes. Se llama al apagar la app."""
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()
@@ -88,7 +90,7 @@ class FriendlyExpiryService:
         """Al arrancar: reprograma los amistosos en espera. Los que ya vencieron
         se cancelan enseguida (delay 0); al resto les queda su tiempo real."""
 
-        def waiting():
+        def waiting() -> list[WaitingFriendlyData]:
             with self._repo_scope() as repo:
                 return repo.list_waiting_friendlies()
 
@@ -112,11 +114,14 @@ class FriendlyExpiryService:
             except Exception:
                 logger.exception(
                     "No se pudo caducar el amistoso del partido %s (intento %s/%s)",
-                    match_id, attempt, EXPIRY_RETRIES,
+                    match_id,
+                    attempt,
+                    EXPIRY_RETRIES,
                 )
                 if attempt < EXPIRY_RETRIES:
                     await asyncio.sleep(EXPIRY_RETRY_DELAY * attempt)
         logger.error(
             "Se agotaron los reintentos para caducar el partido %s; "
-            "queda en espera hasta el próximo recover()", match_id,
+            "queda en espera hasta el próximo recover()",
+            match_id,
         )

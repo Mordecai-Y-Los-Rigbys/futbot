@@ -20,10 +20,10 @@ def body():
     return {
         "name": "Partido amistoso 1",
         "members": [
-            {"playerId": i + 1, "role": r, "behaviorId": 10 + i}
-            for i, r in enumerate(ROLES)
+            {"playerId": i + 1, "role": r, "behaviorId": 10 + i} for i, r in enumerate(ROLES)
         ],
     }
+
 
 @pytest.fixture()
 def players():
@@ -34,12 +34,15 @@ def players():
 def behaviors():
     return FakeBehaviors()
 
+
 @pytest.fixture()
 def repo():
     r = MagicMock(spec=AbstractFriendlyRepository)
     r.user_is_playing.return_value = False
     r.create_with_team.return_value = FriendlyMatchData(
-        id=100, name="Partido amistoso 1", status="scheduled",
+        id=100,
+        name="Partido amistoso 1",
+        status="scheduled",
         club1=FriendlyClubData(id=1, username="usuario1", club_name="Club Atletico"),
         created_at=NOW,
     )
@@ -56,7 +59,7 @@ def test_success_returns_the_match_schema(repo, players, behaviors):
     assert out.model_dump_json(by_alias=True).count("2026-10-03T18:00:00Z") == 1
 
 
-def test_success_returns_the_match_schema(repo, players, behaviors):
+def test_success_sends_the_creator_team_to_the_repo(repo, players, behaviors):
     FriendlyService(repo, players, behaviors).create_friendly(1, body())
     data = repo.create_with_team.call_args.args[0]
     assert data.creator_id == 1 and data.name == "Partido amistoso 1"
@@ -65,17 +68,17 @@ def test_success_returns_the_match_schema(repo, players, behaviors):
     ]
 
 
-def test_success_returns_the_match_schema(repo, players, behaviors):
+def test_name_too_long_is_400_before_touching_the_repo(repo, players, behaviors):
     b = body()
     b["name"] = "x" * 21
     with pytest.raises(ApiError) as e:
-        FriendlyService(repo, players, behaviors).create_friendly(1, body())
+        FriendlyService(repo, players, behaviors).create_friendly(1, b)
     assert (e.value.status_code, e.value.code) == (400, "nameTooLong")
     repo.user_is_playing.assert_not_called()
     repo.create_with_team.assert_not_called()
 
 
-def test_success_returns_the_match_schema(repo, players, behaviors):
+def test_user_already_playing_is_409(repo, players, behaviors):
     repo.user_is_playing.return_value = True
     with pytest.raises(ApiError) as e:
         FriendlyService(repo, players, behaviors).create_friendly(1, body())
@@ -84,7 +87,7 @@ def test_success_returns_the_match_schema(repo, players, behaviors):
 
 
 def test_player_not_owned_or_missing(repo, players, behaviors):
-    players.owned = {1, 2, 4, 5, 6}   # falta el 3
+    players.owned = {1, 2, 4, 5, 6}  # falta el 3
     with pytest.raises(ApiError) as e:
         FriendlyService(repo, players, behaviors).create_friendly(1, body())
     assert (e.value.status_code, e.value.code) == (409, "playerOrBehaviorNotOwned")
@@ -92,7 +95,7 @@ def test_player_not_owned_or_missing(repo, players, behaviors):
 
 
 def test_behavior_not_owned_or_missing(repo, players, behaviors):
-    behaviors.owned = {10, 11, 13, 14, 15}   # falta el 12
+    behaviors.owned = {10, 11, 13, 14, 15}  # falta el 12
     with pytest.raises(ApiError) as e:
         FriendlyService(repo, players, behaviors).create_friendly(1, body())
     assert e.value.code == "playerOrBehaviorNotOwned"

@@ -10,7 +10,9 @@ PAGE_SIZE = 50
 
 
 class BehaviorService:
-    def __init__(self, repository: AbstractBehaviorRepository):
+    """Casos de uso de los behaviors de un usuario: listar, ver y crear los iniciales."""
+
+    def __init__(self, repository: AbstractBehaviorRepository) -> None:
         self.repository = repository
 
     def list_behaviors(
@@ -33,7 +35,7 @@ class BehaviorService:
         if behavior.user_id != user_id:
             raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
         return behavior
-    
+
     def create_default_behaviors(self, user_id: int) -> list[BehaviorData]:
         """Crea para el usuario una copia propia de los behaviors iniciales."""
         return self.repository.create_many(

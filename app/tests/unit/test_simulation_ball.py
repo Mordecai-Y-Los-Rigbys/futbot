@@ -80,6 +80,7 @@ def test_friction_is_applied_every_tick():
     ball, _ = ball_after_one_tick((50.0, 30.0), (10.0, 0.0))
     assert ball.velocity.x == pytest.approx(10.0 * BALL_FRICTION_PER_TICK)
 
+
 def test_ball_crossing_just_outside_the_post_bounces_back_in():
     # Cruza la línea afuera del palo pero termina a la altura del arco.
     ball, events = ball_after_one_tick((1.0, GOAL_Y_MIN - 1.0), (-40.0, 20.0))

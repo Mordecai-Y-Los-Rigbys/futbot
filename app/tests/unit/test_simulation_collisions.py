@@ -70,6 +70,7 @@ def test_three_players_overlapping_are_all_separated():
         for b in positions[i + 1 :]:
             assert (b - a).length() >= 2 * PLAYER_RADIUS - 1e-3  # tolerancia numérica
 
+
 def test_separating_a_pair_can_create_a_new_overlap_that_is_also_resolved():
     # Orden de los pares: (AWAY 1, AWAY 2), (AWAY 1, HOME 1), (AWAY 2, HOME 1).
     s = step(
@@ -83,15 +84,19 @@ def test_separating_a_pair_can_create_a_new_overlap_that_is_also_resolved():
     for i, a in enumerate(positions):
         for b in positions[i + 1 :]:
             assert (b - a).length() >= 2 * PLAYER_RADIUS - 1e-3
-        
+
+
 @pytest.mark.parametrize("strength_a, strength_b", [(20, 80), (60, 60), (80, 20)])
 def test_player_against_the_wall_ends_without_overlap(strength_a, strength_b):
-    s = step(state(player(HOME, 1, x=2.0, strength=strength_a),
-                   player(AWAY, 1, x=3.0, strength=strength_b))).state
+    s = step(
+        state(
+            player(HOME, 1, x=2.0, strength=strength_a), player(AWAY, 1, x=3.0, strength=strength_b)
+        )
+    ).state
     a, b = s.player(A).position, s.player(B).position
     assert a.x >= PLAYER_RADIUS
     assert (b - a).length() >= 2 * PLAYER_RADIUS - 1e-9
-    
+
 
 def test_players_against_different_walls_in_a_corner_end_separated():
     # Cada uno contra una pared distinta: los dos quedan frenados y la

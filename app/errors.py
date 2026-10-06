@@ -18,7 +18,7 @@ UNREADABLE_BODY_TYPES = {"json_invalid", "model_attributes_type"}
 class ApiError(Exception):
     """Error con la forma del contrato: { "code": str | None, "message": str }."""
 
-    def __init__(self, status_code: int, code: str | None, message: str):
+    def __init__(self, status_code: int, code: str | None, message: str) -> None:
         self.status_code = status_code
         self.code = code
         self.message = message
@@ -37,8 +37,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
 def is_unreadable_body(errors: List[Dict[str, Any]]) -> bool:
     """JSON roto, body vacío o body que no es un objeto: el error es del body entero."""
     return any(
-        err.get("type") in UNREADABLE_BODY_TYPES
-        or tuple(err.get("loc", ())) == ("body",)
+        err.get("type") in UNREADABLE_BODY_TYPES or tuple(err.get("loc", ())) == ("body",)
         for err in errors
     )
 
@@ -46,6 +45,7 @@ def is_unreadable_body(errors: List[Dict[str, Any]]) -> bool:
 # ------------------------------------------------------------------
 # Register
 # ------------------------------------------------------------------
+
 
 def determine_rejection_reason(error_detail: Dict[str, Any], field: str) -> str:
     err_type: str = error_detail.get("type", "")
@@ -89,14 +89,10 @@ def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | 
 
 
 def handle_register_validation_error(exc: RequestValidationError) -> JSONResponse:
-    field_errors = [
-        fe for fe in (build_field_error(err) for err in exc.errors()) if fe is not None
-    ]
+    field_errors = [fe for fe in (build_field_error(err) for err in exc.errors()) if fe is not None]
     if not field_errors:
         # Body ilegible (JSON roto, vacío, array): se reportan los cinco campos
-        field_errors = [
-            RegisterUserFieldError(field=f, reason="required") for f in REGISTER_FIELDS
-        ]
+        field_errors = [RegisterUserFieldError(field=f, reason="required") for f in REGISTER_FIELDS]
 
     payload = RegisterUserBadRequest(
         message="Revisá los campos marcados.",
@@ -111,6 +107,7 @@ def handle_register_validation_error(exc: RequestValidationError) -> JSONRespons
 # ------------------------------------------------------------------
 # Login
 # ------------------------------------------------------------------
+
 
 def _login_error(code: str, message: str) -> JSONResponse:
     payload = LogInBadRequest(code=code, message=message)
@@ -156,6 +153,7 @@ def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
 # ------------------------------------------------------------------
 # Genérico y dispatcher
 # ------------------------------------------------------------------
+
 
 def handle_generic_validation_error(exc: RequestValidationError) -> JSONResponse:
     errors = exc.errors()

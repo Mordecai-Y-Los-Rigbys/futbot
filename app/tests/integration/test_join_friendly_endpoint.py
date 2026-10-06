@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start
+from app.api.ws_deps import get_friendly_expiry
 from app.domain.match import MatchStatus
 from app.main import app
 from app.models.match import Match
@@ -25,12 +25,20 @@ pytestmark = pytest.mark.integration
 
 ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
 ITEM_FIELDS = {
-    "id", "leagueId", "name", "status", "club1", "club2",
-    "scheduledAt", "createdAt", "result",
+    "id",
+    "leagueId",
+    "name",
+    "status",
+    "club1",
+    "club2",
+    "scheduledAt",
+    "createdAt",
+    "result",
 }
 
 
-# --- fakes y fixtures -----------------------------------------------------------------------
+# --- fakes y fixtures ---------------------------------------------------------
+
 
 class FakeExpiry:
     def __init__(self):
@@ -78,8 +86,15 @@ def make_team(db_session, make_behaviors):
 
     def _make(user):
         players = [
-            Player(user_id=user.id, name=f"J{i}", power=60, agility=60,
-                   control=60, strength=60, speed=60)
+            Player(
+                user_id=user.id,
+                name=f"J{i}",
+                power=60,
+                agility=60,
+                control=60,
+                strength=60,
+                speed=60,
+            )
             for i in range(6)
         ]
         db_session.add_all(players)
@@ -133,9 +148,7 @@ def match_row(db_session, match_id) -> Match:
 def members_of(db_session, match_id, user_id):
     db_session.expire_all()
     return db_session.scalars(
-        select(TeamMember).where(
-            TeamMember.match_id == match_id, TeamMember.user_id == user_id
-        )
+        select(TeamMember).where(TeamMember.match_id == match_id, TeamMember.user_id == user_id)
     ).all()
 
 
@@ -166,7 +179,8 @@ def to_data(match_id, user_id, members):
     )
 
 
-# --- unión exitosa ------------------------------------------------------------------------------------
+# --- unión exitosa ------------------------------------------------------------
+
 
 def test_join_keeps_the_same_match_and_registers_the_rival(
     login_as, db_session, creator, joiner, friendly, joiner_team, schedulers
@@ -198,7 +212,9 @@ def test_both_teams_are_persisted_and_the_creators_is_kept(
 ):
     created, creator_members = friendly
     login_as(joiner).post(url(created["id"]), json={"members": joiner_team})
-    assert team_of(members_of(db_session, created["id"], creator.id)) == expected_team(creator_members)
+    assert team_of(members_of(db_session, created["id"], creator.id)) == expected_team(
+        creator_members
+    )
     assert team_of(members_of(db_session, created["id"], joiner.id)) == expected_team(joiner_team)
 
 
@@ -219,7 +235,9 @@ def test_joined_match_disappears_from_the_listing(
     created, _ = friendly
     viewer = login_as(create_user("viewer"))
     assert [i["id"] for i in viewer.get("/friendlies").json()["items"]] == [created["id"]]
-    assert login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
+    assert (
+        login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
+    )
     body = viewer.get("/friendlies").json()
     assert body["items"] == [] and body["total"] == 0
 
@@ -228,16 +246,21 @@ def test_second_join_is_not_joinable_and_keeps_the_first_rival(
     login_as, db_session, joiner, late, friendly, joiner_team, late_team, schedulers
 ):
     created, _ = friendly
-    assert login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
+    assert (
+        login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
+    )
     resp = login_as(late).post(url(created["id"]), json={"members": late_team})
     assert resp.status_code == 409 and resp.json()["code"] == "notJoinable"
     assert match_row(db_session, created["id"]).user_2_id == joiner.id
     assert members_of(db_session, created["id"], late.id) == []
 
 
-# --- autenticación y ids de ruta -------------------------------------------------------------------------
+# --- autenticación y ids de ruta ----------------------------------------------
 
-@pytest.mark.parametrize("path", ["/friendlies/1/members", "/friendlies/abc/members", "/friendlies/0/members"])
+
+@pytest.mark.parametrize(
+    "path", ["/friendlies/1/members", "/friendlies/abc/members", "/friendlies/0/members"]
+)
 def test_no_cookie_is_401_even_with_bad_id_or_body(client, path):
     resp = client.post(path, json={"members": 5})
     assert resp.status_code == 401 and resp.json()["code"] is None
@@ -268,17 +291,23 @@ def test_nonexistent_match_is_404(login_as, joiner, joiner_team):
     assert resp.json() == {"code": None, "message": "Partido amistoso no encontrado."}
 
 
-def test_league_match_is_404(login_as, db_session, creator, joiner, other, joiner_team, make_league):
+def test_league_match_is_404(
+    login_as, db_session, creator, joiner, other, joiner_team, make_league
+):
     league = make_league(creator, "Liga")
     match = add_match(
-        db_session, league_id=league.id, user_1_id=creator.id, user_2_id=other.id,
+        db_session,
+        league_id=league.id,
+        user_1_id=creator.id,
+        user_2_id=other.id,
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
     resp = login_as(joiner).post(url(match.id), json={"members": joiner_team})
     assert resp.status_code == 404
 
 
-# --- validación del body (400) ----------------------------------------------------------------------------
+# --- validación del body (400) ------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "kwargs, code",
@@ -288,7 +317,10 @@ def test_league_match_is_404(login_as, db_session, creator, joiner, other, joine
         ({"json": []}, "incompleteForm"),
         ({"json": {}}, "incompleteForm"),
         ({"json": {"members": "x"}}, "invalidFieldType"),
-        ({"json": {"members": [{"playerId": 0, "role": "forward", "behaviorId": 1}]}}, "invalidFieldType"),
+        (
+            {"json": {"members": [{"playerId": 0, "role": "forward", "behaviorId": 1}]}},
+            "invalidFieldType",
+        ),
         ({"json": {"members": []}}, "invalidTeam"),
     ],
 )
@@ -309,7 +341,7 @@ def test_400_beats_409_own_match(login_as, creator, friendly):
     assert resp.status_code == 400 and resp.json()["code"] == "invalidTeam"
 
 
-# --- conflictos (409) ----------------------------------------------------------------------------------------
+# --- conflictos (409) ---------------------------------------------------------
 
 STATES = {
     "with_rival": lambda other: dict(user_2_id=other.id),
@@ -402,7 +434,8 @@ def test_nonexistent_ids_are_not_owned(login_as, db_session, joiner, friendly, j
     assert_untouched(db_session, created["id"], joiner)
 
 
-# --- repositorio: unión condicional ----------------------------------------------------------------------------------
+# --- repositorio: unión condicional -------------------------------------------
+
 
 @pytest.mark.parametrize("kind", list(STATES))
 def test_repo_join_returns_none_when_the_match_does_not_admit_a_rival(
@@ -428,17 +461,26 @@ def test_repo_get_friendly_state(db_session, creator, other, friendly, make_leag
     created, _ = friendly
     repo = SqlAlchemyFriendlyRepository(db_session)
     st = repo.get_friendly_state(created["id"])
-    assert (st.id, st.creator_id, st.rival_id, st.status) == (created["id"], creator.id, None, "scheduled")
+    assert (st.id, st.creator_id, st.rival_id, st.status) == (
+        created["id"],
+        creator.id,
+        None,
+        "scheduled",
+    )
     assert repo.get_friendly_state(999999) is None
     league = make_league(creator, "Liga")
     league_match = add_match(
-        db_session, league_id=league.id, user_1_id=creator.id, user_2_id=other.id,
+        db_session,
+        league_id=league.id,
+        user_1_id=creator.id,
+        user_2_id=other.id,
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
     assert repo.get_friendly_state(league_match.id) is None  # no es un amistoso
 
 
-# --- atomicidad ------------------------------------------------------------------------------------------------------------
+# --- atomicidad ---------------------------------------------------------------
+
 
 def test_failure_while_saving_the_team_rolls_back_the_join(
     db_session, creator, joiner, friendly, joiner_team
@@ -475,7 +517,8 @@ def test_unexpected_error_rolls_back_the_join(
     assert_untouched(db_session, created["id"], joiner)
 
 
-# --- concurrencia (dos sesiones reales) --------------------------------------------------------------------------------------
+# --- concurrencia (dos sesiones reales) ---------------------------------------
+
 
 def run_in_parallel(fns):
     from queue import Queue
@@ -556,10 +599,12 @@ def test_two_simultaneous_joins_only_one_wins(
     db_session, creator, joiner, late, friendly, joiner_team, late_team, attempt
 ):
     created, _ = friendly
-    results = run_in_parallel([
-        join_in_own_session(db_session, created["id"], joiner.id, joiner_team),
-        join_in_own_session(db_session, created["id"], late.id, late_team),
-    ])
+    results = run_in_parallel(
+        [
+            join_in_own_session(db_session, created["id"], joiner.id, joiner_team),
+            join_in_own_session(db_session, created["id"], late.id, late_team),
+        ]
+    )
     winners = [r for r in results if r is not None]
     assert len(winners) == 1  # el otro recibe notJoinable
     winner_id = winners[0].club2.id
@@ -576,10 +621,12 @@ def test_join_vs_expiry_race_has_a_single_consistent_outcome(
 ):
     for i in range(10):
         match = add_match(db_session, user_1_id=creator.id, name=f"Carrera {i}")
-        joined, cancelled = run_in_parallel([
-            join_in_own_session(db_session, match.id, joiner.id, joiner_team),
-            cancel_in_own_session(db_session, match.id),
-        ])
+        joined, cancelled = run_in_parallel(
+            [
+                join_in_own_session(db_session, match.id, joiner.id, joiner_team),
+                cancel_in_own_session(db_session, match.id),
+            ]
+        )
         row = match_row(db_session, match.id)
         if joined is not None:
             assert cancelled is False
@@ -591,7 +638,8 @@ def test_join_vs_expiry_race_has_a_single_consistent_outcome(
             assert members_of(db_session, match.id, joiner.id) == []  # sin rival en un cancelado
 
 
-# --- cuenta regresiva y arranque (tiempo controlado) -------------------------------------------------------------------
+# --- cuenta regresiva y arranque (tiempo controlado) --------------------------
+
 
 def status_of(db_session, match_id):
     db_session.expire_all()
@@ -602,7 +650,9 @@ def test_match_stays_scheduled_during_the_countdown_and_the_simulation_is_trigge
     login_as, db_session, joiner, friendly, joiner_team
 ):
     created, _ = friendly
-    assert login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
+    assert (
+        login_as(joiner).post(url(created["id"]), json={"members": joiner_team}).status_code == 200
+    )
     assert status_of(db_session, created["id"]) == MatchStatus.scheduled
 
     @contextmanager
@@ -624,23 +674,25 @@ def test_match_stays_scheduled_during_the_countdown_and_the_simulation_is_trigge
         return during
 
     during = asyncio.run(scenario())
-    assert during == (MatchStatus.scheduled, [])                    # todavía no dispara
+    assert during == (MatchStatus.scheduled, [])  # todavía no dispara
     assert status_of(db_session, created["id"]) == MatchStatus.scheduled  # lo arranca el runner
-    assert triggered == [created["id"]]                             # pero la simulación sí se disparó
+    assert triggered == [created["id"]]  # pero la simulación sí se disparó
 
 
-# --- repositorio de arranque ---------------------------------------------------------------------------------------------------
+# --- repositorio de arranque --------------------------------------------------
 
-def test_is_ready_to_start_only_if_friendly_has_rival(
-    db_session, creator, other, make_league
-):
+
+def test_is_ready_to_start_only_if_friendly_has_rival(db_session, creator, other, make_league):
     repo = SqlAlchemyMatchStartRepository(db_session)
     ready = add_match(db_session, user_1_id=creator.id, user_2_id=other.id, name="Listo")
     waiting = add_match(db_session, user_1_id=creator.id, name="Esperando")
     cancelled = add_match(db_session, user_1_id=creator.id, status=MatchStatus.cancelled)
     league = make_league(creator, "Liga")
     league_match = add_match(
-        db_session, league_id=league.id, user_1_id=creator.id, user_2_id=other.id,
+        db_session,
+        league_id=league.id,
+        user_1_id=creator.id,
+        user_2_id=other.id,
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
 
@@ -652,8 +704,8 @@ def test_is_ready_to_start_only_if_friendly_has_rival(
     assert repo.is_ready_to_start(ready.id) is True
     assert status_of(db_session, ready.id) == MatchStatus.scheduled
     assert repo.list_pending_start() == [ready.id]
-    
-    
+
+
 def test_nonexistent_behavior_rejects_join_without_side_effects(
     login_as, db_session, joiner, friendly, joiner_team, schedulers
 ):
@@ -680,9 +732,9 @@ def test_nonexistent_behavior_rejects_join_without_side_effects(
     assert response.json()["code"] == "playerOrBehaviorNotOwned"
     assert_untouched(db_session, created["id"], joiner)
 
-    assert team_of(
-        members_of(db_session, created["id"], created["club1"]["id"])
-    ) == expected_team(creator_members)
+    assert team_of(members_of(db_session, created["id"], created["club1"]["id"])) == expected_team(
+        creator_members
+    )
 
     assert expiry.unscheduled == expiry_before
 
@@ -692,10 +744,7 @@ def test_same_owned_behavior_can_be_persisted_for_all_six_players(
 ):
     created, _ = friendly
     behavior_id = joiner_team[0]["behaviorId"]
-    members = [
-        {**member, "behaviorId": behavior_id}
-        for member in joiner_team
-    ]
+    members = [{**member, "behaviorId": behavior_id} for member in joiner_team]
 
     response = login_as(joiner).post(
         url(created["id"]),
@@ -736,18 +785,18 @@ def test_start_callback_sees_committed_match_and_both_teams(
         # Leer desde otra sesión verifica que el estado ya se confirmó.
         with factory() as session:
             match = session.get(Match, started_id)
-            observations.append({
-                "id": match.id,
-                "status": match.status,
-                "creator_id": match.user_1_id,
-                "rival_id": match.user_2_id,
-                "creator_team": team_of(
-                    members_of(session, started_id, created["club1"]["id"])
-                ),
-                "rival_team": team_of(
-                    members_of(session, started_id, joiner.id)
-                ),
-            })
+            observations.append(
+                {
+                    "id": match.id,
+                    "status": match.status,
+                    "creator_id": match.user_1_id,
+                    "rival_id": match.user_2_id,
+                    "creator_team": team_of(
+                        members_of(session, started_id, created["club1"]["id"])
+                    ),
+                    "rival_team": team_of(members_of(session, started_id, joiner.id)),
+                }
+            )
 
     service = FriendlyStartService(scope, on_start)
 
@@ -759,7 +808,7 @@ def test_start_callback_sees_committed_match_and_both_teams(
     first, second = asyncio.run(scenario())
 
     assert first is True
-    assert second is True     
+    assert second is True
     snapshot = {
         "id": match_id,
         "status": MatchStatus.scheduled,
@@ -768,6 +817,4 @@ def test_start_callback_sees_committed_match_and_both_teams(
         "creator_team": expected_team(creator_members),
         "rival_team": expected_team(joiner_team),
     }
-    # start() no longer changes the match state, so each call triggers on_start;
-    # the real idempotency lives in MatchRunner.start().
     assert observations == [snapshot, snapshot]

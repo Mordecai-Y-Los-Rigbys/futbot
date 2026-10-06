@@ -25,10 +25,7 @@ def register(client, email="nuevo@test.com", username="nuevo"):
 
 def behaviors_of(db_session, user_id):
     return (
-        db_session.query(Behavior)
-        .filter(Behavior.user_id == user_id)
-        .order_by(Behavior.id)
-        .all()
+        db_session.query(Behavior).filter(Behavior.user_id == user_id).order_by(Behavior.id).all()
     )
 
 
@@ -49,9 +46,7 @@ def test_new_user_sees_them_in_get_behaviors_me(client):
 
     assert response.status_code == 200
     assert response.json()["total"] == len(DEFAULT_BEHAVIORS)
-    assert [b["name"] for b in response.json()["items"]] == [
-        b["name"] for b in DEFAULT_BEHAVIORS
-    ]
+    assert [b["name"] for b in response.json()["items"]] == [b["name"] for b in DEFAULT_BEHAVIORS]
 
 
 def test_each_user_gets_their_own_copies(client, db_session):
@@ -72,7 +67,9 @@ def test_if_the_behaviors_fail_nothing_is_saved(client, db_session, monkeypatch)
     def fail_to_create_default_behaviors(self, user_id):
         raise RuntimeError("falló la creación de behaviors")
 
-    monkeypatch.setattr(BehaviorService, "create_default_behaviors", fail_to_create_default_behaviors)
+    monkeypatch.setattr(
+        BehaviorService, "create_default_behaviors", fail_to_create_default_behaviors
+    )
 
     with pytest.raises(RuntimeError):
         register(client)
@@ -82,6 +79,7 @@ def test_if_the_behaviors_fail_nothing_is_saved(client, db_session, monkeypatch)
 
     monkeypatch.undo()
     assert register(client).status_code == 201  # el email quedó libre
+
 
 def test_if_the_session_fails_nothing_is_saved(client, db_session, monkeypatch):
     # Si falla, el usuario y sus behaviors no tienen que quedar guardados.
@@ -96,6 +94,7 @@ def test_if_the_session_fails_nothing_is_saved(client, db_session, monkeypatch):
     assert db_session.query(User).count() == 0
     assert db_session.query(Behavior).count() == 0
 
+
 def test_duplicate_email_leaves_no_orphan_behaviors(client, db_session):
     assert register(client, "dup@test.com", "a").status_code == 201
 
@@ -105,9 +104,8 @@ def test_duplicate_email_leaves_no_orphan_behaviors(client, db_session):
     assert db_session.query(User).count() == 1
     assert db_session.query(Behavior).count() == len(DEFAULT_BEHAVIORS)
 
-def test_duplicate_email_detected_by_the_database_leaves_nothing(
-    client, db_session, monkeypatch
-):
+
+def test_duplicate_email_detected_by_the_database_leaves_nothing(client, db_session, monkeypatch):
     # Simula dos registros simultáneos con el mismo email: los dos pasan el
     # chequeo previo y el duplicado recién lo detecta el INSERT (savepoint).
     assert register(client, "dup@test.com", "a").status_code == 201

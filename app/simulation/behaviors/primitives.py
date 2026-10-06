@@ -57,9 +57,9 @@ def behavior_constants() -> dict[str, Any]:
         "goal_width": C.GOAL_WIDTH,
         "player_radius": C.PLAYER_RADIUS,
         "ball_radius": C.BALL_RADIUS,
-        "my_goal": (0.0, width / 2), # (0, 30)
-        "opponent_goal": (length, width / 2), # (100, 30)
-        "field_center": (length / 2, width / 2), # (50, 30)
+        "my_goal": (0.0, width / 2),  # (0, 30)
+        "opponent_goal": (length, width / 2),  # (100, 30)
+        "field_center": (length / 2, width / 2),  # (50, 30)
         "bottom_left_corner": (0.0, 0.0),
         "bottom_right_corner": (length, 0.0),
         "top_left_corner": (0.0, width),
@@ -67,7 +67,7 @@ def behavior_constants() -> dict[str, Any]:
     }
 
 
-# --- validación de argumentos -------------------------------------------------------
+# --- validación de argumentos -------------------------------------------------
 
 
 def _number(value: Any, name: str) -> float:
@@ -92,7 +92,7 @@ def _stat_name(stat: Any) -> str:
     return stat
 
 
-# --- primitivas -----------------------------------------------------------------------
+# --- primitivas ---------------------------------------------------------------
 
 
 def build_primitives(

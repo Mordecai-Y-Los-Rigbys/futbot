@@ -24,8 +24,12 @@ def deps():
     parent = MagicMock()
     parent.user_repo.get_by_email.return_value = None
     parent.user_repo.create.return_value = User(
-        id=7, username="messi", email="messi@test.com",
-        password_hash="h", club_name="Inter", avatar=1,
+        id=7,
+        username="messi",
+        email="messi@test.com",
+        password_hash="h",
+        club_name="Inter",
+        avatar=1,
     )
     parent.session_service.create.return_value.id = "session-id"
     return parent

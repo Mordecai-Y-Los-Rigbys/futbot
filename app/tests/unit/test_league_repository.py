@@ -48,7 +48,8 @@ def count_stmt(db):
     return db.scalar.call_args.args[0]
 
 
-# --- escape ------------------------------------------------------------
+# --- escape -------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "raw, escaped",
@@ -64,7 +65,8 @@ def test_escape_like(raw, escaped):
     assert _escape_like(raw) == escaped
 
 
-# --- mapeo a DTO ---------------------------------------------------------
+# --- mapeo a DTO --------------------------------------------------------------
+
 
 def test_maps_rows_to_dtos(repo, db):
     db.scalar.return_value = 1
@@ -99,7 +101,8 @@ def test_total_comes_from_the_count_query(repo, db):
     assert repo.list_page(name=None, offset=100, limit=50).total == 120
 
 
-# --- SQL generado --------------------------------------------------------
+# --- SQL generado -------------------------------------------------------------
+
 
 def test_orders_by_id_ascending(repo, db):
     repo.list_page(name=None, offset=0, limit=50)
@@ -171,9 +174,7 @@ def test_counts_participants_with_a_subquery(repo, db):
 @pytest.mark.parametrize("rows", [1, 50])
 def test_always_two_statements_regardless_of_rows(repo, db, rows):
     """Sin N+1: la cantidad de queries no depende de cuántas ligas haya."""
-    db.execute.return_value.all.return_value = [
-        (fake_league(id=i), 1) for i in range(1, rows + 1)
-    ]
+    db.execute.return_value.all.return_value = [(fake_league(id=i), 1) for i in range(1, rows + 1)]
     repo.list_page(name=None, offset=0, limit=50)
     assert db.scalar.call_count == 1
     assert db.execute.call_count == 1

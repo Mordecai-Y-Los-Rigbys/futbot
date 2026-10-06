@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import ColumnElement, and_, select, update
 from sqlalchemy.orm import Session
 
 from app.models.match import Match, MatchStatus
@@ -11,11 +11,11 @@ from app.repositories.match_expiry_abstract import (
 
 
 class SqlAlchemyMatchExpiryRepository(AbstractMatchExpiryRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     @staticmethod
-    def is_waiting_friendly():
+    def is_waiting_friendly() -> ColumnElement[bool]:
         """Condición SQL de un amistoso esperando rival: sin liga, sin usuario 2
         y todavía sin arrancar."""
         return and_(

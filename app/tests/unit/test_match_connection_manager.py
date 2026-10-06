@@ -3,7 +3,6 @@ import asyncio
 
 from app.errors import ApiError
 from app.services.match_connection_manager import (
-    MAX_CONNECTIONS_PER_USER_AND_MATCH,
     MatchConnectionManager,
 )
 
@@ -11,10 +10,6 @@ from app.services.match_connection_manager import (
 @pytest.fixture()
 def manager():
     return MatchConnectionManager()
-
-
-def test_limit_is_five():
-    assert MAX_CONNECTIONS_PER_USER_AND_MATCH == 5
 
 
 def test_allows_up_to_five_connections_per_user_and_match(manager):
@@ -67,10 +62,13 @@ def test_subscribers_are_listed_per_match(manager):
     assert set(manager.subscribers(1)) == {(a, 7), (b, 7)}
     assert manager.subscribers(2) == [(c, 7)]
 
+
 def test_subscribers_carry_the_user_id(manager):
     a, b = object(), object()
-    manager.reserve(1, 7); manager.subscribe(1, 7, a)
-    manager.reserve(1, 8); manager.subscribe(1, 8, b)
+    manager.reserve(1, 7)
+    manager.subscribe(1, 7, a)
+    manager.reserve(1, 8)
+    manager.subscribe(1, 8, b)
     assert dict(manager.subscribers(1)) == {a: 7, b: 8}
 
 
@@ -143,6 +141,7 @@ def test_close_match_closes_every_subscriber_even_if_one_fails(manager):
 def test_close_match_without_subscribers_is_a_noop(manager):
     asyncio.run(manager.close_match(999))
 
+
 def test_close_match_does_not_touch_other_matches(manager):
     mine, other = FakeWs(), FakeWs()
     manager.reserve(1, 7)
@@ -156,7 +155,8 @@ def test_close_match_does_not_touch_other_matches(manager):
     assert other.closed is None  # el otro partido no se toca
     assert manager.subscribers(2) == [(other, 7)]
 
-# --- evict ---------------------------------------------------------------------
+
+# --- evict --------------------------------------------------------------------
 
 
 def test_evict_frees_the_slot_and_the_subscription_immediately(manager):
@@ -220,14 +220,15 @@ def test_evict_then_release_leaves_no_residue(manager):
     assert manager._reserved == {} and manager._subscribers == {}
     assert manager._evicted == set()  # sin fuga de memoria
 
+
 def test_evict_after_the_endpoint_already_released_is_a_noop(manager):
     a, b = object(), object()
     for ws in (a, b):
         manager.reserve(1, 7)
         manager.subscribe(1, 7, ws)
 
-    manager.release(1, 7, a)   # el endpoint se adelantó
-    manager.evict(1, 7, a)     # el broadcast llega tarde
+    manager.release(1, 7, a)  # el endpoint se adelantó
+    manager.evict(1, 7, a)  # el broadcast llega tarde
 
     assert manager.count(1, 7) == 1
     assert manager.subscribers(1) == [(b, 7)]

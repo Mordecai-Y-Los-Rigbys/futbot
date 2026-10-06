@@ -3,8 +3,10 @@
 import asyncio
 import json
 from dataclasses import dataclass
+from fastapi import WebSocket
 
 from app.services.match_connection_manager import MatchConnectionManager
+from app.simulation.geometry import Vec
 from app.simulation.match_rules import Event, TickResult
 from app.simulation.state import Team
 
@@ -28,7 +30,7 @@ def _r(value: float) -> float:
     return round(value, 2)
 
 
-def _position(vector) -> dict:
+def _position(vector: Vec) -> dict:
     return {"x": _r(vector.x), "y": _r(vector.y)}
 
 
@@ -62,8 +64,7 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     return {
         "type": "tick",
         "players": [
-            {"playerId": p.player_id, "position": _position(p.position)}
-            for p in state.players
+            {"playerId": p.player_id, "position": _position(p.position)} for p in state.players
         ],
         "ballPosition": _position(state.ball.position),
         "score1": result.score_1,
@@ -74,9 +75,10 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     }
 
 
-_closing: set[asyncio.Task] = set()   # referencia fuerte: si no, el GC puede matar la tarea
+_closing: set[asyncio.Task] = set()  # referencia fuerte: si no, el GC puede matar la tarea
 
-async def _close(websocket, timeout: float) -> None:
+
+async def _close(websocket: WebSocket, timeout: float) -> None:
     try:
         await asyncio.wait_for(
             websocket.close(code=SLOW_CLIENT_CODE, reason=SLOW_CLIENT_REASON), timeout
@@ -84,20 +86,36 @@ async def _close(websocket, timeout: float) -> None:
     except Exception:
         pass
 
-async def _send(manager, match_id, user_id, websocket, text, timeout) -> None:
+
+async def _send(
+    manager: MatchConnectionManager,
+    match_id: int,
+    user_id: int,
+    websocket: WebSocket,
+    text: str,
+    timeout: float,
+) -> None:
     """Nunca lanza: un suscriptor caído o lento no puede frenar a los demás."""
     try:
         await asyncio.wait_for(websocket.send_text(text), timeout)
         return
     except Exception:
         pass
-    manager.evict(match_id, user_id, websocket)          # cupo libre al toque
+    manager.evict(match_id, user_id, websocket)  # cupo libre al toque
     task = asyncio.create_task(_close(websocket, timeout))  # sin esperar dentro del gather
     _closing.add(task)
     task.add_done_callback(_closing.discard)
 
 
-async def broadcast_tick(manager, match_id, payload, timeout=SEND_TIMEOUT) -> None:
+async def broadcast_tick(
+    manager: MatchConnectionManager, match_id: int, payload: dict, timeout: float = SEND_TIMEOUT
+) -> None:
+    """Envía el tick a todos los suscriptores del partido, en paralelo.
+
+    Un suscriptor que no recibe el mensaje en `timeout` segundos se libera del
+    manager en el momento y se cierra con 1013 / slowClient, sin frenar al resto.
+    """
+
     subscribers = manager.subscribers(match_id)
     if not subscribers:
         return

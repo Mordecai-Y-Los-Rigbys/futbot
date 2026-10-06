@@ -35,7 +35,7 @@ def mirrored(x, y):
     return (FIELD_LENGTH - x, FIELD_WIDTH - y)
 
 
-# --- lectura en coordenadas relativas -------------------------------------------------
+# --- lectura en coordenadas relativas -----------------------------------------
 
 
 def test_home_reads_absolute_positions():
@@ -77,7 +77,7 @@ def test_invalid_stat_raises():
         p["teammate_stat"](1, "magic")
 
 
-# --- quién tiene la pelota -------------------------------------------------------------
+# --- quién tiene la pelota ----------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -92,11 +92,16 @@ def test_invalid_stat_raises():
 )
 def test_who_has_the_ball(owner, me, expected):
     p, _ = primitives_for(me, match(owner=owner))
-    got = (p["i_have_ball"](), p["teammate_has_ball"](), p["opponent_has_ball"](), p["nobody_has_ball"]())
+    got = (
+        p["i_have_ball"](),
+        p["teammate_has_ball"](),
+        p["opponent_has_ball"](),
+        p["nobody_has_ball"](),
+    )
     assert got == expected
 
 
-# --- acciones --------------------------------------------------------------------------
+# --- acciones -----------------------------------------------------------------
 
 
 def test_go_to_is_recorded_in_absolute_coordinates():
@@ -160,7 +165,7 @@ def test_actions_reject_anything_that_is_not_a_finite_number(bad):
     assert recorder.move is None and recorder.kick is None
 
 
-# --- utilidades, tiempo y constantes ---------------------------------------------------
+# --- utilidades, tiempo y constantes ------------------------------------------
 
 
 def test_distance():

@@ -47,11 +47,14 @@ class FakeManager:
         self.match_closed.append((match_id, code, reason))
 
 
-
 def build(manager, repo, **kwargs):
     setup = MatchSetup(
-        make_team(), make_team(first_id=10), 1, countdown_seconds=1,
-        club_1_name="Club Uno", club_2_name="Club Dos",
+        make_team(),
+        make_team(first_id=10),
+        1,
+        countdown_seconds=1,
+        club_1_name="Club Uno",
+        club_2_name="Club Dos",
     )
 
     @contextmanager
@@ -148,7 +151,11 @@ def test_ticks_are_scheduled_every_50ms_without_drift():
         delays.append(delay)
         clock[0] += delay
 
-    run(build(FakeManager([FakeWs()]), FakeMatchRepo(), sleep=fake_sleep, monotonic=lambda: clock[0]))
+    run(
+        build(
+            FakeManager([FakeWs()]), FakeMatchRepo(), sleep=fake_sleep, monotonic=lambda: clock[0]
+        )
+    )
     assert len(delays) == TOTAL - 1
     assert all(abs(d - 0.05) < 1e-6 for d in delays)
 
@@ -162,8 +169,8 @@ def test_seed_is_saved_and_logged_before_the_first_tick(caplog):
     with caplog.at_level(logging.INFO):
         run(build(FakeManager([ws]), repo))
 
-    assert repo.seeds == {1: 42}                    # seed_factory=lambda: 42
-    assert seen[0] == {1: 42}                       # ya estaba guardada en el primer tick
+    assert repo.seeds == {1: 42}  # seed_factory=lambda: 42
+    assert seen[0] == {1: 42}  # ya estaba guardada en el primer tick
     assert "seed=42" in caplog.text
 
 
@@ -178,6 +185,6 @@ def test_if_saving_the_seed_fails_the_match_is_still_played(caplog):
     with caplog.at_level(logging.INFO):
         run(build(FakeManager([ws]), repo))
 
-    assert len(ws.received) == TOTAL                # el partido se jugó completo
+    assert len(ws.received) == TOTAL  # el partido se jugó completo
     assert "No se pudo guardar la seed" in caplog.text
-    assert "seed=42" in caplog.text                 # igual quedó en el log
+    assert "seed=42" in caplog.text  # igual quedó en el log

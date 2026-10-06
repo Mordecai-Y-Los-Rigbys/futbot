@@ -50,6 +50,7 @@ def db_session():
         Base.metadata.drop_all(engine)
         engine.dispose()
 
+
 @pytest.fixture()
 def make_behaviors(db_session):
     """make_behaviors(user_id, names) -> list[Behavior], en orden de creación."""
@@ -67,11 +68,14 @@ def make_behaviors(db_session):
 
     return _make
 
+
 @pytest.fixture()
 def make_user(db_session):
     def _make(user_id: int) -> User:
         return ensure_user(db_session, user_id)
+
     return _make
+
 
 @pytest.fixture()
 def client(db_session):
@@ -81,6 +85,7 @@ def client(db_session):
         finally:
             # Lo que la app no commiteó se descarta al terminar el request.
             db_session.rollback()
+
     app.dependency_overrides[get_db] = override_get_db
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -96,6 +101,7 @@ def login(client, auth_cookies):
         return client
 
     return _login
+
 
 def ensure_user(db_session, user_id: int) -> User:
     """
@@ -116,6 +122,7 @@ def ensure_user(db_session, user_id: int) -> User:
         db_session.commit()
     return user
 
+
 def pytest_collection_modifyitems(config, items):
     if not os.environ.get("TEST_DATABASE_URL"):
         skip = pytest.mark.skip(reason="requiere TEST_DATABASE_URL")
@@ -135,6 +142,7 @@ def auth_cookies(db_session):
         return {"session_id": session.id}
 
     return _make
+
 
 @pytest.fixture
 def session_service(db_session):

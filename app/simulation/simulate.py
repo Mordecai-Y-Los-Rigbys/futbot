@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.simulation.constants import COUNTDOWN_SECONDS
 from app.simulation.match_rules import TeamSetup, TickResult, build_session
 
+
 @dataclass(frozen=True)
 class SimulationResult:
     score_1: int

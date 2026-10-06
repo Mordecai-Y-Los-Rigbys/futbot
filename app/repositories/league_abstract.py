@@ -51,9 +51,7 @@ class CreateLeagueData(BaseModel):
 
 class AbstractLeagueRepository(ABC):
     @abstractmethod
-    def list_page(
-        self, name: str | None, offset: int, limit: int
-    ) -> LeaguePageData:
+    def list_page(self, name: str | None, offset: int, limit: int) -> LeaguePageData:
         """
         Devuelve una página de ligas ordenadas por id ascendente, con el
         creador y la cantidad de participantes (incluido el creador).

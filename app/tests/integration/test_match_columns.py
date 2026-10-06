@@ -1,4 +1,5 @@
 """Columnas del contrato que tiene el partido: `name` (amistosos) y `createdAt`."""
+
 import pytest
 from sqlalchemy.exc import DataError, IntegrityError
 

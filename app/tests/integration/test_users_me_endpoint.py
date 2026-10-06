@@ -27,7 +27,8 @@ def test_openapi_documents_users_me():
     assert "Users" in operation["tags"]
 
 
-# ---------- Éxito ----------
+# --- Éxito --------------------------------------------------------------------
+
 
 def test_me_matches_database_row(create_user, login_as, db_session):
     user = create_user("mgonzalez", club_name="Boca Juniors")
@@ -59,7 +60,8 @@ def test_me_returns_each_users_own_data(create_user, login_as):
     assert login_as(beto).get("/users/me").json()["clubName"] == "Club Beto"
 
 
-# ---------- Flujo completo con cookie real ----------
+# --- Flujo completo con cookie real -------------------------------------------
+
 
 def test_register_then_me(client):
     registered = client.post("/auth/register", json=register_payload()).json()
@@ -88,7 +90,8 @@ def test_login_then_me(client):
     assert response.json()["username"] == "primeruser"
 
 
-# ---------- Autenticación ----------
+# --- Autenticación ------------------------------------------------------------
+
 
 def test_me_without_cookie_returns_401(client):
     response = client.get("/users/me")
@@ -129,7 +132,7 @@ def test_me_with_session_of_deleted_user_returns_401(create_user, login_as, db_s
 
     assert response.status_code == 401
     assert response.json() == UNAUTHORIZED
-    
+
 
 def test_openapi_users_me_matches_contract():
     from app.main import app

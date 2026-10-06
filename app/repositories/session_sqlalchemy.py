@@ -30,7 +30,7 @@ def _to_data(record: UserSession) -> SessionData:
 
 
 class SqlAlchemySessionRepository(AbstractSessionRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def create(self, session: CreateSessionData) -> SessionData:

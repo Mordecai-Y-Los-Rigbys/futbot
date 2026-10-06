@@ -60,7 +60,9 @@ def league_match(db_session, create_user, make_league):
     owner, rival = create_user("owner"), create_user("rival")
     league = make_league(owner, "Privada", status="started", private=True)  # password "secret"
     m = Match(
-        league_id=league.id, user_1_id=owner.id, user_2_id=rival.id,
+        league_id=league.id,
+        user_1_id=owner.id,
+        user_2_id=rival.id,
         status=MatchStatus.started,
         scheduled_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
@@ -81,6 +83,9 @@ def test_private_league_participant_needs_no_password(login_as, db_session, leag
     api = login_as(league_match.user_2)
     # el rival no está en league_participants salvo que se inscriba:
     from app.models.league_participant import LeagueParticipant
-    db_session.add(LeagueParticipant(league_id=league_match.league_id, user_id=league_match.user_2_id))
+
+    db_session.add(
+        LeagueParticipant(league_id=league_match.league_id, user_id=league_match.user_2_id)
+    )
     db_session.commit()
     assert api.post(f"/matches/{league_match.id}/connections").status_code == 201

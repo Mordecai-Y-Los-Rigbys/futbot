@@ -57,7 +57,7 @@ def run(coro_fn):
     asyncio.run(coro_fn())
 
 
-# --- el plazo ---------------------------------------------------------------
+# --- el plazo -----------------------------------------------------------------
 
 
 def test_default_wait_is_max_friendly_wait(repo):
@@ -71,7 +71,7 @@ def test_default_wait_is_max_friendly_wait(repo):
     assert FriendlyExpiryService(scope, close).wait == MAX_FRIENDLY_WAIT
 
 
-# --- vencimiento -------------------------------------------------------------
+# --- vencimiento --------------------------------------------------------------
 
 
 def test_waiting_friendly_is_cancelled_and_its_connections_closed(repo):
@@ -164,7 +164,7 @@ def test_a_failure_does_not_kill_the_service(repo, caplog):
     assert "No se pudo caducar" in caplog.text
 
 
-# --- recuperación al arrancar -----------------------------------------------------
+# --- recuperación al arrancar -------------------------------------------------
 
 
 def test_recover_cancels_overdue_now_and_reschedules_the_rest(repo):

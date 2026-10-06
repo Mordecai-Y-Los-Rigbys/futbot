@@ -48,8 +48,9 @@ def _new_league(creator, name, status, max_participants, private):
 def make_league(db_session):
     """Crea una liga e inscribe al creador como participante (como hace la app)."""
 
-    def _make(creator, name="Liga", status="preparation", max_participants=8,
-              private=False) -> League:
+    def _make(
+        creator, name="Liga", status="preparation", max_participants=8, private=False
+    ) -> League:
         league = _new_league(creator, name, status, max_participants, private)
         db_session.add(league)
         db_session.flush()
@@ -68,9 +69,7 @@ def make_leagues_bulk(db_session):
         leagues = [_new_league(creator, n, status, 8, False) for n in names]
         db_session.add_all(leagues)
         db_session.flush()
-        db_session.add_all(
-            LeagueParticipant(league_id=lg.id, user_id=creator.id) for lg in leagues
-        )
+        db_session.add_all(LeagueParticipant(league_id=lg.id, user_id=creator.id) for lg in leagues)
         db_session.commit()
         return [lg.id for lg in leagues]
 
@@ -137,7 +136,9 @@ def count_queries(db_session):
 
     return _count
 
+
 @pytest.fixture(autouse=True)
 def no_retry_delay(monkeypatch):
     from app.services import friendly_expiry
+
     monkeypatch.setattr(friendly_expiry, "EXPIRY_RETRY_DELAY", 0)

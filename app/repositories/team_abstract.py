@@ -13,6 +13,7 @@ class StarterData(BaseModel):
     speed: int
     behavior_code: str
 
+
 class AbstractTeamRepository(ABC):
     @abstractmethod
     def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:

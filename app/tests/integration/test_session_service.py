@@ -31,7 +31,8 @@ def repository(db_session):
     return SqlAlchemySessionRepository(db_session)
 
 
-# ---------- service + real DB ----------
+# --- service + real DB --------------------------------------------------------
+
 
 def test_full_flow_with_real_fk(session_service, user):
     s = session_service.create(user_id=user.id)
@@ -85,7 +86,7 @@ def test_delete_removes_the_row(session_service, db_session, user):
 
 
 def test_delete_nonexistent_does_not_fail(session_service):
-    session_service.delete("does-not-exist")  # must not raise
+    session_service.delete("does-not-exist")  # no tiene que fallar
 
 
 def test_delete_does_not_affect_other_sessions(session_service, user):
@@ -103,14 +104,15 @@ def test_cannot_create_session_for_nonexistent_user(session_service, db_session)
     db_session.rollback()
 
 
-# ---------- repository: persistence details ----------
+# --- repository: persistence details ------------------------------------------
+
 
 def test_repository_get_by_id_unknown_returns_none(repository):
     assert repository.get_by_id("does-not-exist") is None
 
 
 def test_repository_returns_timezone_aware_datetimes(repository, db_session, user):
-    # Insert with naive datetimes, as a DateTime column without tz would return them
+    # Se inserta con datetimes sin zona horaria, como los devolvería una columna DateTime sin tz
     naive_now = datetime.now(timezone.utc).replace(tzinfo=None)
     db_session.add(
         UserSession(

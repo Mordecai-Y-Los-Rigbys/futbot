@@ -4,12 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.league import LeagueStatus
-from app.domain.team_member import MemberRole
-from app.models.behavior import Behavior
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
 from app.models.team_member import TeamMember
-from app.models.player import Player
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
@@ -49,19 +46,15 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
 
 
 class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def list_page(self, name: str | None, offset: int, limit: int) -> LeaguePageData:
         filters = []
         if name:
-            filters.append(
-                League.name.ilike(f"%{_escape_like(name)}%", escape="\\")
-            )
+            filters.append(League.name.ilike(f"%{_escape_like(name)}%", escape="\\"))
 
-        total = self.db.scalar(
-            select(func.count()).select_from(League).where(*filters)
-        )
+        total = self.db.scalar(select(func.count()).select_from(League).where(*filters))
 
         participants_count = (
             select(func.count(func.distinct(LeagueParticipant.user_id)))
@@ -105,7 +98,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             self.db.add_all(
                 TeamMember(
                     league_id=league.id,
-                    match_id=None,          # el CHECK exige que exactamente uno esté seteado
+                    match_id=None,  # el CHECK exige que exactamente uno esté seteado
                     user_id=data.creator_id,
                     player_id=m.player_id,
                     behavior_id=m.behavior_id,
@@ -123,6 +116,4 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
 
     def get_match_duration_minutes(self, league_id: int) -> int | None:
         # scalar() devuelve None si la liga no existe
-        return self.db.scalar(
-            select(League.match_duration).where(League.id == league_id)
-        )
+        return self.db.scalar(select(League.match_duration).where(League.id == league_id))

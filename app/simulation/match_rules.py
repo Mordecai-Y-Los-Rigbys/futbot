@@ -105,36 +105,18 @@ class MatchSession:
         seq = self._seq
         self._seq += 1
         event: Event | None = Event.PERIOD_START if seq == 0 else None
-        scorer: Team | None = None
 
         if seq < self._countdown_ticks:
             return self._result(seq, Phase.COUNTDOWN, event, played=0)
 
         play_index = seq - self._countdown_ticks
+        scorer: Team | None = None
         if self._pending_reset:
-            # Tick siguiente al gol: todos en sus posiciones, pelota libre en el
-            # centro, cooldowns reiniciados. El reloj sigue corriendo.
-            self._state = reset_positions(self._state)
-            self._state.tick += 1
-            self._pending_reset = False
+            self._reset_after_goal()
         else:
-            clock = MatchClock(
-                elapsed=play_index / C.TICKS_PER_SECOND,
-                remaining=(self._play_ticks - play_index) / C.TICKS_PER_SECOND,
-                period=self._period(play_index),
-            )
-            actions = run_behaviors(self._state, self._behaviors, clock)
-            result = step(self._state, actions)
-            self._state = result.state
-            for result_event in result.events:
-                if isinstance(result_event, Goal):
-                    if result_event.scoring_team is Team.HOME:
-                        self._score_1 += 1
-                    else:
-                        self._score_2 += 1
-                    event = Event.GOAL
-                    scorer = result_event.scoring_team
-                    self._pending_reset = True
+            scorer = self._play_tick(play_index)
+        if scorer is not None:
+            event = Event.GOAL
 
         phase = Phase.PLAYING
         if play_index == self._play_ticks - 1:
@@ -142,6 +124,37 @@ class MatchSession:
             phase, event = Phase.FINISHED, Event.MATCH_END
             self._finished = True
         return self._result(seq, phase, event, played=play_index + 1, scorer=scorer)
+
+    def _reset_after_goal(self) -> None:
+        """Tick siguiente al gol: todos en sus posiciones, pelota libre en el
+        centro, cooldowns reiniciados. El reloj sigue corriendo."""
+        self._state = reset_positions(self._state)
+        self._state.tick += 1
+        self._pending_reset = False
+
+    def _play_tick(self, play_index: int) -> Team | None:
+        """Corre los behaviors y la física de un tick. Devuelve quién hizo gol, o None."""
+        clock = MatchClock(
+            elapsed=play_index / C.TICKS_PER_SECOND,
+            remaining=(self._play_ticks - play_index) / C.TICKS_PER_SECOND,
+            period=self._period(play_index),
+        )
+        actions = run_behaviors(self._state, self._behaviors, clock)
+        result = step(self._state, actions)
+        self._state = result.state
+        scorer = None
+        for result_event in result.events:
+            if isinstance(result_event, Goal):
+                scorer = result_event.scoring_team
+                self._register_goal(scorer)
+        return scorer
+
+    def _register_goal(self, scorer: Team) -> None:
+        if scorer is Team.HOME:
+            self._score_1 += 1
+        else:
+            self._score_2 += 1
+        self._pending_reset = True
 
     def _period(self, play_index: int) -> int:
         return min(self._periods, play_index // self._period_ticks + 1)
