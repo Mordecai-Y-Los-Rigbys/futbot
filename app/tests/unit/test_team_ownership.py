@@ -15,8 +15,8 @@ def test_owned_team_passes():
 @pytest.mark.parametrize(
     "players, behaviors",
     [
-        (FakePlayers(owned={1, 2, 3, 4, 5}), FakeBehaviors()),   # falta el jugador 6
-        (FakePlayers(), FakeBehaviors(owned={10})),              # falta el behavior 11
+        (FakePlayers(owned={1, 2, 3, 4, 5}), FakeBehaviors()),  # falta el jugador 6
+        (FakePlayers(), FakeBehaviors(owned={10})),  # falta el behavior 11
         (FakePlayers(owned=set()), FakeBehaviors(owned=set())),
     ],
 )

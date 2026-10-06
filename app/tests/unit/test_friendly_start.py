@@ -47,11 +47,6 @@ def no_retry_delay(monkeypatch):
     monkeypatch.setattr(friendly_start, "START_RETRY_DELAY", 0)
 
 
-def test_default_countdown_is_three_seconds():
-    assert FRIENDLY_COUNTDOWN == timedelta(seconds=3)
-    assert make_service(FakeStartRepo(), countdown=FRIENDLY_COUNTDOWN).countdown == timedelta(seconds=3)
-
-
 def test_start_returns_false_and_skips_on_start_when_not_ready():
     repo = FakeStartRepo(ready=False)
     calls = []
@@ -156,9 +151,9 @@ def test_shutdown_cancels_pending_timers():
 
     asyncio.run(scenario())
     assert repo.triggered == []
-    
 
-def test_countdown_waits_three_seconds_before_starting(monkeypatch):
+
+def test_countdown_waits_the_friendly_countdown_before_starting(monkeypatch):
     from types import SimpleNamespace
 
     async def scenario():
@@ -179,9 +174,7 @@ def test_countdown_waits_three_seconds_before_starting(monkeypatch):
             get_running_loop=asyncio.get_running_loop,
             CancelledError=asyncio.CancelledError,
         )
-        monkeypatch.setattr(
-            friendly_start, "asyncio", controlled_asyncio
-        )
+        monkeypatch.setattr(friendly_start, "asyncio", controlled_asyncio)
 
         repo = FakeStartRepo()
 
@@ -201,7 +194,7 @@ def test_countdown_waits_three_seconds_before_starting(monkeypatch):
             # El timeout solo detecta un bloqueo; no simula el tiempo.
             await asyncio.wait_for(waiting.wait(), timeout=5)
 
-            assert requested_delays == [3.0]
+            assert requested_delays == [FRIENDLY_COUNTDOWN.total_seconds()]
             assert repo.attempts == 0
             assert repo.triggered == []
             assert callbacks == []

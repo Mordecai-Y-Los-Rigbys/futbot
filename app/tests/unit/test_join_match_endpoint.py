@@ -37,10 +37,15 @@ def test_success_returns_201_with_token(auth_conn_api, repo):
     assert repo.create_token.call_args.args[0].user_id == 7
 
 
-@pytest.mark.parametrize("kwargs", [
-    {}, {"json": {}}, {"json": {"password": 123}},
-    {"content": "{", "headers": {"Content-Type": "application/json"}},
-])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},
+        {"json": {}},
+        {"json": {"password": 123}},
+        {"content": "{", "headers": {"Content-Type": "application/json"}},
+    ],
+)
 def test_friendly_accepts_any_body(auth_conn_api, kwargs):
     assert auth_conn_api.post("/matches/5/connections", **kwargs).status_code == 201
 
@@ -63,7 +68,9 @@ def test_nonexistent_is_404(auth_conn_api, repo):
     assert auth_conn_api.post("/matches/5/connections").status_code == 404
 
 
-@pytest.mark.parametrize("status, code", [("finished", "matchFinished"), ("cancelled", "matchCancelled")])
+@pytest.mark.parametrize(
+    "status, code", [("finished", "matchFinished"), ("cancelled", "matchCancelled")]
+)
 def test_409_codes(auth_conn_api, repo, status, code):
     repo.get_access.return_value = MatchAccessData(id=5, status=status)
     r = auth_conn_api.post("/matches/5/connections")

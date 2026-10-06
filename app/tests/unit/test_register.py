@@ -62,17 +62,9 @@ def post_unreadable(client, url, kind):
     return client.post(url, json=payload)
 
 
-# ==============================================================================
-# Register: sanity check
-# ==============================================================================
-
 def test_register_valid_body_passes_validation(client):
     assert client.post("/auth/register", json=body()).status_code == 200
 
-
-# ==============================================================================
-# Register: body ilegible (antes daba 500)
-# ==============================================================================
 
 def test_register_broken_json_reports_all_fields_required(client):
     response = client.post(
@@ -90,10 +82,6 @@ def test_register_without_body_reports_all_fields_required(client):
 def test_register_array_body_reports_all_fields_required(client):
     assert_all_required(client.post("/auth/register", json=[]))
 
-
-# ==============================================================================
-# Register: invalidType
-# ==============================================================================
 
 def test_register_username_not_a_string_is_invalid_type(client):
     response = client.post("/auth/register", json=body(username=123))
@@ -114,10 +102,6 @@ def test_register_bad_avatar_is_invalid_type(client, avatar):
 def test_register_valid_avatars_are_accepted(client, avatar):
     assert client.post("/auth/register", json=body(avatar=avatar)).status_code == 200
 
-
-# ==============================================================================
-# Register: email (required / tooLong / invalidEmail)
-# ==============================================================================
 
 def test_register_email_of_300_chars_is_too_long(client):
     long_email = "a" * 290 + "@test.com"  # 299 caracteres
@@ -159,10 +143,6 @@ def test_register_email_256_chars_is_too_long(client):
     assert reasons(response) == {"email": "tooLong"}
 
 
-# ==============================================================================
-# Register: tooLong / required en el resto de los campos
-# ==============================================================================
-
 @pytest.mark.parametrize(
     "field, value",
     [
@@ -196,26 +176,18 @@ def test_register_empty_string_is_required(client, field):
     assert reasons(response) == {field: "required"}
 
 
-# ==============================================================================
-# Register: contraseña de 72 caracteres multibyte
-# ==============================================================================
-
 def test_register_accepts_72_multibyte_char_password(client):
     assert client.post("/auth/register", json=body(password="ñ" * 72)).status_code == 200
 
-
-# ==============================================================================
-# Register: varios campos mal a la vez (no se corta en el primero)
-# ==============================================================================
 
 def test_register_multiple_failures_are_all_reported(client):
     response = client.post(
         "/auth/register",
         json=body(
-            username="",             # required
+            username="",  # required
             email="no-es-un-email",  # invalidEmail
-            password="p" * 73,       # tooLong
-            avatar="3",              # invalidType (strict)
+            password="p" * 73,  # tooLong
+            avatar="3",  # invalidType (strict)
         ),
     )
 
@@ -237,15 +209,8 @@ def test_register_errors_list_is_never_empty(client, payload):
     assert len(response.json()["errors"]) >= 1
 
 
-# ==============================================================================
-# Login: validación (schema + handler)
-# ==============================================================================
-
 def test_login_schema_accepts_300_char_password(client):
-    # Ya no hay max_length en el schema: el service responde 401 sobre 72
-    response = client.post(
-        "/auth/log-in", json={"email": "messi@test.com", "password": "a" * 300}
-    )
+    response = client.post("/auth/log-in", json={"email": "messi@test.com", "password": "a" * 300})
     assert response.status_code == 200
 
 
@@ -272,10 +237,6 @@ def test_login_email_not_a_string_is_invalid_field_type(client):
     assert response.json()["code"] == "invalidFieldType"
 
 
-# ==============================================================================
-# Body ilegible: login y register responden igual (convención 9)
-# ==============================================================================
-
 @pytest.mark.parametrize("kind", ["broken_json", "no_body", "array", "string", "number"])
 def test_login_unreadable_body_is_incomplete_form(client, kind):
     response = post_unreadable(client, "/auth/log-in", kind)
@@ -288,10 +249,6 @@ def test_login_unreadable_body_is_incomplete_form(client, kind):
 def test_register_unreadable_body_reports_all_fields_required(client, kind):
     assert_all_required(post_unreadable(client, "/auth/register", kind))
 
-
-# ==============================================================================
-# Dispatch: los handlers aplican aunque la app tenga un prefijo
-# ==============================================================================
 
 @pytest.fixture(scope="module")
 def prefixed_client():

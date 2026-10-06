@@ -30,7 +30,8 @@ class CreateLeagueBadRequest(BaseModel):
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
-    
+
+
 class CreatePlayerBadRequest(BaseModel):
     code: Literal[
         "invalidFieldType",
@@ -51,6 +52,7 @@ class CreateFriendlyMatchConflict(BaseModel):
     code: Literal["alreadyPlaying", "playerOrBehaviorNotOwned"]
     message: str
 
+
 class JoinMatchBadRequest(BaseModel):
     code: Literal["invalidFieldType"]
     message: str
@@ -65,13 +67,12 @@ class JoinMatchConflict(BaseModel):
     code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
     message: str
 
+
 class JoinFriendlyMatchBadRequest(BaseModel):
     code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]
     message: str
 
 
 class JoinFriendlyMatchConflict(BaseModel):
-    code: Literal[
-        "notJoinable", "isOwnMatch", "alreadyPlaying", "playerOrBehaviorNotOwned"
-    ]
+    code: Literal["notJoinable", "isOwnMatch", "alreadyPlaying", "playerOrBehaviorNotOwned"]
     message: str

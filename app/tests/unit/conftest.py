@@ -34,9 +34,7 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         return LeagueListItemData(
             id=1,
             name=data.name,
-            creator=LeagueCreatorData(
-                id=7, username="mgonzalez", club_name="Boca Juniors FC"
-            ),
+            creator=LeagueCreatorData(id=7, username="mgonzalez", club_name="Boca Juniors FC"),
             status="preparation",
             participants_count=1,
             max_participants=data.max_participants,
@@ -105,6 +103,7 @@ def auth_api(api):
     """Mismo cliente, con cookie de una sesión válida."""
     api.cookies.set("session_id", "valid-session")
     return api
+
 
 @pytest.fixture()
 def fake_players():

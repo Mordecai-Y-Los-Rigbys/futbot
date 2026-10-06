@@ -1,6 +1,7 @@
 import os
+from collections.abc import Iterator
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import Session, sessionmaker, declarative_base
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,8 +15,7 @@ Base = declarative_base()
 
 
 # Dependencia para inyectar la sesión en los endpoints
-
-def get_db():
+def get_db() -> Iterator[Session]:
     db = SessionLocal()
     try:
         yield db

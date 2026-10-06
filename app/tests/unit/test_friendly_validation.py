@@ -13,8 +13,7 @@ def valid():
     return {
         "name": "Partido amistoso 1",
         "members": [
-            {"playerId": i + 1, "role": r, "behaviorId": 10 + i}
-            for i, r in enumerate(ROLES)
+            {"playerId": i + 1, "role": r, "behaviorId": 10 + i} for i, r in enumerate(ROLES)
         ],
     }
 

@@ -43,6 +43,7 @@ class Vec:
 
 ZERO = Vec(0.0, 0.0)
 
-#Con esto limitamos el valor entre un maximo y un minimo.
+
+# Con esto limitamos el valor entre un maximo y un minimo.
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))

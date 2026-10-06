@@ -94,7 +94,7 @@ def rejection(client, path) -> tuple[int, str]:
     return exc.value.code, exc.value.reason
 
 
-# --- handshake aceptado ---------------------------------------------------------
+# --- handshake aceptado -------------------------------------------------------
 
 
 def test_valid_token_opens_the_connection(client, make_match, make_token, manager):
@@ -113,7 +113,7 @@ def test_same_token_reconnects(client, make_match, make_token):
             pass
 
 
-# --- handshake rechazado --------------------------------------------------------
+# --- handshake rechazado ------------------------------------------------------
 
 
 def test_unknown_token_is_4401(client, make_match):
@@ -144,9 +144,7 @@ def test_finished_match_is_4409_even_with_a_valid_token(client, make_match, make
     assert rejection(client, path(match, "tok")) == (4409, "matchFinished")
 
 
-def test_sixth_connection_of_the_same_user_is_4429(
-    client, make_match, make_token, manager
-):
+def test_sixth_connection_of_the_same_user_is_4429(client, make_match, make_token, manager):
     match = make_match()
     make_token("tok", 7, match)
     with ExitStack() as stack:
@@ -156,7 +154,7 @@ def test_sixth_connection_of_the_same_user_is_4429(
         assert manager.count(match.id, 7) == 5
 
 
-# --- el partido no se modifica --------------------------------------------------
+# --- el partido no se modifica ------------------------------------------------
 
 
 @pytest.mark.parametrize("status", [MatchStatus.scheduled, MatchStatus.started])
@@ -172,9 +170,8 @@ def test_connecting_and_disconnecting_does_not_change_the_match(
     db_session.refresh(match)
     assert match.status == status
 
-def test_open_connection_survives_token_expiry(
-    client, db_session, make_match, make_token, manager
-):
+
+def test_open_connection_survives_token_expiry(client, db_session, make_match, make_token, manager):
     match = make_match()
     match_id = match.id  # se guarda antes: después del commit/close el objeto no sirve
     make_token("corto", 7, match)
@@ -211,10 +208,12 @@ def test_reconnecting_after_the_match_is_cancelled_is_4409(
 
         assert rejection(client, url) == (4409, "matchCancelled")
 
+
 def test_cancelled_match_is_4409_even_with_a_valid_token(client, make_match, make_token):
     match = make_match(status=MatchStatus.cancelled)
     make_token("tok", 7, match)
     assert rejection(client, path(match, "tok")) == (4409, "matchCancelled")
+
 
 def test_expiry_cancels_the_match_and_closes_the_open_connection(
     client, db_session, make_match, make_token, manager

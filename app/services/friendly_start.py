@@ -49,11 +49,13 @@ class FriendlyStartService:
         )
 
     def unschedule(self, match_id: int) -> None:
+        """Cancela la cuenta regresiva pendiente del partido, si la hay."""
         task = self._tasks.pop(match_id, None)
         if task is not None:
             task.cancel()
 
     def shutdown(self) -> None:
+        """Cancela todas las cuentas regresivas pendientes. Se llama al apagar la app."""
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()
@@ -66,15 +68,21 @@ class FriendlyStartService:
             with self._repo_scope() as repo:
                 return repo.is_ready_to_start(match_id)
 
-        started = await run_in_threadpool(mark)
-        if started and self._on_start is not None:
+        ready = await run_in_threadpool(mark)
+        if ready and self._on_start is not None:
             try:
                 await self._on_start(match_id)
             except Exception:
                 logger.exception("Falló el arranque de la simulación del partido %s", match_id)
-        return started
+        return ready
 
     async def recover(self) -> None:
+        """Al arrancar la app, reprograma los amistosos con rival que siguen `scheduled`.
+
+        La cuenta regresiva vuelve a empezar de cero: no se guarda cuándo se unió
+        el rival.
+        """
+
         def pending() -> list[int]:
             with self._repo_scope() as repo:
                 return repo.list_pending_start()
@@ -93,11 +101,14 @@ class FriendlyStartService:
             except Exception:
                 logger.exception(
                     "No se pudo arrancar el partido %s (intento %s/%s)",
-                    match_id, attempt, START_RETRIES,
+                    match_id,
+                    attempt,
+                    START_RETRIES,
                 )
                 if attempt < START_RETRIES:
                     await asyncio.sleep(START_RETRY_DELAY * attempt)
         logger.error(
             "Se agotaron los reintentos para arrancar el partido %s; "
-            "queda en cuenta regresiva hasta el próximo recover()", match_id,
+            "queda en cuenta regresiva hasta el próximo recover()",
+            match_id,
         )

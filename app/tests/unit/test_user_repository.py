@@ -22,13 +22,20 @@ def repo(db):
 
 
 def a_user(**over):
-    data = dict(id=1, username="messi", email="messi@test.com",
-                password_hash="h", club_name="Inter", avatar=1)
+    data = dict(
+        id=1,
+        username="messi",
+        email="messi@test.com",
+        password_hash="h",
+        club_name="Inter",
+        avatar=1,
+    )
     data.update(over)
     return User(**data)
 
 
-# ---------- get_by_email ----------
+# --- get_by_email -------------------------------------------------------------
+
 
 def test_get_by_email_returns_the_user_found(repo, db):
     found = a_user()
@@ -60,7 +67,8 @@ def test_get_by_email_does_not_write(repo, db):
     db.delete.assert_not_called()
 
 
-# ---------- create ----------
+# --- create -------------------------------------------------------------------
+
 
 def test_create_adds_inside_a_savepoint_and_refreshes(repo, db):
     result = repo.create("messi", "messi@test.com", "hash", "Inter", 2)
@@ -68,8 +76,13 @@ def test_create_adds_inside_a_savepoint_and_refreshes(repo, db):
     db.begin_nested.assert_called_once()
     added = db.add.call_args.args[0]
     assert isinstance(added, User)
-    assert (added.username, added.email, added.password_hash,
-            added.club_name, added.avatar) == ("messi", "messi@test.com", "hash", "Inter", 2)
+    assert (added.username, added.email, added.password_hash, added.club_name, added.avatar) == (
+        "messi",
+        "messi@test.com",
+        "hash",
+        "Inter",
+        2,
+    )
     db.refresh.assert_called_once_with(added)
     db.commit.assert_not_called()  # el commit no es de este repo
     assert result is added
@@ -80,8 +93,13 @@ def test_create_builds_the_user_with_the_given_fields(repo, db):
 
     added = db.add.call_args.args[0]
     assert isinstance(added, User)
-    assert (added.username, added.email, added.password_hash,
-            added.club_name, added.avatar) == ("messi", "messi@test.com", "hash", "Inter", 2)
+    assert (added.username, added.email, added.password_hash, added.club_name, added.avatar) == (
+        "messi",
+        "messi@test.com",
+        "hash",
+        "Inter",
+        2,
+    )
     db.refresh.assert_called_once_with(added)
     assert result is added
 
@@ -93,7 +111,10 @@ def test_create_does_not_swallow_unexpected_errors(repo, db):
         repo.create("messi", "messi@test.com", "hash", "Inter", 2)
 
     db.refresh.assert_not_called()
-# ---------- create: email duplicado ----------
+
+
+# --- create: email duplicado --------------------------------------------------
+
 
 def test_create_duplicate_email_raises_409(repo, db):
     db.add.side_effect = IntegrityError("INSERT ...", {}, Exception("duplicate key"))

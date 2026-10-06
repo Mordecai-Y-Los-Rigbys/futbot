@@ -22,7 +22,7 @@ class Player(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    name: Mapped[str] = mapped_column(String(20), nullable=False)  
+    name: Mapped[str] = mapped_column(String(20), nullable=False)
     power: Mapped[int] = mapped_column(Integer, nullable=False)
     agility: Mapped[int] = mapped_column(Integer, nullable=False)
     control: Mapped[int] = mapped_column(Integer, nullable=False)

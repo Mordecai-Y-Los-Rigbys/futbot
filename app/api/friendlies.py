@@ -39,9 +39,7 @@ def list_friendlies(
     user_id: int = Depends(get_current_user_id),  # 401 antes que cualquier 400
     service: FriendlyService = Depends(get_friendly_service),
 ) -> MatchPage:
-    return service.list_waiting_friendlies(
-        user_id=user_id, name=name, page=parse_page(page)
-    )
+    return service.list_waiting_friendlies(user_id=user_id, name=name, page=parse_page(page))
 
 
 @router.post(

@@ -13,7 +13,7 @@ from app.repositories.match_connection_abstract import (
 
 
 class SqlAlchemyMatchConnectionRepository(AbstractMatchConnectionRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def get_access(self, match_id: int) -> MatchAccessData | None:

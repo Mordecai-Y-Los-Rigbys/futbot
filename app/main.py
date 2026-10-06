@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -30,8 +31,9 @@ ensure_single_worker()
 # Crea las tablas en la BD (para desarrollo temprano, luego usarás Alembic)
 Base.metadata.create_all(bind=engine)
 
+
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     expiry = get_friendly_expiry()
     start = get_friendly_start()
     await expiry.recover()
@@ -40,6 +42,7 @@ async def lifespan(_app: FastAPI):
     start.shutdown()
     await get_match_runner().shutdown()
     expiry.shutdown()
+
 
 app = FastAPI(title="Futbot API", lifespan=lifespan)
 
@@ -54,8 +57,7 @@ app.include_router(matches_router)
 app.include_router(users_router)
 
 
-
-# Task 0.2: Configuración de CORS
+# Configuración de CORS
 origins = [
     os.getenv("FRONTEND_URL", "http://localhost:3000"),
 ]

@@ -2,13 +2,10 @@ import enum
 from dataclasses import dataclass
 
 from app.simulation.actions import MoveAction
-from app.simulation.constants import (
-    NO_KICK_COOLDOWN, 
-    NOT_REGAIN_BLOCKED, 
-    NOT_PROTECTED
-)
+from app.simulation.constants import NO_KICK_COOLDOWN, NOT_REGAIN_BLOCKED, NOT_PROTECTED
 from app.simulation.geometry import ZERO, Vec
 from app.domain.team_member import MemberRole
+
 
 class Team(str, enum.Enum):
     HOME = "home"  # club1: ataca hacia x = FIELD_LENGTH
@@ -17,6 +14,7 @@ class Team(str, enum.Enum):
     @property
     def opponent(self) -> "Team":
         return Team.AWAY if self is Team.HOME else Team.HOME
+
 
 PlayerKey = tuple[Team, int]
 
@@ -40,7 +38,9 @@ class PlayerState:
     facing: Vec  # hacia donde mira, direccion del ultimo movimiento; ahí lleva la pelota
     move: MoveAction | None = None  # último movimiento pedido
     next_kick_tick: int = NO_KICK_COOLDOWN  # cooldown de agility: puede patear desde este tick
-    regain_blocked_until: int = NOT_REGAIN_BLOCKED  # hasta este tick no puede recuperar la pelota despues de patear
+    regain_blocked_until: int = (
+        NOT_REGAIN_BLOCKED  # hasta este tick no puede recuperar la pelota despues de patear
+    )
 
     @property
     def number(self) -> int:
@@ -56,7 +56,7 @@ class BallState:
     position: Vec
     velocity: Vec = ZERO
     owner: PlayerKey | None = None
-    protected_until: int = NOT_PROTECTED  
+    protected_until: int = NOT_PROTECTED
 
 
 @dataclass

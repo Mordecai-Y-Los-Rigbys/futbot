@@ -22,7 +22,6 @@ def frozen_now(monkeypatch):
 @pytest.fixture
 def repo():
     mock = create_autospec(AbstractSessionRepository, instance=True)
-    # By default, create() echoes back what it receives (like a real repo would)
     mock.create.side_effect = lambda data: SessionData(**data.model_dump())
     return mock
 
@@ -41,7 +40,8 @@ def stored_session(expires_at, user_id=1, session_id="sid"):
     )
 
 
-# ---------- create ----------
+# --- create -------------------------------------------------------------------
+
 
 def test_create_calls_repository_once_with_create_data(service, repo):
     service.create(user_id=42)
@@ -89,7 +89,8 @@ def test_create_respects_custom_ttl(service, repo):
     assert data.expires_at - data.created_at == timedelta(minutes=5)
 
 
-# ---------- get_user_id ----------
+# --- get_user_id --------------------------------------------------------------
+
 
 def test_get_user_id_queries_the_repository_by_id(service, repo):
     repo.get_by_id.return_value = None
@@ -135,7 +136,7 @@ def test_get_user_id_expired_session_is_deleted(service, repo):
 
 
 def test_get_user_id_exactly_at_the_limit_is_expired(service, repo):
-    repo.get_by_id.return_value = stored_session(NOW)  # the code uses <=
+    repo.get_by_id.return_value = stored_session(NOW)
 
     assert service.get_user_id("sid") is None
     repo.delete.assert_called_once_with("sid")
@@ -147,7 +148,8 @@ def test_get_user_id_one_second_before_the_limit_is_valid(service, repo):
     assert service.get_user_id("sid") == 5
 
 
-# ---------- delete ----------
+# --- delete -------------------------------------------------------------------
+
 
 def test_delete_delegates_to_the_repository(service, repo):
     service.delete("sid")

@@ -12,7 +12,7 @@ from app.repositories.match_abstract import (
 
 
 class SqlAlchemyMatchRepository(AbstractMatchRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def get_state(self, match_id: int) -> MatchStateData | None:
@@ -66,8 +66,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
         )
         self.db.commit()
-    
+
     def save_seed(self, match_id: int, seed: int) -> None:
         self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
         self.db.commit()
-

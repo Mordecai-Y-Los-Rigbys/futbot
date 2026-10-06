@@ -17,6 +17,8 @@ def _utcnow() -> datetime:
 
 @dataclass(frozen=True)
 class HandshakeGrant:
+    """Usuario y partido de un handshake aceptado."""
+
     user_id: int
     match_id: int
 
@@ -33,11 +35,27 @@ class MatchHandshakeService:
         self,
         tokens: AbstractMatchWsTokenRepository,
         matches: AbstractMatchRepository,
-    ):
+    ) -> None:
         self.tokens = tokens
         self.matches = matches
 
     def authorize(self, token: str | None, raw_match_id: str) -> HandshakeGrant:
+        """Valida el token y el partido de una conexión a /ws/matches/{id}.
+
+        Args:
+            token: tokenWs de la query. Puede faltar.
+            raw_match_id: id de la ruta, todavía sin validar.
+
+        Raises:
+            ApiError 401: tokenInvalid o tokenExpired.
+            ApiError 403: tokenMatchMismatch (el token es de otro partido).
+            ApiError 404: matchNotFound.
+            ApiError 409: matchFinished o matchCancelled.
+
+        Returns:
+            El usuario dueño del token y el partido al que se conecta.
+        """
+
         # 401: falta, es inválido o expiró
         if not token or len(token) > MAX_TOKEN_LEN:
             raise ApiError(401, "tokenInvalid", "Token inválido.")
@@ -58,6 +76,5 @@ class MatchHandshakeService:
             raise ApiError(409, "matchFinished", "El partido ya terminó.")
         if match.status == MatchStatus.cancelled:
             raise ApiError(409, "matchCancelled", "El partido fue cancelado.")
-
 
         return HandshakeGrant(user_id=record.user_id, match_id=record.match_id)

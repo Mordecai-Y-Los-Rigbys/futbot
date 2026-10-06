@@ -1,12 +1,12 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    CheckConstraint, 
-    DateTime, 
-    Enum, 
-    ForeignKey, 
-    Integer, 
-    func, 
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    func,
     String,
     BigInteger,
 )
@@ -16,6 +16,7 @@ from app.domain.match import MatchStatus
 from app.models.league import League
 from app.models.user import User
 from app.database import Base
+
 
 class Match(Base):
     """Un partido, de liga o amistoso.
@@ -78,12 +79,8 @@ class Match(Base):
     league_id: Mapped[int | None] = mapped_column(
         ForeignKey("leagues.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    user_1_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"), nullable=False, index=True
-    )
-    user_2_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id"), nullable=True, index=True
-    )
+    user_1_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    user_2_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     status: Mapped[MatchStatus] = mapped_column(
         Enum(
             MatchStatus,
@@ -93,9 +90,7 @@ class Match(Base):
         nullable=False,
         default=MatchStatus.scheduled,
     )
-    scheduled_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     name: Mapped[str | None] = mapped_column(String(20), nullable=True)
     score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
     score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)

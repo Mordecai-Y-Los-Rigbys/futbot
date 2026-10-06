@@ -7,7 +7,7 @@ from app.repositories.user_abstract import AbstractUserRepository
 
 
 class SqlAlchemyUserRepository(AbstractUserRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def get_by_email(self, email: str) -> User | None:

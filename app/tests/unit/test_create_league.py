@@ -44,7 +44,8 @@ def post(api, body):
     return api.post("/leagues", json=body)
 
 
-# --- éxito ---------------------------------------------------------------
+# --- éxito --------------------------------------------------------------------
+
 
 def test_creates_public_league(auth_api, fake_repo):
     resp = post(auth_api, payload(password="ignorada"))
@@ -71,7 +72,7 @@ def test_public_league_ignores_password_entirely(auth_api, fake_repo, pw):
     assert fake_repo.created[0].password is None
 
 
-# --- 400 por código --------------------------------------------------------
+# --- 400 por código -----------------------------------------------------------
 
 CASES = [
     # invalidFieldType
@@ -133,7 +134,8 @@ def test_boundaries_are_valid(auth_api):
     assert post(auth_api, ok).status_code == 201
 
 
-# --- orden de evaluación (convención 6) -----------------------------------------------
+# --- orden de evaluación (convención 6) ---------------------------------------
+
 
 def test_type_error_beats_missing_field(auth_api):
     resp = post(auth_api, payload(name=MISSING, matchDuration="x"))
@@ -163,7 +165,8 @@ def test_400_has_priority_over_409(auth_api, fake_players):
     assert resp.status_code == 400
 
 
-# --- 409 / 401 / body raro ----------------------------------------------------------------
+# --- 409 / 401 / body raro ----------------------------------------------------
+
 
 def test_not_owned_returns_409(auth_api, fake_repo, fake_players):
     fake_players.owned = set()
@@ -171,7 +174,7 @@ def test_not_owned_returns_409(auth_api, fake_repo, fake_players):
     assert resp.status_code == 409
     assert resp.json()["code"] == "playerOrBehaviorNotOwned"
     assert fake_repo.created == []
-    
+
 
 def test_no_session_returns_401_even_with_broken_body(api):
     resp = api.post("/leagues", content="{", headers={"Content-Type": "application/json"})

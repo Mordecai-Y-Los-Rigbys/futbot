@@ -1,11 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from app.models.match import MatchStatus
-from app.repositories.match_abstract import (
-    AbstractMatchRepository, 
-    MatchSetupData,
-    MatchStateData
-)
+from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData, MatchStateData
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
@@ -41,9 +37,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.seeds: dict[int, int] = {}
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
-        self.states[match_id] = MatchStateData(
-            id=match_id, status=MatchStatus(status).value
-        )
+        self.states[match_id] = MatchStateData(id=match_id, status=MatchStatus(status).value)
 
     def get_state(self, match_id):
         return self.states.get(match_id)
@@ -64,6 +58,6 @@ class FakeMatchRepo(AbstractMatchRepository):
         # Algunos tests no llaman a add(): en ese caso solo se registra el historial.
         if match_id in self.states:
             self.states[match_id] = MatchStateData(id=match_id, status=status.value)
-    
+
     def save_seed(self, match_id, seed):
         self.seeds[match_id] = seed

@@ -1,6 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NoReturn
 
 from app.errors import ApiError
 from app.helpers.ids import MAX_ID
@@ -50,34 +50,47 @@ def _is_id(v: Any) -> bool:
     return _is_int(v) and 1 <= v <= MAX_ID
 
 
+def _invalid_type(message: str) -> NoReturn:
+    raise _bad("invalidFieldType", message)
+
+
+def _check_member_types(member: Any) -> None:
+    """invalidFieldType de un elemento de `members`."""
+    if not isinstance(member, dict):
+        _invalid_type("Cada elemento de `members` debe ser un objeto.")
+    for field in ("playerId", "behaviorId"):
+        if field in member and not _is_id(member[field]):
+            _invalid_type(f"`{field}` debe ser un entero entre 1 y {MAX_ID}.")
+    if "role" in member and not isinstance(member["role"], str):
+        _invalid_type("`role` debe ser un string.")
+
+
+def _check_members_types(body: dict) -> None:
+    """invalidFieldType de `members`: un array de objetos con ids y rol válidos."""
+    if "members" not in body:
+        return
+    if not isinstance(body["members"], list):
+        _invalid_type("`members` debe ser un array.")
+    for member in body["members"]:
+        _check_member_types(member)
+
+
 def _check_types(body: dict) -> None:
     """Regla (a): invalidFieldType. `password` solo se evalúa si private es true."""
 
-    def fail(msg: str):
-        raise _bad("invalidFieldType", msg)
-
     if "name" in body and not isinstance(body["name"], str):
-        fail("`name` debe ser un string.")
+        _invalid_type("`name` debe ser un string.")
     for f in INT_FIELDS:
         if f in body and (not _is_int(body[f]) or body[f] > MAX_ID):
-            fail(f"`{f}` debe ser un entero.")
+            _invalid_type(f"`{f}` debe ser un entero.")
     if "private" in body and not isinstance(body["private"], bool):
-        fail("`private` debe ser un booleano.")
+        _invalid_type("`private` debe ser un booleano.")
     if body.get("private") is True:
         pw = body.get("password")
         if pw is not None and not isinstance(pw, str):
-            fail("`password` debe ser un string.")
-    if "members" in body:
-        if not isinstance(body["members"], list):
-            fail("`members` debe ser un array.")
-        for m in body["members"]:
-            if not isinstance(m, dict):
-                fail("Cada elemento de `members` debe ser un objeto.")
-            for f in ("playerId", "behaviorId"):
-                if f in m and not _is_id(m[f]):
-                    fail(f"`{f}` debe ser un entero entre 1 y {MAX_ID}.")
-            if "role" in m and not isinstance(m["role"], str):
-                fail("`role` debe ser un string.")
+            _invalid_type("`password` debe ser un string.")
+
+    _check_members_types(body)
 
 
 def _check_team(members: list[dict]) -> None:
@@ -95,6 +108,17 @@ def _check_team(members: list[dict]) -> None:
 
 
 def parse_create_league(body: Any) -> CreateLeagueInput:
+    """Valida el body de POST /leagues y devuelve los datos de la liga.
+
+    Las reglas se evalúan en este orden y se lanza solo la primera que falla
+    (convención 6): invalidFieldType > incompleteForm > nameTooLong >
+    minParticipantsTooLow > maxLessThanMin > matchDurationOutOfRange >
+    passwordTooLong > invalidTeam. `password` solo cuenta si la liga es privada.
+
+    Raises:
+        ApiError 400: con el código de la primera regla que falla.
+    """
+
     if body is INVALID_JSON or (body is not None and not isinstance(body, dict)):
         raise _bad("invalidFieldType", "El body debe ser un objeto JSON válido.")
     body = body or {}
@@ -144,7 +168,5 @@ def parse_create_league(body: Any) -> CreateLeagueInput:
         match_duration=body["matchDuration"],
         private=private,
         password=body["password"] if private else None,
-        members=[
-            MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]
-        ],
+        members=[MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]],
     )

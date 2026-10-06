@@ -21,6 +21,8 @@ from app.simulation.state import Stats
 
 @dataclass(frozen=True)
 class MatchSetup:
+    """Todo lo que necesita el runner para jugar un partido."""
+
     team_1: TeamSetup  # club1 = user_1
     team_2: TeamSetup  # club2 = user_2
     duration_seconds: float
@@ -28,18 +30,31 @@ class MatchSetup:
     club_1_name: str
     club_2_name: str
 
+
 class MatchSetupService:
+    """Arma los equipos y la duración de un partido a partir de la base."""
+
     def __init__(
         self,
         matches: AbstractMatchRepository,
         leagues: AbstractLeagueRepository,
         teams: AbstractTeamRepository,
-    ):
+    ) -> None:
         self.matches = matches
         self.leagues = leagues
         self.teams = teams
 
     def load_match_setup(self, match_id: int) -> MatchSetup:
+        """Carga los titulares de los dos clubes, con sus behaviors ya compilados.
+
+        La duración es la que definió la liga, o FRIENDLY_MATCH_DURATION si es
+        un amistoso.
+
+        Raises:
+            LookupError: el partido no existe, no tiene rival o su liga no existe.
+            ValueError: algún equipo no tiene exactamente un titular por rol.
+        """
+
         match = self.matches.get_setup_data(match_id)
         if match is None or match.user_2_id is None or match.club_2_name is None:
             raise LookupError(f"partido {match_id} inexistente o sin rival")
@@ -62,9 +77,7 @@ class MatchSetupService:
 
         minutes = self.leagues.get_match_duration_minutes(match.league_id)
         if minutes is None:
-            raise LookupError(
-                f"la liga {match.league_id} del partido {match.id} no existe"
-            )
+            raise LookupError(f"la liga {match.league_id} del partido {match.id} no existe")
         return minutes
 
     def _build_team(self, match: MatchSetupData, user_id: int) -> TeamSetup:

@@ -33,6 +33,7 @@ def default_team(first_id: int = 0) -> TeamSetup:
         },
     )
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Simula un partido de Futbot")
     parser.add_argument("--seed", type=int, default=1)
@@ -41,7 +42,7 @@ def main() -> None:
     args = parser.parse_args()
 
     result = simulate_match(
-        default_team(0, ), default_team(10, ), args.duration, args.seed, args.countdown
+        default_team(0), default_team(10), args.duration, args.seed, args.countdown
     )
     for t in result.ticks:
         if t.event is Event.GOAL:

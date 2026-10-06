@@ -19,9 +19,7 @@ CTX = TickContext(club_1="Club Uno", club_2="Club Dos", countdown_seconds=1)
 def payload(**over) -> dict:
     base = {
         "type": "tick",
-        "players": [
-            {"playerId": i, "position": {"x": 10.0 + i, "y": 30.0}} for i in range(1, 7)
-        ],
+        "players": [{"playerId": i, "position": {"x": 10.0 + i, "y": 30.0}} for i in range(1, 7)],
         "ballPosition": {"x": 50.0, "y": 30.0},
         "score1": 0,
         "score2": 0,
@@ -33,31 +31,45 @@ def payload(**over) -> dict:
     return base
 
 
-# --- el schema acepta lo que define el contrato ---------------------------------
+# --- el schema acepta lo que define el contrato -------------------------------
 
 
 @pytest.mark.parametrize(
     "over",
     [
         {},
-        {"phase": "countdown", "elapsedTime": 0,
-         "event": {"type": "periodStart", "periodNumber": 1, "countdownSeconds": 10}},
+        {
+            "phase": "countdown",
+            "elapsedTime": 0,
+            "event": {"type": "periodStart", "periodNumber": 1, "countdownSeconds": 10},
+        },
         {"score1": 1, "event": {"type": "goal", "scoringClub": "Club Uno"}},
-        {"score1": 1, "ballPosition": {"x": 100.4, "y": 30.0},  # pelota dentro del arco
-         "event": {"type": "goal", "scoringClub": "Club Uno"}},
+        {
+            "score1": 1,
+            "ballPosition": {"x": 100.4, "y": 30.0},  # pelota dentro del arco
+            "event": {"type": "goal", "scoringClub": "Club Uno"},
+        },
         {"phase": "paused", "event": {"type": "pause", "reason": "halftime"}},
-        {"score1": 2, "score2": 1, "phase": "finished",
-         "event": {"type": "matchEnd", "result": {"score1": 2, "score2": 1}}},
+        {
+            "score1": 2,
+            "score2": 1,
+            "phase": "finished",
+            "event": {"type": "matchEnd", "result": {"score1": 2, "score2": 1}},
+        },
         # gol en el último tick: llega matchEnd, no goal, con la pelota en el arco
-        {"score1": 1, "phase": "finished", "ballPosition": {"x": 100.4, "y": 30.0},
-         "event": {"type": "matchEnd", "result": {"score1": 1, "score2": 0}}},
+        {
+            "score1": 1,
+            "phase": "finished",
+            "ballPosition": {"x": 100.4, "y": 30.0},
+            "event": {"type": "matchEnd", "result": {"score1": 1, "score2": 0}},
+        },
     ],
 )
 def test_valid_payloads(over):
     TickPayload.model_validate(payload(**over))
 
 
-# --- ...y rechaza lo que no -----------------------------------------------------
+# --- ...y rechaza lo que no ---------------------------------------------------
 
 
 def without(key):
@@ -66,8 +78,9 @@ def without(key):
     return p
 
 
-@pytest.mark.parametrize("key", ["type", "players", "ballPosition", "score1", "score2",
-                                 "elapsedTime", "phase", "event"])
+@pytest.mark.parametrize(
+    "key", ["type", "players", "ballPosition", "score1", "score2", "elapsedTime", "phase", "event"]
+)
 def test_every_key_is_required_including_a_null_event(key):
     with pytest.raises(ValidationError):
         TickPayload.model_validate(without(key))
@@ -76,9 +89,9 @@ def test_every_key_is_required_including_a_null_event(key):
 @pytest.mark.parametrize(
     "over",
     [
-        {"extra": 1},                                  # clave de más
+        {"extra": 1},  # clave de más
         {"type": "marcador"},
-        {"score1": "1"},                               # sin conversión de tipos
+        {"score1": "1"},  # sin conversión de tipos
         {"score1": True},
         {"score1": -1},
         {"elapsedTime": 1.5},
@@ -86,14 +99,16 @@ def test_every_key_is_required_including_a_null_event(key):
         {"phase": "waiting"},
         {"ballPosition": {"x": 50.0}},
         {"ballPosition": {"x": 50.0, "y": 30.0, "z": 0}},
-        {"ballPosition": {"x": 50.0, "y": 61.0}},      # fuera de la cancha
-        {"ballPosition": {"x": 101.0, "y": 30.0}},     # fuera de la cancha sin gol
+        {"ballPosition": {"x": 50.0, "y": 61.0}},  # fuera de la cancha
+        {"ballPosition": {"x": 101.0, "y": 30.0}},  # fuera de la cancha sin gol
         {"players": [{"playerId": "1", "position": {"x": 10.0, "y": 30.0}}]},
         {"players": [{"playerId": 1, "position": {"x": 101.0, "y": 30.0}}]},
-        {"event": {"type": "tiro"}},                   # evento desconocido
-        {"event": {"type": "goal"}},                   # falta scoringClub
-        {"event": {"type": "periodStart", "periodNumber": 5, "countdownSeconds": 10},
-         "phase": "countdown"},
+        {"event": {"type": "tiro"}},  # evento desconocido
+        {"event": {"type": "goal"}},  # falta scoringClub
+        {
+            "event": {"type": "periodStart", "periodNumber": 5, "countdownSeconds": 10},
+            "phase": "countdown",
+        },
         {"event": {"type": "pause", "reason": "lluvia"}, "phase": "paused"},
     ],
 )
@@ -109,8 +124,11 @@ def test_invalid_payloads(over):
         {"event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}}},
         {"phase": "finished"},
         # el resultado no coincide con el marcador
-        {"score1": 1, "phase": "finished",
-         "event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}}},
+        {
+            "score1": 1,
+            "phase": "finished",
+            "event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}},
+        },
         # evento en una fase que no le corresponde
         {"event": {"type": "periodStart", "periodNumber": 1, "countdownSeconds": 10}},
         {"phase": "countdown", "event": {"type": "goal", "scoringClub": "Club Uno"}},
@@ -122,7 +140,7 @@ def test_phase_and_event_must_agree(over):
         TickPayload.model_validate(payload(**over))
 
 
-# --- lo que realmente emite el servidor ------------------------------------------
+# --- lo que realmente emite el servidor ---------------------------------------
 
 
 def on_the_wire(result: TickResult) -> dict:

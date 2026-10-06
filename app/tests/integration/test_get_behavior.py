@@ -4,7 +4,17 @@ from app.models.behavior import Behavior
 
 pytestmark = pytest.mark.integration
 
-INVALID_IDS = ["abc", "1.5", "0", "-1", "2147483648", "99999999999999999999", "1_0", "+1", "9" * 5000]
+INVALID_IDS = [
+    "abc",
+    "1.5",
+    "0",
+    "-1",
+    "2147483648",
+    "99999999999999999999",
+    "1_0",
+    "+1",
+    "9" * 5000,
+]
 
 
 def url(behavior_id) -> str:
@@ -19,7 +29,8 @@ def add_behavior(db, user_id: int, name="mi-behavior", code="print('hola')") -> 
     return behavior
 
 
-# ---------- 401 ----------
+# --- 401 ----------------------------------------------------------------------
+
 
 def test_no_cookie_returns_401(client):
     r = client.get(url(1))
@@ -48,7 +59,8 @@ def test_no_cookie_does_not_leak_behavior(client, db_session, make_user):
     assert "secreto" not in r.text
 
 
-# ---------- 200 ----------
+# --- 200 ----------------------------------------------------------------------
+
 
 def test_returns_own_behavior(login, db_session):
     api = login(1)
@@ -75,7 +87,8 @@ def test_me_route_is_not_shadowed_by_id_route(login):
     assert r.status_code == 200
 
 
-# ---------- 404 ----------
+# --- 404 ----------------------------------------------------------------------
+
 
 def test_nonexistent_id_returns_404(login):
     r = login(1).get(url(999999))
@@ -95,7 +108,8 @@ def test_max_valid_id_is_looked_up_normally(login):
     assert r.status_code == 404  # válido pero inexistente, sin error de base
 
 
-# ---------- 403 ----------
+# --- 403 ----------------------------------------------------------------------
+
 
 def test_other_users_behavior_returns_403_without_leaking(login, db_session, make_user):
     make_user(2)  # el dueño del behavior tiene que existir (FK)
@@ -109,7 +123,8 @@ def test_other_users_behavior_returns_403_without_leaking(login, db_session, mak
     assert "secreto" not in r.text
 
 
-# ---------- solo lectura ----------
+# --- solo lectura -------------------------------------------------------------
+
 
 def test_get_does_not_modify_behavior(login, db_session):
     api = login(1)

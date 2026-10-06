@@ -25,7 +25,8 @@ def make_user(id=7, username="mgonzalez", club_name="Boca Juniors FC"):
     )
 
 
-# ---------- UserService ----------
+# --- UserService --------------------------------------------------------------
+
 
 @pytest.fixture
 def user_repo():
@@ -52,7 +53,8 @@ def test_service_missing_user_raises_401(user_repo):
     assert exc.value.message == "Sin sesión válida."
 
 
-# ---------- Endpoint ----------
+# --- Endpoint -----------------------------------------------------------------
+
 
 @pytest.fixture()
 def user_service():

@@ -7,11 +7,11 @@ import pytest
 import app.simulation as simulation_pkg
 from app.simulation.actions import GoTo, Kick, MoveInDirection, PlayerActions
 from app.simulation.constants import (
-    FIELD_LENGTH, 
-    FIELD_WIDTH, 
-    NO_KICK_COOLDOWN, 
-    NOT_REGAIN_BLOCKED, 
-    STARTER_ROLES
+    FIELD_LENGTH,
+    FIELD_WIDTH,
+    NO_KICK_COOLDOWN,
+    NOT_REGAIN_BLOCKED,
+    STARTER_ROLES,
 )
 from app.simulation.geometry import Vec
 from app.simulation.physics import (
@@ -25,14 +25,17 @@ from app.tests.unit.simulation_helpers import AWAY, HOME, stats
 
 
 def team(first_id):
-    return [PlayerSetup(player_id=first_id + i, role=r, stats=stats()) for i, r in enumerate(STARTER_ROLES)]
+    return [
+        PlayerSetup(player_id=first_id + i, role=r, stats=stats())
+        for i, r in enumerate(STARTER_ROLES)
+    ]
 
 
 def initial(seed=1):
     return create_initial_state(team(1), team(11), seed=seed)
 
 
-# --- estado inicial ---------------------------------------------------------------
+# --- estado inicial -----------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -80,6 +83,7 @@ def test_reset_positions_puts_everyone_back_and_keeps_the_tick():
     assert reset.player((HOME, 3)).move is None
     assert reset.ball.owner is None
 
+
 def test_reset_positions_clears_the_cooldowns():
     s = initial()
     p = s.player((HOME, 3))
@@ -90,7 +94,8 @@ def test_reset_positions_clears_the_cooldowns():
     assert reset.player((HOME, 3)).next_kick_tick == NO_KICK_COOLDOWN
     assert reset.player((HOME, 3)).regain_blocked_until == NOT_REGAIN_BLOCKED
 
-# --- determinismo y pureza ---------------------------------------------------------
+
+# --- determinismo y pureza ----------------------------------------------------
 
 
 def busy_actions():
@@ -121,7 +126,7 @@ def test_step_does_not_modify_the_given_state():
     assert s == before
 
 
-# --- constantes ------------------------------------------------------------------------
+# --- constantes ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize("module", ["physics.py", "geometry.py"])

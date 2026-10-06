@@ -3,6 +3,7 @@
 import logging
 import time
 from collections.abc import Callable, Mapping
+from typing import Any
 
 from app.simulation import constants as C
 from app.simulation.actions import PlayerActions
@@ -31,7 +32,7 @@ def run_behaviors(
 ) -> dict[PlayerKey, PlayerActions]:
     """Ejecuta el comportamiento de cada jugador y devuelve sus acciones en
     coordenadas absolutas.
-    
+
     Cada equipo tiene `team_budget` segundos por tick para sus tres behaviors:
     cada jugador puede usar lo que sus compañeros anteriores no gastaron.
     """
@@ -41,32 +42,40 @@ def run_behaviors(
 
     constants = behavior_constants()
     actions: dict[PlayerKey, PlayerActions] = {}
-    
+
     for team in (Team.HOME, Team.AWAY):
         remaining = team_budget
         for player in state.players:
             if player.team is not team:
                 continue
-            
+
             if remaining <= 0:
                 # El equipo ya gastó su presupuesto en este tick: el jugador
                 # no se ejecuta y sigue con su último movimiento.
                 logger.warning(
-                    "Sin tiempo para el comportamiento de %s en el tick %s", 
-                    player.key, state.tick
+                    "Sin tiempo para el comportamiento de %s en el tick %s", player.key, state.tick
                 )
                 actions[player.key] = PlayerActions()
                 continue
-            
+
             started = timer()
             actions[player.key] = _run_player(
                 state, player.key, behaviors[player.key], clock, constants, remaining, timer
             )
             remaining -= timer() - started
-    
+
     return actions
 
-def _run_player(state, key, behavior, clock, constants, time_limit, timer) -> PlayerActions:
+
+def _run_player(
+    state: MatchState,
+    key: PlayerKey,
+    behavior: CompiledBehavior,
+    clock: MatchClock,
+    constants: dict[str, Any],
+    time_limit: float,
+    timer: Callable[[], float],
+) -> PlayerActions:
     recorder = ActionRecorder()
     # Namespace nuevo en cada tick: las variables no se conservan entre ticks.
     namespace = {**constants, **build_primitives(state, key, clock, recorder)}

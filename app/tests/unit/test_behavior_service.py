@@ -3,9 +3,14 @@ from unittest.mock import create_autospec
 import pytest
 
 from app.errors import ApiError
-from app.repositories.behavior_abstract import AbstractBehaviorRepository, BehaviorData, CreateBehaviorData
+from app.repositories.behavior_abstract import (
+    AbstractBehaviorRepository,
+    BehaviorData,
+    CreateBehaviorData,
+)
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
 from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
+
 
 @pytest.fixture
 def repo():
@@ -24,7 +29,8 @@ def behavior(id=5, user_id=1, name="a", code="x"):
     return BehaviorData(id=id, user_id=user_id, name=name, code=code)
 
 
-# ---------- list_behaviors ----------
+# --- list_behaviors -----------------------------------------------------------
+
 
 @pytest.mark.parametrize("page, expected_offset", [(1, 0), (2, PAGE_SIZE), (5, 4 * PAGE_SIZE)])
 def test_list_behaviors_translates_page_to_offset(service, repo, page, expected_offset):
@@ -47,7 +53,8 @@ def test_list_behaviors_returns_what_the_repository_returns(service, repo):
     assert service.list_behaviors(user_id=1, name=None, page=1) == (["a", "b"], 12)
 
 
-# ---------- get_owned_behavior ----------
+# --- get_owned_behavior -------------------------------------------------------
+
 
 def test_returns_own_behavior(service, repo):
     own = behavior(id=5, user_id=1)
@@ -84,9 +91,10 @@ def test_get_owned_behavior_is_read_only(service, repo):
 
     # el único acceso al repositorio es la lectura por id
     assert [c[0] for c in repo.method_calls] == ["get_by_id"]
-    
-    
-# ---------- create_default_behaviors ----------
+
+
+# --- create_default_behaviors -------------------------------------------------
+
 
 def test_create_default_behaviors_creates_a_copy_for_the_user(service, repo):
     service.create_default_behaviors(user_id=7)

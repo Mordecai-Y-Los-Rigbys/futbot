@@ -8,8 +8,8 @@ class FriendlyClubData(BaseModel):
     id: int
     username: str
     club_name: str
-    
-        
+
+
 class FriendlyMatchData(BaseModel):
     id: int
     name: str | None
@@ -29,8 +29,8 @@ class CreateFriendlyData(BaseModel):
     name: str
     creator_id: int
     members: list[CreateFriendlyMemberData]
-    
-    
+
+
 class FriendlyJoinState(BaseModel):
     id: int
     creator_id: int
@@ -42,7 +42,8 @@ class JoinFriendlyData(BaseModel):
     match_id: int
     user_id: int
     members: list[CreateFriendlyMemberData]
-    
+
+
 class FriendlyPageData(BaseModel):
     items: list[FriendlyMatchData]
     total: int
@@ -53,6 +54,7 @@ class AbstractFriendlyRepository(ABC):
     def user_is_playing(self, user_id: int) -> bool:
         """True si el usuario participa de un partido `started`, o de un
         amistoso `scheduled` (esperando rival o por arrancar)."""
+
     @abstractmethod
     def create_with_team(self, data: CreateFriendlyData) -> FriendlyMatchData:
         """Crea el partido `scheduled` y el equipo del creador en una única
@@ -64,7 +66,7 @@ class AbstractFriendlyRepository(ABC):
     ) -> FriendlyPageData:
         """Amistosos esperando rival creados por otros usuarios, ordenados por
         id ascendente, con `total` calculado con los mismos filtros."""
-        
+
     @abstractmethod
     def get_friendly_state(self, match_id: int) -> FriendlyJoinState | None:
         """Estado mínimo de un amistoso (partido sin liga), o None si no existe

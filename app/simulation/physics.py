@@ -14,6 +14,7 @@ Orden de un tick:
 import copy
 import random
 from collections.abc import Mapping, Sequence
+from itertools import combinations
 from dataclasses import dataclass
 
 from app.simulation import constants as C
@@ -34,7 +35,7 @@ from app.simulation.state import (
 )
 from app.domain.team_member import MemberRole
 
-# --- Stats -> física ------------------------------------------------------------
+# --- Stats -> física ----------------------------------------------------------
 
 
 def player_speed(speed: int) -> float:
@@ -57,7 +58,7 @@ def kick_cooldown_ticks(agility: int) -> int:
     return round(C.KICK_COOLDOWN_BASE_TICKS - agility * C.KICK_COOLDOWN_TICKS_PER_POINT)
 
 
-# --- Estado inicial ---------------------------------------------------------------
+# --- Estado inicial -----------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -117,18 +118,16 @@ def reset_positions(state: MatchState) -> MatchState:
     return new
 
 
-# --- Tick -------------------------------------------------------------------------------
+# --- Tick ---------------------------------------------------------------------
 
 
-def step(
-    state: MatchState, actions: Mapping[PlayerKey, PlayerActions] | None = None
-) -> StepResult:
+def step(state: MatchState, actions: Mapping[PlayerKey, PlayerActions] | None = None) -> StepResult:
     """Avanza un tick. `actions` usa coordenadas absolutas."""
     actions = actions or {}
     state_copy = copy.deepcopy(state)
     state_copy.tick += 1
 
-    #Mover jugadores y resolver choques
+    # Mover jugadores y resolver choques
     for player in state_copy.players:
         requested = actions.get(player.key)
         if requested is not None and requested.move is not None:
@@ -152,12 +151,14 @@ def step(
     return StepResult(state_copy)
 
 
-# --- Movimiento ------------------------------------------------------------------------
+# --- Movimiento ---------------------------------------------------------------
+
 
 # limita la posicion de un jugador al campo
 def _clamp_player(vector: Vec) -> Vec:
     r = C.PLAYER_RADIUS
     return Vec(clamp(vector.x, r, C.FIELD_LENGTH - r), clamp(vector.y, r, C.FIELD_WIDTH - r))
+
 
 # limita un punto del espacio al campo
 def _clamp_to_field(vector: Vec) -> Vec:
@@ -165,9 +166,11 @@ def _clamp_to_field(vector: Vec) -> Vec:
 
 
 def _move_player(player: PlayerState) -> None:
-    max_step = player_speed(player.stats.speed) * C.SECONDS_PER_TICK 
+    max_step = player_speed(player.stats.speed) * C.SECONDS_PER_TICK
     if isinstance(player.move, MoveInDirection):
-        delta = Vec(player.move.dx, player.move.dy).normalized() * max_step # desplazamiento en este tick
+        delta = (
+            Vec(player.move.dx, player.move.dy).normalized() * max_step
+        )  # desplazamiento en este tick
     elif isinstance(player.move, GoTo):
         to_target = _clamp_player(Vec(player.move.x, player.move.y)) - player.position
         distance = to_target.length()
@@ -186,49 +189,49 @@ def _move_player(player: PlayerState) -> None:
     player.position = new_position
 
 
-# --- Choques -------------------------------------------------------------------------------
+# --- Choques ------------------------------------------------------------------
 
 
 def _resolve_collisions(players: list[PlayerState]) -> None:
     """Separa a los jugadores superpuestos. El desplazamiento se reparte en
     proporción inversa a strength: el más fuerte se mueve menos. Es un
     forcejeo, no un impulso: no deja velocidad residual."""
-    
+
     # queda ordenado para que el resultado sea siempre el mismo
-    ordered = sorted(players, key=lambda p: (p.team.value, p.number)) 
-    
+    ordered = sorted(players, key=lambda p: (p.team.value, p.number))
+
     for _ in range(C.COLLISION_PASSES):
         any_separated = False
-        for i, player_a in enumerate(ordered):
-            for player_b in ordered[i + 1 :]:
-                if _separate(player_a, player_b):
-                    any_separated = True
+        for player_a, player_b in combinations(ordered, 2):
+            if _separate(player_a, player_b):
+                any_separated = True
         if not any_separated:
             return
+
 
 def _separate(player_a: PlayerState, player_b: PlayerState) -> bool:
     """Si los dos jugadores se superponen, los separa: cada uno empuja al otro
     en proporción a su propia fuerza. Devuelve True si tuvo que separarlos."""
-    min_distance = 2 * C.PLAYER_RADIUS # si los centros estan mas cerca hay colision
+    min_distance = 2 * C.PLAYER_RADIUS  # si los centros están más cerca hay colision
     between = player_b.position - player_a.position
     distance = between.length()
     if distance >= min_distance:
         return False
 
     push_direction = between.normalized() if distance > 0 else Vec(1.0, 0.0)
-    overlap = min_distance - distance # cuánto se superponen
+    overlap = min_distance - distance  # cuánto se superponen
     total = player_a.stats.strength + player_b.stats.strength
     push_by_a = push_direction * (overlap * player_a.stats.strength / total)
     push_by_b = push_direction * (overlap * player_b.stats.strength / total)
-    
+
     # A donde queria ir cada uno
     wanted_a = player_a.position - push_by_b
     wanted_b = player_b.position + push_by_a
-    
+
     # A donde puede ir cada uno sin salirse del campo
     new_a = _clamp_player(wanted_a)
     new_b = _clamp_player(wanted_b)
-    
+
     # Si la pared frenó a uno, el otro absorbe lo que falta
     gap = new_b - new_a
     missing = min_distance - gap.length()
@@ -238,12 +241,13 @@ def _separate(player_a: PlayerState, player_b: PlayerState) -> bool:
             new_b = _clamp_player(new_b + direction * missing)
         elif new_b != wanted_b:
             new_a = _clamp_player(new_a - direction * missing)
-   
+
     player_a.position = new_a
     player_b.position = new_b
     return True
 
-# --- Pelota ----------------------------------------------------------------------------------
+
+# --- Pelota -------------------------------------------------------------------
 
 
 # chequea si la pelota se sale del campo y la devuelve a la cancha
@@ -255,6 +259,7 @@ def _clamp_ball(vector: Vec) -> Vec:
 def _on_goal_line(y: float) -> bool:
     """True si la altura 'y' queda entre los palos."""
     return C.GOAL_Y_MIN <= y <= C.GOAL_Y_MAX
+
 
 def _goal_crossing(old: Vec, new: Vec) -> Goal | None:
     """Goal si la pelota, al ir de old a new, cruzó una línea de fondo entre
@@ -269,6 +274,7 @@ def _goal_crossing(old: Vec, new: Vec) -> Goal | None:
         if _on_goal_line(y_at_crossing):
             return Goal(scoring_team=scorer)
     return None
+
 
 def _update_ball(state: MatchState) -> Goal | None:
     ball = state.ball
@@ -306,18 +312,20 @@ def _update_ball(state: MatchState) -> Goal | None:
         ball.position = _clamp_ball(new_position)
         return None
 
-    # Libre sin gol: rebote en las paredes. Frente al arco no hay pared, así que normalmente no rebota ahí. 
+    # Libre sin gol: rebote en las paredes. Frente al arco no hay pared,
+    # así que normalmente no rebota ahí.
     # Pero si la pelota ya pasó la línea de fondo y no fue gol, es porque cruzó por afuera
     # de los palos (chocó la pared): en ese caso rebota igual.
-    
-    # Las paredes estan a un radio del borde de la cancha, así que la pelota no puede ir más allá de eso.
+
+    # Las paredes están a un radio del borde de la cancha, así que la pelota
+    # no puede ir más allá de eso.
     wall_min_x = C.BALL_RADIUS
     wall_max_x = C.FIELD_LENGTH - C.BALL_RADIUS
     wall_min_y = C.BALL_RADIUS
     wall_max_y = C.FIELD_WIDTH - C.BALL_RADIUS
-    
+
     x, y = new_position.x, new_position.y
-    velocity_x, velocity_y  = ball.velocity.x, ball.velocity.y
+    velocity_x, velocity_y = ball.velocity.x, ball.velocity.y
 
     # Rebotar = reflejar la posición del otro lado de la pared (lo que se pasó,
     # vuelve hacia adentro) e invertir la velocidad, perdiendo un poco.
@@ -325,7 +333,7 @@ def _update_ball(state: MatchState) -> Goal | None:
         x = 2 * wall_min_x - x
         velocity_x = -velocity_x * C.WALL_RESTITUTION
     elif x > wall_max_x and (x > C.FIELD_LENGTH or not _on_goal_line(y)):
-        x =  2 * (wall_max_x) - x
+        x = 2 * (wall_max_x) - x
         velocity_x = -velocity_x * C.WALL_RESTITUTION
 
     if y < wall_min_y:
@@ -343,7 +351,7 @@ def _update_ball(state: MatchState) -> Goal | None:
     return None
 
 
-# --- Posesión ------------------------------------------------------------------------------
+# --- Posesión -----------------------------------------------------------------
 
 
 def _resolve_possession(state: MatchState) -> None:
@@ -353,15 +361,17 @@ def _resolve_possession(state: MatchState) -> None:
         return
 
     # Son candidatos los que esten al alcance y no tengan bloqueada la recuperación
-    candidates = [ p for p in state.players
-        if state.tick > p.regain_blocked_until and 
-        (p.position - ball.position).length() <= reach(p.stats.control)
+    candidates = [
+        p
+        for p in state.players
+        if state.tick > p.regain_blocked_until
+        and (p.position - ball.position).length() <= reach(p.stats.control)
     ]
     if not candidates:
         return
 
     strongest = max(p.stats.strength for p in candidates)
-    candidates = [p for p in candidates if p.stats.strength == strongest] 
+    candidates = [p for p in candidates if p.stats.strength == strongest]
     # Si hay varios con la misma fuerza, gana el que esté más cerca de la pelota.
     closest = min((p.position - ball.position).length() for p in candidates)
     candidates = [
@@ -369,7 +379,7 @@ def _resolve_possession(state: MatchState) -> None:
         for p in candidates
         if (p.position - ball.position).length() - closest <= C.DISTANCE_EPSILON
     ]
-    
+
     candidates.sort(key=lambda p: (p.team.value, p.number))
     if len(candidates) == 1:
         winner = candidates[0]
@@ -383,7 +393,7 @@ def _resolve_possession(state: MatchState) -> None:
         ball.velocity = ZERO
 
 
-# --- Patadas --------------------------------------------------------------------------------
+# --- Patadas ------------------------------------------------------------------
 
 
 def _kick(state: MatchState, player: PlayerState, kick: KickAction) -> None:
@@ -394,7 +404,7 @@ def _kick(state: MatchState, player: PlayerState, kick: KickAction) -> None:
     3. ¿Hacia dónde sale?     → adelante (kick) o hacia un punto (kick_to)
     4. ¿Con qué velocidad?    → force × power
     5. Soltar la pelota       → velocidad, sin dueño, cooldown y bloqueo"""
-    
+
     ball = state.ball
     if ball.owner != player.key or state.tick < player.next_kick_tick:
         return

@@ -19,8 +19,13 @@ def team_of(db_session):
     def _make(user):
         players = [
             Player(
-                user_id=user.id, name=f"p{i}",
-                power=60, agility=60, control=60, strength=60, speed=60,
+                user_id=user.id,
+                name=f"p{i}",
+                power=60,
+                agility=60,
+                control=60,
+                strength=60,
+                speed=60,
             )
             for i in range(6)
         ]
@@ -28,8 +33,7 @@ def team_of(db_session):
         db_session.add_all([*players, behavior])
         db_session.commit()
         return [
-            {"playerId": p.id, "behaviorId": behavior.id, "role": r}
-            for p, r in zip(players, ROLES)
+            {"playerId": p.id, "behaviorId": behavior.id, "role": r} for p, r in zip(players, ROLES)
         ]
 
     return _make
@@ -37,8 +41,12 @@ def team_of(db_session):
 
 def body_for(members, **over):
     base = {
-        "name": "Nueva", "minParticipants": 3, "maxParticipants": 8,
-        "matchDuration": 5, "private": False, "members": members,
+        "name": "Nueva",
+        "minParticipants": 3,
+        "maxParticipants": 8,
+        "matchDuration": 5,
+        "private": False,
+        "members": members,
     }
     base.update(over)
     return base
@@ -48,9 +56,7 @@ def count(db_session, model):
     return db_session.scalar(select(func.count()).select_from(model))
 
 
-def test_create_league_enrolls_creator_with_team(
-    login_as, create_user, team_of, db_session
-):
+def test_create_league_enrolls_creator_with_team(login_as, create_user, team_of, db_session):
     creator = create_user("creator")
     api = login_as(creator)
 
@@ -73,9 +79,7 @@ def test_create_league_enrolls_creator_with_team(
     assert api.get("/leagues").json()["total"] == 1  # visible en el listado
 
 
-def test_public_league_does_not_persist_password(
-    login_as, create_user, team_of, db_session
-):
+def test_public_league_does_not_persist_password(login_as, create_user, team_of, db_session):
     creator = create_user("creator")
     api = login_as(creator)
 
@@ -85,9 +89,7 @@ def test_public_league_does_not_persist_password(
     assert db_session.get(League, resp.json()["id"]).password is None
 
 
-def test_nothing_is_persisted_when_team_is_not_owned(
-    login_as, create_user, team_of, db_session
-):
+def test_nothing_is_persisted_when_team_is_not_owned(login_as, create_user, team_of, db_session):
     other, creator = create_user("other"), create_user("creator")
 
     resp = login_as(creator).post("/leagues", json=body_for(team_of(other)))  # equipo ajeno
@@ -102,9 +104,7 @@ def test_nothing_is_persisted_when_team_is_not_owned(
 def test_invalid_payload_persists_nothing(login_as, create_user, team_of, db_session):
     creator = create_user("creator")
 
-    resp = login_as(creator).post(
-        "/leagues", json=body_for(team_of(creator), minParticipants=2)
-    )
+    resp = login_as(creator).post("/leagues", json=body_for(team_of(creator), minParticipants=2))
 
     assert resp.status_code == 400
     assert resp.json()["code"] == "minParticipantsTooLow"

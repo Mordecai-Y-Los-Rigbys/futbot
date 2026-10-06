@@ -8,12 +8,10 @@ from app.repositories.team_abstract import AbstractTeamRepository, StarterData
 
 
 class SqlAlchemyTeamRepository(AbstractTeamRepository):
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_starters(
-        self, match_id: int, league_id: int | None, user_id: int
-    ) -> list[StarterData]:
+    def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:
         # El equipo de un partido de liga es el de la liga; el de un amistoso, el del partido.
         owner = (
             TeamMember.match_id == match_id

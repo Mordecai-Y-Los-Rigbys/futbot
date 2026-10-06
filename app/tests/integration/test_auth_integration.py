@@ -17,6 +17,7 @@ def register_payload(**over):
     payload.update(over)
     return payload
 
+
 def test_openapi_documents_the_auth_error_schemas():
     from app.main import app
 
@@ -24,10 +25,6 @@ def test_openapi_documents_the_auth_error_schemas():
     assert "LogInBadRequest" in schemas
     assert "RegisterUserBadRequest" in schemas
 
-
-# ==============================================================================
-# PRUEBAS DE INTEGRACIÓN: POST /auth/register
-# ==============================================================================
 
 def test_register_success_exact_limits(client):
     """Valida el registro exitoso aceptando valores cercanos a los límites máximos permitidos."""
@@ -100,7 +97,7 @@ def test_register_invalid_payload_persists_nothing(client, db_session):
 
 
 def test_register_email_variants_invalid_formats(client):
-    """Valida diversos formatos de correo electrónico incorrectos que deben retornar invalidEmail."""
+    """Valida formatos de email incorrectos que deben devolver invalidEmail."""
     invalid_emails = ["sin-arroba.com", "test@", "@dominio.com"]
     for bad_email in invalid_emails:
         response = client.post(
@@ -142,10 +139,6 @@ def test_register_duplicate_email_conflict_409(client, db_session):
     assert data["message"] is not None
     assert db_session.query(User).count() == 1
 
-
-# ==============================================================================
-# PRUEBAS DE INTEGRACIÓN: POST /auth/log-in
-# ==============================================================================
 
 def test_login_after_register_succeeds(client):
     client.post("/auth/register", json=register_payload())
