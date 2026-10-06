@@ -2,6 +2,8 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.domain.team_member import MemberRole
+from app.models.league import League
+from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
 from app.models.team_member import TeamMember
@@ -43,6 +45,39 @@ def add_member(db_session, match_id, user_id, player_id, behavior_id, role=Membe
     db_session.add(
         TeamMember(
             match_id=match_id,
+            user_id=user_id,
+            player_id=player_id,
+            behavior_id=behavior_id,
+            role=role,
+        )
+    )
+    db_session.commit()
+
+
+def new_league_participant(db_session, user_id):
+    """Crea una liga con el usuario inscripto y devuelve su inscripción."""
+    league = League(
+        name="Liga",
+        creator_id=user_id,
+        min_participants=3,
+        max_participants=8,
+        match_duration=2,
+        private=False,
+    )
+    db_session.add(league)
+    db_session.flush()
+    participant = LeagueParticipant(league_id=league.id, user_id=user_id)
+    db_session.add(participant)
+    db_session.commit()
+    return participant
+
+
+def add_league_member(
+    db_session, league_id, user_id, player_id, behavior_id, role=MemberRole.forward
+):
+    db_session.add(
+        TeamMember(
+            league_id=league_id,
             user_id=user_id,
             player_id=player_id,
             behavior_id=behavior_id,
@@ -94,4 +129,41 @@ def test_same_player_can_play_two_different_friendlies(db_session, users, team):
     second = new_match(db_session, user_1_id=users[0].id)
     add_member(db_session, first.id, users[0].id, *team)
     add_member(db_session, second.id, users[0].id, *team)  # no debe lanzar
+    assert db_session.query(TeamMember).count() == 2
+
+
+def test_removing_a_league_participant_deletes_their_team(db_session, users, team):
+    participant = new_league_participant(db_session, users[0].id)
+    add_league_member(db_session, participant.league_id, users[0].id, *team)
+
+    db_session.delete(participant)
+    db_session.commit()
+
+    assert db_session.query(TeamMember).count() == 0
+
+
+def test_same_player_twice_in_the_same_league_team_is_rejected(db_session, users, team):
+    participant = new_league_participant(db_session, users[0].id)
+    add_league_member(db_session, participant.league_id, users[0].id, *team)
+    db_session.add(
+        TeamMember(
+            league_id=participant.league_id,
+            user_id=users[0].id,
+            player_id=team[0],
+            behavior_id=team[1],
+            role=MemberRole.defense,
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_same_player_can_play_in_two_different_leagues(db_session, users, team):
+    first = new_league_participant(db_session, users[0].id)
+    second = new_league_participant(db_session, users[0].id)
+    add_league_member(db_session, first.league_id, users[0].id, *team)
+    add_league_member(db_session, second.league_id, users[0].id, *team)
+
     assert db_session.query(TeamMember).count() == 2
