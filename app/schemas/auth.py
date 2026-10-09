@@ -24,7 +24,7 @@ class User(BaseModel):
 class RegisterUserFieldError(BaseModel):
 
     field: Literal["username", "email", "password", "clubName", "avatar"]
-    reason: Literal["required", "tooLong", "invalidEmail", "invalidType"]
+    reason: Literal["required", "tooLong", "invalidEmail", "invalidType", "outOfRange"]
 
 
 class RegisterUserBadRequest(BaseModel):
