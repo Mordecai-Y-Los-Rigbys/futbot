@@ -1,259 +1,547 @@
-from unittest.mock import MagicMock
-from app.services.security_service import hash_password
+import json
+import uuid
+from types import SimpleNamespace
+ 
 import pytest
-from fastapi import Response
-
-from app.api.auth import user_login
-from app.errors import ApiError
-from app.models.user import User
+from fastapi import APIRouter, FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.testclient import TestClient
+ 
+from app.errors import ApiError, api_error_handler, validation_exception_handler
+from app.repositories.user_abstract import AbstractUserRepository
 from app.schemas.auth import LogInRequest
 from app.services.auth_service import AuthService
-
-
+from app.services.security_service import hash_password
+ 
+URL = "/auth/log-in"
+ 
+# Orden del schema LogInRequest (convención 6.g y convención 9)
+SCHEMA_ORDER = ["email", "password"]
+ 
+UNREADABLE_KINDS = ["broken_json", "no_body", "null", "array", "string", "number"]
+ 
+UNAUTHORIZED_MESSAGE = "Email o contraseña incorrectos."
+UNAUTHORIZED_BODY = {"code": None, "message": UNAUTHORIZED_MESSAGE}
+ 
+ 
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+ 
+ 
+def unique_email() -> str:
+    return f"{uuid.uuid4().hex}@test.com"
+ 
+ 
+def build_email(total_length: int) -> str:
+    """
+    Email sintácticamente válido, único y de exactamente `total_length`
+    caracteres: local de 64, labels de dominio de hasta 63 y TLD "com".
+    """
+    local = uuid.uuid4().hex + "a" * 32  # 64 caracteres
+    remaining = total_length - len(local) - 1 - len("com")  # 1 = la "@"
+    labels: list[str] = []
+    while remaining > 0:
+        size = min(63, remaining - 1)  # -1 por el punto que sigue a cada label
+        labels.append("b" * size)
+        remaining -= size + 1
+    email = f"{local}@{'.'.join(labels)}.com"
+    assert len(email) == total_length
+    return email
+ 
+ 
+def credentials(**overrides) -> dict:
+    data = {"email": unique_email(), "password": "Password123!"}
+    data.update(overrides)
+    return data
+ 
+ 
+def without(data: dict, field: str) -> dict:
+    return {k: v for k, v in data.items() if k != field}
+ 
+ 
+def errors_of(response) -> list[dict]:
+    return response.json()["errors"]
+ 
+ 
+def reasons(response) -> dict:
+    """{campo: reason} a partir de `errors`."""
+    return {e["field"]: e["reason"] for e in errors_of(response)}
+ 
+ 
+def assert_validation_error(response, expected: dict):
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalidFields"
+    assert reasons(response) == expected
+    assert "session_id" not in response.cookies
+ 
+ 
+def assert_all_required(response):
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalidFields"
+    assert errors_of(response) == [{"field": f, "reason": "required"} for f in SCHEMA_ORDER]
+ 
+ 
+def post_unreadable(test_client, kind: str, url: str = URL):
+    """Body ilegible: JSON roto, sin body o algo que no es un objeto."""
+    headers = {"Content-Type": "application/json"}
+    if kind == "broken_json":
+        return test_client.post(url, content="{esto no es json", headers=headers)
+    if kind == "no_body":
+        return test_client.post(url)
+    if kind == "null":
+        return test_client.post(url, content="null", headers=headers)
+    values = {"array": [], "string": "texto", "number": 42}
+    return test_client.post(url, content=json.dumps(values[kind]), headers=headers)
+ 
+ 
+# ------------------------------------------------------------------
+# Fakes en memoria (sin base de datos)
+# ------------------------------------------------------------------
+ 
+ 
+class FakeUserRepo(AbstractUserRepository):
+    def __init__(self) -> None:
+        self.users: dict[str, SimpleNamespace] = {}
+        self.lookups = 0
+ 
+    def add(self, email: str, password_hash: str, username="messi", club_name="Inter Miami"):
+        user = SimpleNamespace(
+            id=len(self.users) + 1,
+            username=username,
+            email=email,
+            password_hash=password_hash,
+            club_name=club_name,
+            avatar=3,
+        )
+        self.users[email] = user
+        return user
+ 
+    def get_by_email(self, email: str):
+        self.lookups += 1
+        return self.users.get(email)
+ 
+    def get_by_id(self, user_id: int):
+        return next((u for u in self.users.values() if u.id == user_id), None)
+ 
+    def create(self, username, email, password_hash, club_name, avatar):
+        raise NotImplementedError("el login no crea usuarios")
+ 
+ 
+class FakeSessionService:
+    def __init__(self) -> None:
+        self.created: list[int] = []  # user_id de cada sesión creada
+ 
+    def create(self, user_id: int):
+        self.created.append(user_id)
+        return SimpleNamespace(id=f"session-{len(self.created)}")
+ 
+ 
+# ------------------------------------------------------------------
+# Fixtures
+# ------------------------------------------------------------------
+ 
+ 
+@pytest.fixture(scope="module")
+def password_hash():
+    """Hashea con el bcrypt real una sola vez por contraseña (es lento)."""
+    cache: dict[str, str] = {}
+ 
+    def get(password: str) -> str:
+        if password not in cache:
+            cache[password] = hash_password(password)
+        return cache[password]
+ 
+    return get
+ 
+ 
 @pytest.fixture
-def mock_user_repo():
-    return MagicMock()
-
-
+def world(password_hash):
+    """Repositorio y sesiones falsos, con el AuthService real encima."""
+    repo = FakeUserRepo()
+    sessions = FakeSessionService()
+    service = AuthService(user_repo=repo, session_service=sessions, behavior_service=None)
+    return SimpleNamespace(repo=repo, sessions=sessions, service=service, hash=password_hash)
+ 
+ 
 @pytest.fixture
-def mock_session_service():
-    return MagicMock()
-
-
-@pytest.fixture
-def auth_service(mock_user_repo, mock_session_service):
-    return AuthService(
-        user_repo=mock_user_repo,
-        session_service=mock_session_service,
-        behavior_service=MagicMock(),
+def api(world):
+    """El router real de auth con el AuthService falso inyectado."""
+    # Los imports van acá adentro: si cambia la ruta del módulo, fallan solo
+    # los tests del router y no todo el archivo.
+    from app.api.auth import router
+    from app.api.deps import get_auth_service
+ 
+    app = FastAPI()
+    app.include_router(router)
+    app.add_exception_handler(ApiError, api_error_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.dependency_overrides[get_auth_service] = lambda: world.service
+ 
+    world.client = TestClient(app)
+    return world
+ 
+ 
+@pytest.fixture(scope="module")
+def validation_client():
+    """App mínima: solo validación del request, sin servicios."""
+    app = FastAPI()
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+ 
+    @app.post(URL)
+    def login(body: LogInRequest):
+        return {"ok": True}
+ 
+    return TestClient(app)
+ 
+ 
+@pytest.fixture(scope="module")
+def prefixed_validation_client():
+    """Mismo handler, pero con el router montado bajo un prefijo."""
+    router = APIRouter(prefix="/api")
+ 
+    @router.post(URL)
+    def login(body: LogInRequest):
+        return {"ok": True}
+ 
+    app = FastAPI()
+    app.include_router(router)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    return TestClient(app)
+ 
+ 
+# ==================================================================
+# A) VALIDACIÓN
+# ==================================================================
+ 
+# -- Camino feliz ------------------------------------------------
+ 
+ 
+def test_valid_body_passes_validation(validation_client):
+    assert validation_client.post(URL, json=credentials()).status_code == 200
+ 
+ 
+def test_valid_email_of_255_characters_passes_validation(validation_client):
+    # Un email que register acepta tiene que poder iniciar sesión
+    response = validation_client.post(URL, json=credentials(email=build_email(255)))
+ 
+    assert response.status_code == 200
+ 
+ 
+@pytest.mark.parametrize("length", [72, 73, 300])
+def test_password_has_no_max_length_in_validation(validation_client, length):
+    # Una contraseña larga debe llegar al servicio y responder 401, nunca 400
+    response = validation_client.post(URL, json=credentials(password="p" * length))
+ 
+    assert response.status_code == 200
+ 
+ 
+def test_unknown_fields_are_ignored(validation_client):
+    assert validation_client.post(URL, json=credentials(isAdmin=True)).status_code == 200
+ 
+ 
+# -- Un reason por campo, con la precedencia del contrato ---------
+ 
+ 
+@pytest.mark.parametrize("field", SCHEMA_ORDER)
+def test_missing_field_is_required(validation_client, field):
+    response = validation_client.post(URL, json=without(credentials(), field))
+ 
+    assert_validation_error(response, {field: "required"})
+ 
+ 
+@pytest.mark.parametrize("field", SCHEMA_ORDER)
+def test_empty_string_is_required(validation_client, field):
+    response = validation_client.post(URL, json=credentials(**{field: ""}))
+ 
+    assert_validation_error(response, {field: "required"})
+ 
+ 
+@pytest.mark.parametrize("field", SCHEMA_ORDER)
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(None, id="null"),
+        pytest.param(123, id="number"),
+        pytest.param(True, id="bool"),
+        pytest.param([], id="array"),
+        pytest.param({}, id="object"),
+    ],
+)
+def test_field_with_wrong_type_is_invalid_type(validation_client, field, value):
+    response = validation_client.post(URL, json=credentials(**{field: value}))
+ 
+    assert_validation_error(response, {field: "invalidType"})
+ 
+ 
+@pytest.mark.parametrize(
+    "email",
+    [
+        pytest.param("no-es-un-email", id="sin-arroba"),
+        pytest.param("a@b", id="sin-punto-en-dominio"),
+        pytest.param("a@b..com", id="punto-doble"),
+        pytest.param("@b.com", id="sin-local"),
+        pytest.param("con espacio@b.com", id="espacio"),
+        pytest.param("a" * 65 + "@b.com", id="local-de-65"),
+        pytest.param("a" * 251 + "@b.c", id="local-de-251"),
+        pytest.param("a@" + "b" * 64 + ".com", id="label-de-64"),
+    ],
+)
+def test_badly_formatted_email_is_invalid_email(validation_client, email):
+    response = validation_client.post(URL, json=credentials(email=email))
+ 
+    assert_validation_error(response, {"email": "invalidEmail"})
+ 
+ 
+def test_invalid_email_is_not_evaluated_when_presence_or_type_failed(validation_client):
+    # Precedencia required > invalidType > invalidEmail (convención 6.e)
+    assert_validation_error(
+        validation_client.post(URL, json=credentials(email="")), {"email": "required"}
     )
-
-
-def test_auth_service_login_success(auth_service, mock_user_repo, mock_session_service):
-    """Verifica login exitoso, llamada al repositorio y creación de sesión con mocks."""
-    raw_password = "Password123!"
-    hashed = hash_password(raw_password)
-
-    dummy_user = User(
-        id=1,
-        username="usuario_test",
-        email="user@test.com",
-        password_hash=hashed,
-        club_name="Mi Club",
+    assert_validation_error(
+        validation_client.post(URL, json=credentials(email=123)), {"email": "invalidType"}
     )
-    mock_user_repo.get_by_email.return_value = dummy_user
-
-    dummy_session = MagicMock()
-    dummy_session.id = "session-uuid-valida"
-    mock_session_service.create.return_value = dummy_session
-
-    user, session_id = auth_service.login(email="user@test.com", password=raw_password)
-
-    assert user.id == 1
-    assert user.username == "usuario_test"
-    assert user.club_name == "Mi Club"
-    assert session_id == "session-uuid-valida"
-
-    mock_user_repo.get_by_email.assert_called_once_with("user@test.com")
-    mock_session_service.create.assert_called_once_with(user_id=1)
-
-
-def test_auth_service_login_user_not_found_raises_401(
-    auth_service, mock_user_repo, mock_session_service
-):
-    """Verifica 401 si el email no existe y que no se cree sesión."""
-    mock_user_repo.get_by_email.return_value = None
-
-    with pytest.raises(ApiError) as exc_info:
-        auth_service.login(email="inexistente@test.com", password="password123")
-
-    assert exc_info.value.status_code == 401
-    assert exc_info.value.code is None
-    assert exc_info.value.message == "Email o contraseña incorrectos."
-    mock_session_service.create.assert_not_called()
-
-
-def test_auth_service_login_wrong_password_raises_401(
-    auth_service, mock_user_repo, mock_session_service
-):
-    """Verifica 401 si la contraseña es incorrecta y que no se cree sesión."""
-    hashed = hash_password("correct_password")
-    dummy_user = User(
-        id=1,
-        username="testuser",
-        email="user@test.com",
-        password_hash=hashed,
-        club_name="Mi Club",
+ 
+ 
+# -- Formato del 400 ---------------------------------------------
+ 
+ 
+def test_400_has_the_contract_shape(validation_client):
+    response = validation_client.post(URL, json=credentials(password=""))
+ 
+    assert response.status_code == 400
+    body = response.json()
+    assert set(body) == {"code", "message", "errors"}
+    assert body["code"] == "invalidFields"
+    assert isinstance(body["message"], str) and body["message"]
+    assert body["errors"] == [{"field": "password", "reason": "required"}]
+ 
+ 
+def test_every_failing_field_is_reported_once_in_schema_order(validation_client):
+    # El body trae los campos en orden inverso: el orden de `errors` es el del schema
+    response = validation_client.post(URL, json={"password": 123, "email": "no-es-un-email"})
+ 
+    assert response.status_code == 400
+    assert errors_of(response) == [
+        {"field": "email", "reason": "invalidEmail"},
+        {"field": "password", "reason": "invalidType"},
+    ]
+ 
+ 
+def test_example_from_the_ticket_invalid_email_and_missing_password(validation_client):
+    response = validation_client.post(URL, json={"email": "no-es-un-email"})
+ 
+    assert errors_of(response) == [
+        {"field": "email", "reason": "invalidEmail"},
+        {"field": "password", "reason": "required"},
+    ]
+ 
+ 
+def test_empty_object_reports_both_fields_required_in_order(validation_client):
+    assert_all_required(validation_client.post(URL, json={}))
+ 
+ 
+def test_login_never_reports_too_long(validation_client):
+    # El contrato no define tooLong para login
+    response = validation_client.post(
+        URL, json=credentials(email="a" * 300, password="p" * 300)
     )
-    mock_user_repo.get_by_email.return_value = dummy_user
-
-    with pytest.raises(ApiError) as exc_info:
-        auth_service.login(email="user@test.com", password="wrong_password")
-
-    assert exc_info.value.status_code == 401
-    assert exc_info.value.code is None
-    assert exc_info.value.message == "Email o contraseña incorrectos."
-    mock_session_service.create.assert_not_called()
-
-
-def test_auth_service_login_password_over_72_chars_raises_401(
-    auth_service, mock_user_repo, mock_session_service
-):
-    """Verifica que una contraseña de 73 chars sea rechazada con 401 sin consultar al repo."""
-    password_73 = "a" * 73
-
-    with pytest.raises(ApiError) as exc_info:
-        auth_service.login(email="user@test.com", password=password_73)
-
-    assert exc_info.value.status_code == 401
-    assert exc_info.value.code is None
-    assert exc_info.value.message == "Email o contraseña incorrectos."
-    mock_user_repo.get_by_email.assert_not_called()
-    mock_session_service.create.assert_not_called()
-
-
-def test_auth_service_login_password_exact_72_chars_success(
-    auth_service, mock_user_repo, mock_session_service
-):
-    """Verifica que el límite de 72 caracteres exactos sea aceptado correctamente."""
-    password_72 = "a" * 72
-    hashed = hash_password(password_72)
-
-    dummy_user = User(
-        id=2,
-        username="user72",
-        email="limite72@test.com",
-        password_hash=hashed,
-        club_name="Club Limite",
-    )
-    mock_user_repo.get_by_email.return_value = dummy_user
-
-    dummy_session = MagicMock()
-    dummy_session.id = "session-72"
-    mock_session_service.create.return_value = dummy_session
-
-    user, session_id = auth_service.login(email="limite72@test.com", password=password_72)
-
-    assert user.id == 2
-    assert session_id == "session-72"
-    mock_session_service.create.assert_called_once_with(user_id=2)
-
-
-def test_auth_service_login_password_with_spaces_not_trimmed(
-    auth_service, mock_user_repo, mock_session_service
-):
-    """Verifica que las contraseñas con espacios no se recorten ni alteren antes de verificar."""
-    pass_with_spaces = "  password con espacios  "
-    hashed = hash_password(pass_with_spaces)
-
-    dummy_user = User(
-        id=3,
-        username="user_spaces",
-        email="spaces@test.com",
-        password_hash=hashed,
-        club_name="Club Espacios",
-    )
-    mock_user_repo.get_by_email.return_value = dummy_user
-
-    # Con espacios recortados debe fallar con 401
-    with pytest.raises(ApiError) as exc_info:
-        auth_service.login(email="spaces@test.com", password=pass_with_spaces.strip())
-    assert exc_info.value.status_code == 401
-
-    # Con los espacios exactos debe autenticar
-    dummy_session = MagicMock()
-    dummy_session.id = "session-spaces"
-    mock_session_service.create.return_value = dummy_session
-
-    user, session_id = auth_service.login(email="spaces@test.com", password=pass_with_spaces)
-    assert user.id == 3
-    assert session_id == "session-spaces"
-
-
-# ==============================================================================
-# PRUEBAS UNITARIAS: Controlador API (Mockeando AuthService)
-# ==============================================================================
-
-
-def test_endpoint_user_login_delegates_to_service_and_sets_cookie():
-    """Valida que el endpoint llame a AuthService y setee la cookie en Response."""
-    mock_service = MagicMock()
-    dummy_user = User(
-        id=5,
-        username="apiuser",
-        email="api@test.com",
-        password_hash="hashed_secret",
-        club_name="Api FC",
-    )
-    mock_service.login.return_value = (dummy_user, "mock-cookie-session-id")
-
-    req = LogInRequest(email="api@test.com", password="password123")
-    mock_response = MagicMock(spec=Response)
-
-    result = user_login(request=req, response=mock_response, auth_service=mock_service)
-
-    mock_service.login.assert_called_once_with(email="api@test.com", password="password123")
-    mock_response.set_cookie.assert_called_once_with(
-        key="session_id",
-        value="mock-cookie-session-id",
-        httponly=True,
-        samesite="lax",
-    )
-
-    # Verifica que el cuerpo expuesto contenga los datos esperados y no exponga contraseñas
-    assert result.id == 5
-    assert result.username == "apiuser"
-    assert result.club_name == "Api FC"
-    assert not hasattr(result, "password")
-    assert not hasattr(result, "password_hash")
-
-
-def test_auth_service_login_300_char_password_raises_401_without_hitting_the_db(
-    auth_service, mock_user_repo, mock_session_service
-):
-    """El schema ya no corta en 256: el service responde 401 para todo lo que pase de 72."""
-    with pytest.raises(ApiError) as exc_info:
-        auth_service.login(email="user@test.com", password="a" * 300)
-
-    assert exc_info.value.status_code == 401
-    assert exc_info.value.code is None
-    mock_user_repo.get_by_email.assert_not_called()
-    mock_session_service.create.assert_not_called()
-
-
-def test_auth_service_login_72_char_wrong_password_raises_401(
-    auth_service, mock_user_repo, mock_session_service
-):
-    hashed = hash_password("correct_password")
-    mock_user_repo.get_by_email.return_value = User(
-        id=1,
-        username="testuser",
-        email="user@test.com",
-        password_hash=hashed,
-        club_name="Mi Club",
-    )
-
-    with pytest.raises(ApiError) as exc_info:
-        auth_service.login(email="user@test.com", password="a" * 72)
-
-    assert exc_info.value.status_code == 401
-    mock_session_service.create.assert_not_called()
-
-
-def test_auth_service_login_72_multibyte_chars_succeeds(
-    auth_service, mock_user_repo, mock_session_service
-):
-    password = "ñ" * 72
-    mock_user_repo.get_by_email.return_value = User(
-        id=7,
-        username="enie",
-        email="enie@test.com",
-        password_hash=hash_password(password),
-        club_name="Club Ñ",
-    )
-    mock_session_service.create.return_value = MagicMock(id="session-enie")
-
-    user, session_id = auth_service.login(email="enie@test.com", password=password)
-
-    assert user.id == 7
-    assert session_id == "session-enie"
+ 
+    assert response.status_code == 400
+    assert "tooLong" not in {e["reason"] for e in errors_of(response)}
+ 
+ 
+# -- Body ilegible (convención 9) --------------------------------
+ 
+ 
+@pytest.mark.parametrize("kind", UNREADABLE_KINDS)
+def test_unreadable_body_reports_email_and_password_required(validation_client, kind):
+    assert_all_required(post_unreadable(validation_client, kind))
+ 
+ 
+def test_handler_applies_under_a_router_prefix(prefixed_validation_client):
+    response = prefixed_validation_client.post("/api" + URL, json={"email": "a@b.com"})
+ 
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalidFields"
+    assert errors_of(response) == [{"field": "password", "reason": "required"}]
+ 
+ 
+# ==================================================================
+# B) SERVICIO (AuthService.login con fakes y bcrypt real)
+# ==================================================================
+ 
+ 
+def test_service_returns_the_user_and_creates_one_session(world):
+    user = world.repo.add("a@test.com", world.hash("Password123!"))
+ 
+    returned_user, session_id = world.service.login("a@test.com", "Password123!")
+ 
+    assert returned_user is user
+    assert session_id == "session-1"
+    assert world.sessions.created == [user.id]
+ 
+ 
+@pytest.mark.parametrize(
+    "password",
+    [
+        pytest.param("p" * 72, id="72-ascii"),
+        pytest.param("ñ" * 72, id="72-chars-multibyte"),
+    ],
+)
+def test_service_accepts_a_password_of_exactly_72_characters(world, password):
+    world.repo.add("a@test.com", world.hash(password))
+ 
+    _, session_id = world.service.login("a@test.com", password)
+ 
+    assert session_id == "session-1"
+ 
+ 
+def test_service_does_not_trim_the_password(world):
+    # El ticket: "no se modifica ni recorta la contraseña antes de verificarla"
+    world.repo.add("a@test.com", world.hash("  Clave123  "))
+ 
+    with pytest.raises(ApiError) as exc:
+        world.service.login("a@test.com", "Clave123")
+    assert exc.value.status_code == 401
+ 
+    _, session_id = world.service.login("a@test.com", "  Clave123  ")
+    assert session_id == "session-1"
+ 
+ 
+@pytest.mark.parametrize(
+    "email, password",
+    [
+        pytest.param("nadie@test.com", "Password123!", id="email-no-registrado"),
+        pytest.param("a@test.com", "Incorrecta123!", id="contrasena-incorrecta"),
+        pytest.param("a@test.com", "p" * 73, id="contrasena-de-73"),
+        pytest.param("a@test.com", "p" * 300, id="contrasena-de-300"),
+    ],
+)
+def test_service_rejects_invalid_credentials_with_the_same_401(world, email, password):
+    world.repo.add("a@test.com", world.hash("p" * 72))
+ 
+    with pytest.raises(ApiError) as exc:
+        world.service.login(email, password)
+ 
+    assert exc.value.status_code == 401
+    assert exc.value.code is None
+    assert exc.value.message == UNAUTHORIZED_MESSAGE
+    assert world.sessions.created == []  # un rechazo no crea sesión
+ 
+ 
+def test_service_creates_the_session_for_the_right_user(world):
+    world.repo.add("a@test.com", world.hash("ClaveDeA123"))
+    user_b = world.repo.add("b@test.com", world.hash("ClaveDeB456"))
+ 
+    world.service.login("b@test.com", "ClaveDeB456")
+ 
+    assert world.sessions.created == [user_b.id]
+ 
+ 
+# ==================================================================
+# C) ROUTER (router real + AuthService falso inyectado)
+# ==================================================================
+ 
+# -- 200 ---------------------------------------------------------
+ 
+ 
+def test_router_login_returns_200_with_only_public_user_data(api):
+    user = api.repo.add("a@test.com", api.hash("Password123!"), username="messi", club_name="Inter Miami")
+ 
+    response = api.client.post(URL, json={"email": "a@test.com", "password": "Password123!"})
+ 
+    assert response.status_code == 200
+    assert response.json() == {"id": user.id, "username": "messi", "clubName": "Inter Miami"}
+ 
+ 
+def test_router_login_sets_the_session_cookie(api):
+    api.repo.add("a@test.com", api.hash("Password123!"))
+ 
+    response = api.client.post(URL, json={"email": "a@test.com", "password": "Password123!"})
+ 
+    assert response.cookies.get("session_id") == "session-1"
+ 
+ 
+def test_router_login_never_exposes_the_password_or_its_hash(api):
+    api.repo.add("a@test.com", api.hash("Password123!"))
+ 
+    response = api.client.post(URL, json={"email": "a@test.com", "password": "Password123!"})
+ 
+    assert "Password123!" not in response.text
+    assert "$2" not in response.text  # prefijo de un hash bcrypt
+    assert "password" not in response.json()
+ 
+ 
+def test_router_session_belongs_to_the_user_who_logged_in(api):
+    api.repo.add("a@test.com", api.hash("ClaveDeA123"))
+    user_b = api.repo.add("b@test.com", api.hash("ClaveDeB456"), username="otro")
+ 
+    response = api.client.post(URL, json={"email": "b@test.com", "password": "ClaveDeB456"})
+ 
+    assert response.json()["id"] == user_b.id
+    assert api.sessions.created == [user_b.id]
+ 
+ 
+def test_router_user_with_a_255_character_email_can_log_in(api):
+    email = build_email(255)
+    api.repo.add(email, api.hash("Password123!"))
+ 
+    response = api.client.post(URL, json={"email": email, "password": "Password123!"})
+ 
+    assert response.status_code == 200
+ 
+ 
+# -- 401 ---------------------------------------------------------
+ 
+ 
+@pytest.mark.parametrize(
+    "email, password",
+    [
+        pytest.param("nadie@test.com", "Password123!", id="email-no-registrado"),
+        pytest.param("a@test.com", "Incorrecta123!", id="contrasena-incorrecta"),
+        pytest.param("a@test.com", "p" * 73, id="contrasena-de-73"),
+        pytest.param("a@test.com", "p" * 300, id="contrasena-de-300"),
+    ],
+)
+def test_router_invalid_credentials_return_the_same_401_and_no_cookie(api, email, password):
+    api.repo.add("a@test.com", api.hash("p" * 72))
+ 
+    response = api.client.post(URL, json={"email": email, "password": password})
+ 
+    assert response.status_code == 401
+    assert response.json() == UNAUTHORIZED_BODY
+    assert "session_id" not in response.cookies
+    assert api.sessions.created == []
+ 
+ 
+# -- 400 ---------------------------------------------------------
+ 
+ 
+def test_router_400_has_no_cookie_and_never_reaches_the_service(api):
+    api.repo.add("a@test.com", api.hash("Password123!"))
+ 
+    response = api.client.post(URL, json={"email": "no-es-un-email", "password": ""})
+ 
+    assert response.status_code == 400
+    assert errors_of(response) == [
+        {"field": "email", "reason": "invalidEmail"},
+        {"field": "password", "reason": "required"},
+    ]
+    assert "session_id" not in response.cookies
+    assert api.repo.lookups == 0
+    assert api.sessions.created == []
+ 
+ 
+@pytest.mark.parametrize("kind", UNREADABLE_KINDS)
+def test_router_unreadable_body_reports_both_fields_required(api, kind):
+    assert_all_required(post_unreadable(api.client, kind))
+    assert api.repo.lookups == 0
+ 
+ 
+def test_router_validation_error_takes_precedence_over_unauthorized(api):
+    # Convención 4: el 400 se evalúa antes que el 401 de credenciales.
+    # El email no está registrado, pero el password vacío se rechaza primero.
+    response = api.client.post(URL, json=credentials(password=""))
+ 
+    assert_validation_error(response, {"password": "required"})

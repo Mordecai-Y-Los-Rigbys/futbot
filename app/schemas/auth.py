@@ -44,6 +44,11 @@ class RegisterUserBadRequest(BaseModel):
     code: Literal["invalidFields"] = "invalidFields"
     message: str
     errors: list[RegisterUserFieldError]
+    
+class LogInFieldError(BaseModel):
+
+    field: Literal["email", "password"]
+    reason: Literal["required", "invalidType", "invalidEmail"]
 
 
 class ErrorResponse(BaseModel):
@@ -54,11 +59,20 @@ class ErrorResponse(BaseModel):
 
 class LogInRequest(BaseModel):
 
-    email: EmailStr
+    email: str = Field(min_length=1)
     password: str = Field(min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_format(cls, v: str) -> str:
+        # Mismo formato que register, pero sin máximo de largo (el contrato no lo impone en login)
+        if not EMAIL_RE.fullmatch(v):
+            raise ValueError("invalid email")
+        return v
 
 
 class LogInBadRequest(BaseModel):
 
-    code: Literal["invalidFieldType", "incompleteForm", "invalidEmail"]
+    code: Literal["invalidFields"] = "invalidFields"
     message: str
+    errors: list[LogInFieldError]

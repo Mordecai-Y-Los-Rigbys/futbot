@@ -7,9 +7,12 @@ from app.schemas.auth import (
     LogInBadRequest,
     RegisterUserBadRequest,
     RegisterUserFieldError,
+    LogInFieldError
 )
 
 REGISTER_FIELDS = ("username", "email", "password", "clubName", "avatar")
+
+LOGIN_FIELDS = ("email", "password")
 
 # Tipos de error de Pydantic/FastAPI que indican que el body entero es ilegible
 UNREADABLE_BODY_TYPES = {"json_invalid", "model_attributes_type"}
@@ -106,45 +109,26 @@ def handle_register_validation_error(exc: RequestValidationError) -> JSONRespons
 # ------------------------------------------------------------------
 
 
-def _login_error(code: str, message: str) -> JSONResponse:
-    payload = LogInBadRequest(code=code, message=message)
+def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
+    """Traduce los errores de /auth/log-in al formato invalidFields del contrato."""
+    by_field: dict[str, LogInFieldError] = {}
+    for err in exc.errors():
+        loc = tuple(err.get("loc", ()))
+        if len(loc) >= 2 and loc[0] == "body" and loc[1] in LOGIN_FIELDS and loc[1] not in by_field:
+            by_field[loc[1]] = LogInFieldError(
+                field=loc[1], reason=determine_rejection_reason(err)
+            )
+
+    field_errors = sorted(by_field.values(), key=lambda fe: LOGIN_FIELDS.index(fe.field))
+    if not field_errors:
+        # Body ilegible (JSON roto, vacío, array): faltan ambos campos
+        field_errors = [LogInFieldError(field=f, reason="required") for f in LOGIN_FIELDS]
+
+    payload = LogInBadRequest(message="Revisá los campos marcados.", errors=field_errors)
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=payload.model_dump(),
     )
-
-
-def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
-    """
-    Traduce los errores de validación de /auth/log-in según el contrato.
-    Orden de evaluación: body ilegible > invalidFieldType > incompleteForm > invalidEmail.
-    """
-    errors = exc.errors()
-    incomplete = ("incompleteForm", "Completá el email y la contraseña.")
-
-    # 0. Body ilegible: mismo criterio que register (todo falta)
-    if is_unreadable_body(errors):
-        return _login_error(*incomplete)
-
-    # 1. Algún campo no es un string
-    if any(err.get("type") == "string_type" for err in errors):
-        return _login_error(
-            "invalidFieldType",
-            "El email y la contraseña deben ser cadenas de texto.",
-        )
-
-    # 2. Campo faltante o vacío
-    if any(
-        err.get("type") in ("missing", "string_too_short") or err.get("input") == ""
-        for err in errors
-    ):
-        return _login_error(*incomplete)
-
-    # 3. Email con formato inválido
-    if any(tuple(err.get("loc", ()))[-1:] == ("email",) for err in errors):
-        return _login_error("invalidEmail", "El formato del email no es válido.")
-
-    return _login_error(*incomplete)
 
 
 # ------------------------------------------------------------------
