@@ -47,27 +47,21 @@ def is_unreadable_body(errors: List[Dict[str, Any]]) -> bool:
 # ------------------------------------------------------------------
 
 
-def determine_rejection_reason(error_detail: Dict[str, Any], field: str) -> str:
+def determine_rejection_reason(error_detail: Dict[str, Any]) -> str:
     err_type: str = error_detail.get("type", "")
-    value = error_detail.get("input")
 
-    # 1. Faltante o vacío
-    if err_type == "missing" or err_type.endswith("_too_short"):
+    if err_type in ("missing", "string_too_short"):
         return "required"
-
-    # 2. Demasiado largo
-    if err_type.endswith("_too_long"):
+    
+    if err_type == "string_too_long":
         return "tooLong"
-
-    # 3. Email: el orden importa (vacío > largo > formato > tipo)
-    if field == "email" and isinstance(value, str):
-        if value == "":
-            return "required"
-        if len(value) > 255:
-            return "tooLong"  # email-validator falla antes por largo, con un error de formato
+    
+    if err_type in ("greater_than_equal", "less_than_equal"):
+        return "outOfRange"
+    
+    if err_type == "value_error":
         return "invalidEmail"
-
-    # 4. Todo lo demás es tipo inválido o fuera de rango (avatar: 0, 6, "a", 1.5, etc.)
+    
     return "invalidType"
 
 
@@ -84,20 +78,23 @@ def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | 
     if field is None:
         return None
     return RegisterUserFieldError(
-        field=field, reason=determine_rejection_reason(error_detail, field)
+        field=field, reason=determine_rejection_reason(error_detail)
     )
 
 
 def handle_register_validation_error(exc: RequestValidationError) -> JSONResponse:
-    field_errors = [fe for fe in (build_field_error(err) for err in exc.errors()) if fe is not None]
+    by_field: dict[str, RegisterUserFieldError] = {}
+    for err in exc.errors():
+        fe = build_field_error(err)
+        if fe is not None and fe.field not in by_field:
+            by_field[fe.field] = fe
+
+    field_errors = sorted(by_field.values(), key=lambda fe: REGISTER_FIELDS.index(fe.field))
     if not field_errors:
         # Body ilegible (JSON roto, vacío, array): se reportan los cinco campos
         field_errors = [RegisterUserFieldError(field=f, reason="required") for f in REGISTER_FIELDS]
 
-    payload = RegisterUserBadRequest(
-        message="Revisá los campos marcados.",
-        errors=field_errors,
-    )
+    payload = RegisterUserBadRequest(message="Revisá los campos marcados.", errors=field_errors)
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content=payload.model_dump(by_alias=True),
