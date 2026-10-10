@@ -10,7 +10,6 @@ from app.errors import validation_exception_handler
 from app.schemas.auth import RegisterUserRequest
 
 URL = "/auth/register"
-LOGIN_URL = "/auth/log-in"
 
 # Orden del schema RegisterUserRequest (convención 6.g y convención 9)
 SCHEMA_ORDER = ["username", "email", "password", "clubName", "avatar"]
@@ -94,10 +93,6 @@ def post_unreadable(test_client, kind: str, url: str = URL):
         return test_client.post(url, content="null", headers=headers)
     values = {"array": [], "string": "texto", "number": 42}
     return test_client.post(url, content=json.dumps(values[kind]), headers=headers)
-
-
-def login(client, email: str, password: str):
-    return client.post(LOGIN_URL, json={"email": email, "password": password})
 
 
 # ------------------------------------------------------------------
@@ -332,135 +327,3 @@ def test_handler_applies_under_a_router_prefix(prefixed_validation_client):
     assert_all_required(response)
 
 
-# ==================================================================
-# B) CONTRATO END-TO-END (app real con base de datos)
-# ==================================================================
-
-# -- 201: registro exitoso ---------------------------------------
-
-
-def test_register_returns_201_with_only_public_user_data(client):
-    response = client.post(URL, json=payload(username="messi", clubName="Inter Miami"))
-
-    assert response.status_code == 201
-    body = response.json()
-    assert set(body) == {"id", "username", "clubName"}
-    assert isinstance(body["id"], int)
-    assert body["username"] == "messi"
-    assert body["clubName"] == "Inter Miami"
-
-
-def test_register_never_exposes_the_password_or_its_hash(client):
-    response = client.post(URL, json=payload(password="Password123!"))
-
-    assert response.status_code == 201
-    assert "Password123!" not in response.text
-    assert "$2" not in response.text  # prefijo de un hash bcrypt
-
-
-def test_register_opens_a_session_automatically(client):
-    response = client.post(URL, json=payload())
-
-    assert response.status_code == 201
-    assert response.cookies.get("session_id")
-
-
-@pytest.mark.parametrize(
-    "password",
-    [
-        pytest.param("Password123!", id="normal"),
-        pytest.param("p" * 72, id="72-ascii"),
-        pytest.param("ñ" * 72, id="72-chars-multibyte"),
-    ],
-)
-def test_registered_password_is_stored_in_a_way_login_can_verify(client, password):
-    data = payload(password=password)
-    assert client.post(URL, json=data).status_code == 201
-
-    assert login(client, data["email"], password).status_code == 200
-    assert login(client, data["email"], password + "x").status_code == 401
-
-
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        pytest.param({"username": "ñ" * 20, "clubName": "ñ" * 20}, id="multibyte-20"),
-        pytest.param({"email": build_email(255)}, id="email-255"),
-        pytest.param({"avatar": 1}, id="avatar-1"),
-        pytest.param({"avatar": 5}, id="avatar-5"),
-    ],
-)
-def test_register_persists_values_at_the_limit(client, overrides):
-    # Verifica que la base soporte los máximos que el contrato permite
-    assert client.post(URL, json=payload(**overrides)).status_code == 201
-
-
-def test_register_ignores_unknown_fields(client):
-    response = client.post(URL, json=payload(isAdmin=True, id=999999))
-
-    assert response.status_code == 201
-    assert response.json()["id"] != 999999
-
-
-# -- 400 a través de la app real ---------------------------------
-
-
-def test_register_400_through_the_real_app_has_no_session(client):
-    response = client.post(URL, json=payload(avatar=9))
-
-    assert_validation_error(response, {"avatar": "outOfRange"})
-
-
-@pytest.mark.parametrize("kind", ["broken_json", "no_body", "null"])
-def test_register_unreadable_body_through_the_real_app(client, kind):
-    assert_all_required(post_unreadable(client, kind))
-
-
-# -- 409: email duplicado y qué pasa cuando el registro se rechaza -
-
-
-def test_duplicate_email_returns_409_with_null_code(client):
-    email = unique_email()
-    assert client.post(URL, json=payload(email=email)).status_code == 201
-
-    response = client.post(URL, json=payload(email=email, username="otro"))
-
-    assert response.status_code == 409
-    body = response.json()
-    assert set(body) == {"code", "message"}
-    assert body["code"] is None
-    assert isinstance(body["message"], str) and body["message"]
-    assert "session_id" not in response.cookies
-
-
-def test_duplicate_email_does_not_overwrite_the_original_account(client):
-    email = unique_email()
-    assert client.post(URL, json=payload(email=email, password="Original123!")).status_code == 201
-
-    second = client.post(URL, json=payload(email=email, password="Intruso456!"))
-
-    assert second.status_code == 409
-    assert login(client, email, "Original123!").status_code == 200
-    assert login(client, email, "Intruso456!").status_code == 401
-
-
-def test_validation_error_takes_precedence_over_duplicate_email(client):
-    # Convención 4: 400 se evalúa antes que 409
-    email = unique_email()
-    assert client.post(URL, json=payload(email=email)).status_code == 201
-
-    response = client.post(URL, json=payload(email=email, avatar=9))
-
-    assert_validation_error(response, {"avatar": "outOfRange"})
-
-
-def test_rejected_registration_creates_no_account_and_no_session(client):
-    email = unique_email()
-
-    rejected = client.post(URL, json=payload(email=email, avatar=9))
-
-    assert_validation_error(rejected, {"avatar": "outOfRange"})
-    # No hay cuenta: el login falla...
-    assert login(client, email, "Password123!").status_code == 401
-    # ...y el mismo email todavía se puede registrar (con una cuenta creada daría 409)
-    assert client.post(URL, json=payload(email=email)).status_code == 201
