@@ -48,7 +48,14 @@ class LogInRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class LogInFieldError(BaseModel):
+
+    field: Literal["email", "password"]
+    reason: Literal["required", "invalidType", "invalidEmail"]
+
+
 class LogInBadRequest(BaseModel):
 
-    code: Literal["invalidFieldType", "incompleteForm", "invalidEmail"]
+    code: Literal["invalidFields"] = "invalidFields"
     message: str
+    errors: list[LogInFieldError]
