@@ -126,7 +126,7 @@ def test_registered_password_is_stored_in_a_way_login_can_verify(client, passwor
         pytest.param({"username": "u" * 20}, id="username-20"),
         pytest.param({"clubName": "c" * 20}, id="clubName-20"),
         pytest.param({"username": "ñ" * 20, "clubName": "ñ" * 20}, id="multibyte-20"),
-        pytest.param({"email": build_email(255)}, id="email-255"),
+        pytest.param({"email": build_email(254)}, id="email-254"),
         pytest.param({"avatar": 1}, id="avatar-1"),
         pytest.param({"avatar": 5}, id="avatar-5"),
     ],

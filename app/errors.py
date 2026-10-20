@@ -7,6 +7,7 @@ from app.schemas.auth import (
     LogInBadRequest,
     RegisterUserBadRequest,
     RegisterUserFieldError,
+    MAX_EMAIL_LENGTH,
 )
 
 REGISTER_FIELDS = ("username", "email", "password", "clubName", "avatar")
@@ -47,21 +48,32 @@ def is_unreadable_body(errors: List[Dict[str, Any]]) -> bool:
 # ------------------------------------------------------------------
 
 
-def determine_rejection_reason(error_detail: Dict[str, Any]) -> str:
+def determine_rejection_reason(error_detail: Dict[str, Any], field: str) -> str:
     err_type: str = error_detail.get("type", "")
+    value = error_detail.get("input")
 
+    # Faltante o vacío (string_too_short: min_length=1)
     if err_type in ("missing", "string_too_short"):
         return "required"
-    
+
+    # Demasiado largo
     if err_type == "string_too_long":
         return "tooLong"
-    
+
+    # Entero fuera de rango (avatar)
     if err_type in ("greater_than_equal", "less_than_equal"):
         return "outOfRange"
-    
-    if err_type == "value_error":
+
+    # Email: EmailStr informa vacío, largo excesivo y formato inválido con el mismo
+    # error (value_error), así que se distinguen por el valor. El orden importa.
+    if field == "email" and isinstance(value, str):
+        if value == "":
+            return "required"
+        if len(value) > MAX_EMAIL_LENGTH:
+            return "tooLong"
         return "invalidEmail"
-    
+
+    # Todo lo demás es un tipo inválido (string_type, int_type, etc.)
     return "invalidType"
 
 
@@ -78,7 +90,7 @@ def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | 
     if field is None:
         return None
     return RegisterUserFieldError(
-        field=field, reason=determine_rejection_reason(error_detail)
+        field=field, reason=determine_rejection_reason(error_detail, field)
     )
 
 

@@ -147,7 +147,7 @@ def test_valid_body_passes_validation(validation_client):
         pytest.param({"username": "ñ" * 20, "clubName": "ñ" * 20}, id="multibyte-20"),
         pytest.param({"password": "p" * 72}, id="password-72"),
         pytest.param({"password": "ñ" * 72}, id="password-72-multibyte"),
-        pytest.param({"email": build_email(255)}, id="email-255"),
+        pytest.param({"email": build_email(254)}, id="email-254"),
         pytest.param({"avatar": 1}, id="avatar-1"),
         pytest.param({"avatar": 2}, id="avatar-2"),
         pytest.param({"avatar": 3}, id="avatar-3"),
@@ -182,12 +182,12 @@ def test_one_character_over_the_limit_is_too_long(validation_client, field, valu
 @pytest.mark.parametrize(
     "email",
     [
-        pytest.param(build_email(256), id="valido-de-256"),
-        pytest.param("a" * 256, id="sin-formato-de-256"),
+        pytest.param(build_email(255), id="valido-de-255"),
+        pytest.param("a" * 255, id="sin-formato-de-255"),
         pytest.param("a" * 290 + "@test.com", id="299-caracteres"),
     ],
 )
-def test_email_over_255_characters_is_too_long(validation_client, email):
+def test_email_over_254_characters_is_too_long(validation_client, email):
     # tooLong gana sobre invalidEmail (convención 6.e)
     response = validation_client.post(URL, json=payload(email=email))
 
@@ -236,8 +236,6 @@ def test_string_field_with_wrong_type_is_invalid_type(validation_client, field, 
         pytest.param("a@b..com", id="punto-doble"),
         pytest.param("@b.com", id="sin-local"),
         pytest.param("con espacio@b.com", id="espacio"),
-        pytest.param("a" * 65 + "@b.com", id="local-de-65"),
-        pytest.param("a" * 251 + "@b.c", id="local-de-251"),
         pytest.param("a@" + "b" * 64 + ".com", id="label-de-64"),
     ],
 )

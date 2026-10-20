@@ -1,27 +1,17 @@
-import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
-EMAIL_RE = re.compile(r"[^@\s]{1,64}@([^@\s.]{1,63}\.)+[^@\s.]{1,63}")
+MAX_EMAIL_LENGTH = 254
+
 
 class RegisterUserRequest(BaseModel):
 
     username: str = Field(min_length=1, max_length=20)
-    email: str = Field(min_length=1, max_length=255)
+    email: EmailStr
     password: str = Field(min_length=1, max_length=72)
     club_name: str = Field(alias="clubName", min_length=1, max_length=20)
     avatar: int = Field(strict=True, ge=1, le=5)
-
-    @field_validator("email")
-    @classmethod
-    def validate_email_format(cls, v: str) -> str:
-        # Solo corre si el email ya pasó el tipo y el largo (min/max_length),
-        # así que la precedencia required > invalidType > tooLong > invalidEmail
-        # se cumple sola.
-        if not EMAIL_RE.fullmatch(v):
-            raise ValueError("invalid email")
-        return v
 
 
 class User(BaseModel):
