@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from app.simulation.constants import COUNTDOWN_SECONDS
+from app.simulation.constants import COUNTDOWN_SECONDS, PAUSE_SECONDS, PERIODS
 from app.simulation.match_rules import TeamSetup, TickResult, build_session
 
 
@@ -19,10 +19,15 @@ def simulate_match(
     duration_seconds: float,
     seed: int,
     countdown_seconds: float = COUNTDOWN_SECONDS,
+    periods: int = PERIODS,
+    pause_seconds: float = PAUSE_SECONDS,
 ) -> SimulationResult:
     """Corre el partido completo. `duration_seconds` es el tiempo de juego,
-    sin contar la cuenta regresiva. Misma semilla y mismos equipos => mismos ticks."""
-    session = build_session(team_1, team_2, duration_seconds, seed, countdown_seconds)
+    sin contar las cuentas regresivas ni las pausas. Misma semilla y mismos
+    equipos => mismos ticks."""
+    session = build_session(
+        team_1, team_2, duration_seconds, seed, countdown_seconds, periods, pause_seconds
+    )
     ticks: list[TickResult] = []
     while not session.finished:
         ticks.append(session.advance())
