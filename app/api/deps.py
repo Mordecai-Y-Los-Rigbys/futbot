@@ -42,19 +42,6 @@ def get_player_repository(db: Session = Depends(get_db)) -> AbstractPlayerReposi
     return SqlAlchemyPlayerRepository(db)
 
 
-def get_auth_service(
-    db: Session = Depends(get_db),
-    session_service: SessionService = Depends(get_session_service),
-    behavior_service: BehaviorService = Depends(get_behavior_service),
-) -> AuthService:
-    user_repo = SqlAlchemyUserRepository(db)
-    return AuthService(
-        user_repo=user_repo,
-        session_service=session_service,
-        behavior_service=behavior_service,
-    )
-
-
 def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
     return BehaviorService(SqlAlchemyBehaviorRepository(db))
 
@@ -85,6 +72,19 @@ def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
 
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
     return SessionService(SqlAlchemySessionRepository(db))
+
+def get_auth_service(
+    db: Session = Depends(get_db),
+    session_service: SessionService = Depends(get_session_service),
+    behavior_service: BehaviorService = Depends(get_behavior_service),
+) -> AuthService:
+    user_repo = SqlAlchemyUserRepository(db)
+    return AuthService(
+        user_repo=user_repo,
+        session_service=session_service,
+        behavior_service=behavior_service,
+    )
+
 
 
 def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
