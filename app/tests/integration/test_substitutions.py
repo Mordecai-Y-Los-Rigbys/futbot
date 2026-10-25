@@ -1,4 +1,4 @@
-"""Constraints del modelo `substitutions` contra Postgres (integration).
+"""Tests de integración para las sustituciones
 
 Las reglas que miran otras tablas las hace cumplir un trigger de Postgres,
 así que no se pueden probar con el SQLite de los unit tests.
@@ -17,6 +17,7 @@ from app.models.match import Match
 from app.models.player import Player
 from app.models.substitution import MAX_SUBSTITUTIONS_PER_TEAM, Substitution
 from app.models.team_member import MemberRole, TeamMember
+from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 
 pytestmark = pytest.mark.integration
 
@@ -257,3 +258,46 @@ def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
     db_session.commit()
 
     assert db_session.scalars(select(Substitution)).all() == []
+
+def test_list_first_per_team_returns_the_oldest_of_each_team(db_session, league_match):
+    match, teams = league_match
+    first_1 = substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    substitute(db_session, match, teams[2], out_idx=1, in_idx=4)
+    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)
+
+    rows = SqlAlchemySubstitutionRepository(db_session).list_first_per_team(match.id)
+
+    by_user = {r.user_id: r for r in rows}
+    assert set(by_user) == {1, 2}
+    # el más viejo del equipo 1 es first_1, no el segundo
+    name_out = db_session.get(Player, teams[1][0].player_id).name
+    name_in = db_session.get(Player, teams[1][3].player_id).name
+    assert (by_user[1].starter_name, by_user[1].substitute_name) == (name_out, name_in)
+    assert first_1.id is not None
+
+
+def test_list_first_per_team_ignores_other_matches_and_empty_teams(db_session, league_match):
+    match, teams = league_match
+    assert SqlAlchemySubstitutionRepository(db_session).list_first_per_team(match.id) == []
+
+
+def test_endpoint_end_to_end(login, db_session, friendly_match):
+    match, teams = friendly_match
+    substitute(db_session, match, teams[2])
+    r = login(1).get(f"/matches/{match.id}/substitutions/next")
+    assert r.status_code == 200
+    assert r.json()["club1"] is None and r.json()["club2"] is not None
+    assert set(r.json()["club2"]) == {"starterName", "substituteName"}
+
+
+def test_endpoint_outsider_is_403_and_not_started_is_409(
+    login, db_session, make_user, friendly_match
+):
+    match, _ = friendly_match
+    make_user(3)
+    assert login(3).get(f"/matches/{match.id}/substitutions/next").status_code == 403
+    match.status = MatchStatus.finished
+    match.score_1, match.score_2 = 1, 0
+    db_session.commit()
+    r = login(1).get(f"/matches/{match.id}/substitutions/next")
+    assert (r.status_code, r.json()["code"]) == (409, "matchNotStarted")
