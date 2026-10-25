@@ -1,9 +1,3 @@
-"""Constraints del modelo `substitutions` contra Postgres (integration).
-
-Las reglas que miran otras tablas las hace cumplir un trigger de Postgres,
-así que no se pueden probar con el SQLite de los unit tests.
-"""
-
 from datetime import datetime, timezone
 
 import pytest
