@@ -1,10 +1,18 @@
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.player import Player
+from app.models.substitution import Substitution
+from app.models.team_member import TeamMember
 from app.repositories.substitution_abstract import (
     AbstractSubstitutionRepository,
     FirstSubstitutionData,
 )
+
+
+class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
+    def __init__(self, db: Session) -> None:
+        self.db = db
 
     def list_first_per_team(self, match_id: int) -> list[FirstSubstitutionData]:
         out_member = aliased(TeamMember)
@@ -12,7 +20,6 @@ from app.repositories.substitution_abstract import (
         out_player = aliased(Player)
         in_player = aliased(Player)
 
-        # Mismo criterio que delete_first_per_team: min(id) por equipo.
         first_ids = (
             select(func.min(Substitution.id))
             .join(TeamMember, TeamMember.id == Substitution.member_out_id)
