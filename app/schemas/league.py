@@ -14,6 +14,12 @@ class LeagueCreator(CamelModel):
     id: int
     username: str
     name: str
+    avatar: int
+
+
+class LeagueDetail(LeagueSummary):
+    min_participants: int
+    joined: bool
 
 
 class LeagueSummary(CamelModel):
@@ -24,6 +30,7 @@ class LeagueSummary(CamelModel):
     participants_count: int
     max_participants: int
     private: bool
+    allow_draws: bool
     created_at: datetime
 
     @field_serializer("created_at")
