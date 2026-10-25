@@ -93,6 +93,12 @@ def test_friendly_uses_the_fixed_duration_and_never_asks_the_league():
     assert teams.calls == [(1, None, 1), (1, None, 2)]
 
 
+def test_setup_uses_four_periods_and_15_second_pauses():
+    service, _, _ = build(setup_data())
+    setup = service.load_match_setup(1)
+    assert (setup.periods, setup.pause_seconds) == (4, 15)
+
+
 def test_each_team_has_three_starters_with_their_behaviors():
     service, _, _ = build(setup_data())
     setup = service.load_match_setup(1)
