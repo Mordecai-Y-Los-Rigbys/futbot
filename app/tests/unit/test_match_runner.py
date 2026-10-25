@@ -1,5 +1,7 @@
 import asyncio
+import itertools
 import json
+import logging
 from contextlib import contextmanager
 
 from app.services.match_broadcast import TickContext, build_tick_payload, _closing
@@ -8,13 +10,31 @@ from app.services.match_setup_service import MatchSetup
 from app.simulation.match_rules import Event, Phase, TickResult
 from app.simulation.physics import create_initial_state
 from app.simulation.state import Team
-from app.tests.unit.match_ws_fakes import FakeMatchRepo
+from app.tests.unit.match_ws_fakes import FakeMatchRepo, FakeSubstitutionRepo
+from app.tests.unit.tick_schema import TickPayload
 from app.simulation.run import default_team as make_team
-import logging
 
-TOTAL = 40  # 1 s de cuenta regresiva (20 ticks) + 1 s de juego (20 ticks)
+TOTAL = 40  # 1 s de cuenta regresiva (20 ticks) + 1 s de juego (20 ticks), un solo período
 CTX = TickContext(club_1="Club Uno", club_2="Club Dos", countdown_seconds=1)
-TICK_KEYS = {"type", "players", "ballPosition", "score1", "score2", "elapsedTime", "phase", "event"}
+TICK_KEYS = {
+    "type",
+    "players",
+    "ballPosition",
+    "score1",
+    "score2",
+    "penaltyScore1",
+    "penaltyScore2",
+    "elapsedTime",
+    "pauseRemainingSeconds",
+    "phase",
+    "event",
+}
+
+# 4 períodos, 2 s de juego (10 ticks por período), cuentas de 1 s y pausas de 1 s (20 ticks).
+PAUSED = dict(periods=4, pause_seconds=1, duration=2)
+PAUSED_TOTAL = 20 + 40 + 3 * (20 + 20)  # cuenta + 2 s de juego + 3 × (pausa + cuenta)
+# Igual, pero con pausas de 2 s (40 ticks): permite entrar "a la mitad" con remaining < duración.
+LATE = dict(periods=4, pause_seconds=2, duration=2)
 
 
 class FakeWs:
@@ -47,25 +67,39 @@ class FakeManager:
         self.match_closed.append((match_id, code, reason))
 
 
-def build(manager, repo, **kwargs):
+def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, duration=1, **kwargs):
+    substitutions = substitutions if substitutions is not None else FakeSubstitutionRepo()
     setup = MatchSetup(
         make_team(),
         make_team(first_id=10),
-        1,
+        duration,
         countdown_seconds=1,
         club_1_name="Club Uno",
         club_2_name="Club Dos",
+        periods=periods,
+        pause_seconds=pause_seconds,
     )
 
     @contextmanager
     def scope():
         yield repo
 
+    @contextmanager
+    def substitution_scope():
+        yield substitutions
+
     async def no_sleep(_):
         pass
 
     kwargs.setdefault("sleep", no_sleep)
-    return MatchRunner(manager, lambda _id: setup, scope, seed_factory=lambda: 42, **kwargs)
+    return MatchRunner(
+        manager,
+        lambda _id: setup,
+        scope,
+        substitution_scope,
+        seed_factory=lambda: 42,
+        **kwargs,
+    )
 
 
 def run(runner):
@@ -93,7 +127,11 @@ def test_subscriber_gets_every_tick_in_order_and_the_match_ends():
     assert last["phase"] == "finished"
     assert last["event"] == {
         "type": "matchEnd",
-        "result": {"score1": repo.results[1][0], "score2": repo.results[1][1]},
+        "result": {
+            "score1": repo.results[1][0],
+            "score2": repo.results[1][1],
+            "penalties": None,
+        },
     }
     assert manager.match_closed == [(1, 1000, "matchEnd")]
 
@@ -117,6 +155,8 @@ def test_payload_matches_the_asyncapi_and_has_no_behaviors():
     for tick in ws.received:
         assert set(tick) == TICK_KEYS and tick["type"] == "tick"
         assert isinstance(tick["elapsedTime"], int)
+        assert (tick["penaltyScore1"], tick["penaltyScore2"]) == (0, 0)
+        assert tick["pauseRemainingSeconds"] is None  # sin pausas con un solo período
         text = json.dumps(tick).lower()
         assert "behavior" not in text and "code" not in text
         assert len(tick["players"]) == 6
@@ -188,3 +228,118 @@ def test_if_saving_the_seed_fails_the_match_is_still_played(caplog):
     assert len(ws.received) == TOTAL  # el partido se jugó completo
     assert "No se pudo guardar la seed" in caplog.text
     assert "seed=42" in caplog.text  # igual quedó en el log
+
+
+# --- pausas -------------------------------------------------------------------
+
+
+def test_pause_ticks_follow_the_contract_and_only_they_carry_the_remaining_time():
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), **PAUSED))
+    assert len(ws.received) == PAUSED_TOTAL
+    for tick in ws.received:
+        TickPayload.model_validate(tick)
+        assert (tick["pauseRemainingSeconds"] is not None) == (tick["phase"] == "paused")
+    first = next(t for t in ws.received if t["phase"] == "paused")
+    assert first["event"] == {"type": "pause", "reason": "hydration", "durationSeconds": 1}
+    assert first["pauseRemainingSeconds"] == 1
+    reasons = [
+        t["event"]["reason"]
+        for t in ws.received
+        if t["event"] and t["event"]["type"] == "pause"
+    ]
+    assert reasons == ["hydration", "halftime", "hydration"]
+
+
+def test_the_clock_does_not_advance_during_pauses_and_countdowns():
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), **PAUSED))
+    frozen = [t["elapsedTime"] for t in ws.received if t["phase"] in ("paused", "countdown")]
+    assert frozen and all(isinstance(v, int) for v in frozen)
+    assert ws.received[-1]["elapsedTime"] == 2  # 2 s de juego, sin contar las pausas
+
+
+def test_substitutions_are_consumed_when_each_pause_ends_before_the_next_countdown():
+    repo = FakeMatchRepo()
+    substitutions = FakeSubstitutionRepo()
+    seen = []
+    ws = FakeWs(
+        probe=lambda t: (
+            seen.append((t["event"]["periodNumber"], len(substitutions.pause_ends)))
+            if t["event"] and t["event"]["type"] == "periodStart"
+            else None
+        )
+    )
+    run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
+    assert substitutions.pause_ends == [1, 1, 1]
+    assert seen == [(1, 0), (2, 1), (3, 2), (4, 3)]
+
+
+def test_failure_deleting_substitutions_does_not_stop_the_match(caplog):
+    repo = FakeMatchRepo()
+    substitutions = FakeSubstitutionRepo()
+
+    def boom(match_id):
+        raise RuntimeError("base caída")
+
+    substitutions.delete_first_per_team = boom
+    ws = FakeWs()
+    run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
+    assert len(ws.received) == PAUSED_TOTAL
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudieron borrar los cambios" in caplog.text
+
+
+def test_late_subscriber_gets_the_current_pause_then_the_restarted_countdown_then_play():
+    early, late = FakeWs(), FakeWs()
+    manager = FakeManager([early])
+    count = {"paused": 0}
+
+    def join_mid_pause(tick):
+        if tick["phase"] == "paused":
+            count["paused"] += 1
+            if count["paused"] == 25 and late not in manager.sockets:
+                manager.sockets.append(late)
+
+    early.probe = join_mid_pause
+    run(build(manager, FakeMatchRepo(), **LATE))
+
+    first = late.received[0]
+    assert first["phase"] == "paused" and first["event"] is None
+    assert first["pauseRemainingSeconds"] < 2  # menor a la duración: entró a la mitad
+    assert late.received == early.received[-len(late.received) :]  # sin replay
+
+    head = late.received[:15]  # lo que queda de la primera pausa
+    assert [t["phase"] for t in head] == ["paused"] * 15
+    assert [t["pauseRemainingSeconds"] for t in head] == [1] * 14 + [0]
+
+    phases = [k for k, _ in itertools.groupby(t["phase"] for t in late.received)]
+    assert phases[:3] == ["paused", "countdown", "playing"]
+
+    initial = early.received[0]  # tick 0: posiciones iniciales
+    countdown = [t for t in late.received if t["phase"] == "countdown"][:20]
+    assert len(countdown) == 20
+    assert all(t["players"] == initial["players"] for t in countdown)
+    assert all(t["ballPosition"] == initial["ballPosition"] for t in countdown)
+
+
+def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream():
+    first, second = FakeWs(), FakeWs()
+    manager = FakeManager([first])
+    count = {"n": 0}
+
+    def reconnect(tick):
+        if tick["phase"] == "paused":
+            count["n"] += 1
+            if count["n"] == 3:
+                manager.sockets.remove(first)  # se cae
+                manager.sockets.append(second)  # reconecta con el mismo token
+
+    first.probe = reconnect
+    run(build(manager, FakeMatchRepo(), **PAUSED))
+    assert second.received[0]["phase"] == "paused"
+    assert second.received[0]["pauseRemainingSeconds"] is not None
+    assert second.received[-1]["phase"] == "finished"
+    assert any(t["phase"] == "countdown" for t in second.received)
+    for tick in second.received:
+        TickPayload.model_validate(tick)
