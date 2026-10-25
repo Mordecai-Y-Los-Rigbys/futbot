@@ -8,11 +8,13 @@ from app.repositories.league_abstract import (
 )
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
-from app.schemas.league import LeagueCreator, LeaguePage, LeagueSummary
+from app.schemas.league import LeagueCreator, LeaguePage, LeagueSummary, LeagueDetail
 from app.services.league_validation import parse_create_league
 from app.services.team_ownership import ensure_owned_team
 
 PAGE_SIZE = 50
+
+LEAGUE_NOT_FOUND_MESSAGE = "La liga no existe."
 
 
 def _to_summary(item: LeagueListItemData) -> LeagueSummary:
@@ -108,3 +110,24 @@ class LeagueService:
             )
         )
         return _to_summary(created)
+
+
+def get_league(self, league_id: int, user_id: int) -> LeagueDetail:
+    """Detalle de una liga.
+
+    Args:
+        league_id: id ya parseado (1..2147483647).
+        user_id: usuario autenticado, para calcular `joined`.
+
+    Raises:
+        ApiError 404: la liga no existe.
+    """
+    data = self.repo.get_detail(league_id, user_id)
+    if data is None:
+        raise ApiError(404, None, LEAGUE_NOT_FOUND_MESSAGE)
+
+    return LeagueDetail(
+        **dict(_to_summary(data)),
+        min_participants=data.min_participants,
+        joined=data.joined,
+    )
