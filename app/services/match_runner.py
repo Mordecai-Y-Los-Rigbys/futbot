@@ -11,6 +11,7 @@ from contextlib import AbstractContextManager
 from starlette.concurrency import run_in_threadpool
 
 from app.repositories.match_abstract import AbstractMatchRepository
+from app.repositories.substitution_abstract import AbstractSubstitutionRepository
 from app.services.match_broadcast import (
     SEND_TIMEOUT,
     TickContext,
@@ -34,9 +35,10 @@ MAX_TICK_COMPUTE = 0.1  # segundos: criterio de rendimiento
 class MatchRunner:
     def __init__(
         self,
-        manager: MatchConnectionManager,
-        load_setup: Callable[[int], MatchSetup],
-        repo_scope: Callable[[], AbstractContextManager[AbstractMatchRepository]],
+        manager,
+        load_setup,
+        repo_scope,
+        substitution_scope: Callable[[], AbstractContextManager[AbstractSubstitutionRepository]],
         *,
         executor: ThreadPoolExecutor | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -52,6 +54,7 @@ class MatchRunner:
         self._manager = manager
         self._load_setup = load_setup
         self._repo_scope = repo_scope
+        self._substitution_scope = substitution_scope
         # El cálculo del tick es CPU puro: va a un pool de threads para no
         # bloquear el event loop (WebSockets y API REST).
         self._executor = executor or ThreadPoolExecutor(
@@ -104,6 +107,8 @@ class MatchRunner:
                 setup.duration_seconds,
                 seed,
                 setup.countdown_seconds,
+                setup.periods,
+                setup.pause_seconds,
             )
             context = TickContext(
                 club_1=setup.club_1_name,
@@ -133,6 +138,7 @@ class MatchRunner:
     async def _play(self, match_id: int, session: MatchSession, context: TickContext) -> None:
         loop = asyncio.get_running_loop()
         started = False
+        previous_phase: Phase | None = None
         start = self._monotonic()
         while True:
             began = self._monotonic()
@@ -144,9 +150,13 @@ class MatchRunner:
                 )
 
             if not started and result.phase is not Phase.COUNTDOWN:
-                # Durante la cuenta regresiva el partido sigue `scheduled`.
                 await run_in_threadpool(self._mark_started, match_id)
                 started = True
+
+            if previous_phase is Phase.PAUSED and result.phase is not Phase.PAUSED:
+                # Terminó una pausa: se consume el cambio más antiguo de cada equipo.
+                await run_in_threadpool(self._end_pause, match_id)
+            previous_phase = result.phase
 
             finished = result.phase is Phase.FINISHED
             if finished:
@@ -166,6 +176,13 @@ class MatchRunner:
     def _mark_started(self, match_id: int) -> None:
         with self._repo_scope() as repo:
             repo.mark_started(match_id)
+
+    def _end_pause(self, match_id: int) -> None:
+        try:
+            with self._substitution_scope() as repo:
+                repo.delete_first_per_team(match_id)
+        except Exception:
+            logger.exception("No se pudieron borrar los cambios del partido %s", match_id)
 
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
