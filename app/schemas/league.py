@@ -17,11 +17,6 @@ class LeagueCreator(CamelModel):
     avatar: int
 
 
-class LeagueDetail(LeagueSummary):
-    min_participants: int
-    joined: bool
-
-
 class LeagueSummary(CamelModel):
     id: int
     name: str
@@ -38,6 +33,11 @@ class LeagueSummary(CamelModel):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class LeagueDetail(LeagueSummary):
+    min_participants: int
+    joined: bool
 
 
 class LeaguePage(CamelModel):

@@ -11,7 +11,7 @@ from app.schemas.errors import (
     ListPageBadRequest,
 )
 from app.helpers.ids import parse_path_id
-from app.schemas.league import LeaguePage, LeagueSummary
+from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
 from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
