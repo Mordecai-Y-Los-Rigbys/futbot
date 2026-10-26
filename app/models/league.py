@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import sqlalchemy as sa
+
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -44,6 +46,9 @@ class League(Base):
     match_duration: Mapped[int] = mapped_column(Integer, nullable=False)  # minutos
     private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     password: Mapped[str | None] = mapped_column(String(72), nullable=True)
+    allow_draws: Mapped[bool] = mapped_column(
+    Boolean, nullable=False, default=True, server_default=sa.true()
+)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
