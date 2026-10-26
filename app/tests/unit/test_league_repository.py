@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.league import LeagueStatus
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository, _escape_like
+from app.repositories.league_abstract import LeagueLeaveInfo
 
 
 def compiled(stmt):
@@ -178,3 +179,48 @@ def test_always_two_statements_regardless_of_rows(repo, db, rows):
     repo.list_page(name=None, offset=0, limit=50)
     assert db.scalar.call_count == 1
     assert db.execute.call_count == 1
+    
+
+# --- abandonar liga -----------------------------------------------------------
+
+
+def test_get_leave_info_returns_none_if_league_missing(repo, db):
+    db.execute.return_value.one_or_none.return_value = None
+    assert repo.get_leave_info(5) is None
+
+
+def test_get_leave_info_maps_status_and_creator(repo, db):
+    db.execute.return_value.one_or_none.return_value = SimpleNamespace(
+        status=LeagueStatus.started, creator_id=3
+    )
+    assert repo.get_leave_info(5) == LeagueLeaveInfo(status=LeagueStatus.started, creator_id=3)
+
+
+@pytest.mark.parametrize("found, expected", [(7, True), (None, False)])
+def test_is_participant(repo, db, found, expected):
+    db.scalar.return_value = found
+    assert repo.is_participant(5, 7) is expected
+
+
+def test_remove_participant_deletes_team_then_participation_and_commits(repo, db):
+    repo.remove_participant(5, 7)
+
+    first, second = (c.args[0] for c in db.execute.call_args_list)
+    sql_team, params_team = compiled(first)
+    sql_part, params_part = compiled(second)
+    assert sql_team.startswith("DELETE FROM team_members")  # el equipo, antes que la inscripción
+    assert sql_part.startswith("DELETE FROM league_participants")
+    assert set(params_team.values()) == {5, 7}
+    assert set(params_part.values()) == {5, 7}
+    db.commit.assert_called_once()
+    db.rollback.assert_not_called()
+
+
+def test_remove_participant_rolls_back_and_reraises_on_error(repo, db):
+    db.execute.side_effect = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        repo.remove_participant(5, 7)
+
+    db.rollback.assert_called_once()
+    db.commit.assert_not_called()
