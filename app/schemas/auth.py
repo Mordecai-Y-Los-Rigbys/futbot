@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
+MAX_EMAIL_LENGTH = 254
+
 
 class RegisterUserRequest(BaseModel):
 
@@ -24,7 +26,7 @@ class User(BaseModel):
 class RegisterUserFieldError(BaseModel):
 
     field: Literal["username", "email", "password", "clubName", "avatar"]
-    reason: Literal["required", "tooLong", "invalidEmail", "invalidType"]
+    reason: Literal["required", "tooLong", "invalidEmail", "invalidType", "outOfRange"]
 
 
 class RegisterUserBadRequest(BaseModel):
@@ -46,7 +48,14 @@ class LogInRequest(BaseModel):
     password: str = Field(min_length=1)
 
 
+class LogInFieldError(BaseModel):
+
+    field: Literal["email", "password"]
+    reason: Literal["required", "invalidType", "invalidEmail"]
+
+
 class LogInBadRequest(BaseModel):
 
-    code: Literal["invalidFieldType", "incompleteForm", "invalidEmail"]
+    code: Literal["invalidFields"] = "invalidFields"
     message: str
+    errors: list[LogInFieldError]
