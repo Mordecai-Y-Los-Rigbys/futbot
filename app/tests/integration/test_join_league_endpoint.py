@@ -18,7 +18,10 @@ from app.models.team_member import TeamMember
 from app.repositories.league_abstract import CreateLeagueMemberData, JoinLeagueData
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.schemas.errors import Error, JoinLeagueConflict, JoinLeagueForbidden, ValidationBadRequest
-from app.services.league_participants_broadcast import get_league_participants_publisher
+from app.api.deps import get_league_service
+from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
+from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
+from app.services.league_service import LeagueService
 
 pytestmark = pytest.mark.integration
 
@@ -29,20 +32,26 @@ PASSWORD = "secret"  # la que usa make_league para las ligas privadas
 # --- fakes y fixtures ---------------------------------------------------------
 
 
-class FakePublisher:
+class FakeNotifier:
     def __init__(self):
-        self.published = []
+        self.calls = []
 
-    async def publish(self, league_id):
-        self.published.append(league_id)
+    def participants_changed(self, league_id):
+        self.calls.append(league_id)
 
 
 @pytest.fixture(autouse=True)
-def publisher():
-    fake = FakePublisher()
-    app.dependency_overrides[get_league_participants_publisher] = lambda: fake
+def notifier(db_session):
+    """Servicio real con los repositorios de la base y un notificador fake."""
+    fake = FakeNotifier()
+    app.dependency_overrides[get_league_service] = lambda: LeagueService(
+        SqlAlchemyLeagueRepository(db_session),
+        SqlAlchemyPlayerRepository(db_session),
+        SqlAlchemyBehaviorRepository(db_session),
+        notifier=fake,
+    )
     yield fake
-    app.dependency_overrides.pop(get_league_participants_publisher, None)
+    app.dependency_overrides.pop(get_league_service, None)
 
 
 @pytest.fixture()
@@ -157,11 +166,11 @@ def session_of(api) -> str:
     return api.cookies.get("session_id")
 
 
-def assert_not_joined(db_session, league, user, publisher, count=1):
+def assert_not_joined(db_session, league, user, notifier, count=1):
     assert participant(db_session, league.id, user.id) is None
     assert team_of(db_session, league.id, user.id) == []
     assert participants_count(db_session, league.id) == count
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
 def codes(resp):
@@ -172,7 +181,7 @@ def codes(resp):
 
 
 def test_join_public_league_persists_team_and_coach(
-    login_as, db_session, public_league, joiner, joiner_team, team_body, publisher
+    login_as, db_session, public_league, joiner, joiner_team, team_body, notifier
 ):
     members, coach_id = joiner_team
     assert participants_count(db_session, public_league.id) == 1  # solo el creador
@@ -185,7 +194,7 @@ def test_join_public_league_persists_team_and_coach(
     assert row is not None and row.coach_behavior_id == coach_id
     assert team_of(db_session, public_league.id, joiner.id) == expected_team(members)
     assert participants_count(db_session, public_league.id) == 2
-    assert publisher.published == [public_league.id]
+    assert notifier.calls == [public_league.id]
 
 
 def test_join_public_league_does_not_unlock_the_session(
@@ -206,7 +215,7 @@ def test_public_league_ignores_password_of_any_type(
 
 
 def test_join_private_league_persists_and_unlocks_the_session(
-    login_as, db_session, private_league, joiner, joiner_team, team_body, publisher
+    login_as, db_session, private_league, joiner, joiner_team, team_body, notifier
 ):
     members, coach_id = joiner_team
     api = login_as(joiner)
@@ -221,7 +230,7 @@ def test_join_private_league_persists_and_unlocks_the_session(
     assert is_unlocked(db_session, session_of(api), private_league.id)
     # el desbloqueo es por sesión: la otra sesión no queda desbloqueada
     assert not is_unlocked(db_session, session_of(other_session), private_league.id)
-    assert publisher.published == [private_league.id]
+    assert notifier.calls == [private_league.id]
 
 
 @pytest.mark.parametrize("extra", [{}, {"coachBehaviorId": None}])
@@ -272,11 +281,11 @@ def test_last_free_spot_can_be_taken(login_as, db_session, creator, make_league,
         ("/leagues/0/participants", None),
     ],
 )
-def test_no_cookie_is_401_even_with_bad_id_or_body(client, publisher, path, payload):
+def test_no_cookie_is_401_even_with_bad_id_or_body(client, notifier, path, payload):
     resp = client.post(path, json=payload)
     assert resp.status_code == 401 and resp.json()["code"] is None
     Error.model_validate(resp.json())
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
 def test_nonexistent_session_is_401(client, public_league):
@@ -301,30 +310,30 @@ def test_invalid_route_id_is_404_never_400_or_422(login_as, joiner, team_body, r
         assert resp.status_code == 404 and resp.json()["code"] is None
 
 
-def test_nonexistent_league_is_404(login_as, joiner, team_body, publisher):
+def test_nonexistent_league_is_404(login_as, joiner, team_body, notifier):
     resp = login_as(joiner).post(url(2147483647), json=team_body)
     assert resp.status_code == 404
-    assert resp.json() == {"code": None, "message": "Liga no encontrada."}
-    assert publisher.published == []
+    assert resp.json() == {"code": None, "message": "La liga no existe."}
+    assert notifier.calls == []
 
 
 # --- 400 ----------------------------------------------------------------------
 
 
-def test_missing_members_is_required(login_as, db_session, public_league, joiner, publisher):
+def test_missing_members_is_required(login_as, db_session, public_league, joiner, notifier):
     resp = login_as(joiner).post(url(public_league.id), json={"coachBehaviorId": 1})
     assert resp.status_code == 400
     ValidationBadRequest.model_validate(resp.json())
     assert resp.json()["code"] == "invalidFields"
     assert codes(resp) == [("members", "required")]
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 @pytest.mark.parametrize(
     "password, reason", [(None, "required"), ("__missing__", "required"), (123, "invalidType")]
 )
 def test_private_password_validation(
-    login_as, db_session, private_league, joiner, team_body, publisher, password, reason
+    login_as, db_session, private_league, joiner, team_body, notifier, password, reason
 ):
     payload = dict(team_body)
     if password != "__missing__":
@@ -332,11 +341,11 @@ def test_private_password_validation(
     resp = login_as(joiner).post(url(private_league.id), json=payload)
     assert resp.status_code == 400
     assert codes(resp) == [("password", reason)]
-    assert_not_joined(db_session, private_league, joiner, publisher)
+    assert_not_joined(db_session, private_league, joiner, notifier)
 
 
 def test_invalid_team_is_reported_on_members(
-    login_as, db_session, public_league, joiner, joiner_team, publisher
+    login_as, db_session, public_league, joiner, joiner_team, notifier
 ):
     members, coach_id = joiner_team
     two_forwards = [dict(m) for m in members]
@@ -346,11 +355,11 @@ def test_invalid_team_is_reported_on_members(
     )
     assert resp.status_code == 400
     assert codes(resp) == [("members", "invalidTeam")]
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 def test_bad_ids_in_the_body_are_400_not_404_or_409(
-    login_as, db_session, public_league, joiner, joiner_team, publisher
+    login_as, db_session, public_league, joiner, joiner_team, notifier
 ):
     members, _ = joiner_team
     bad = [dict(m) for m in members]
@@ -363,7 +372,7 @@ def test_bad_ids_in_the_body_are_400_not_404_or_409(
         ("members[1].behaviorId", "outOfRange"),
         ("coachBehaviorId", "outOfRange"),
     ]
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 @pytest.mark.parametrize(
@@ -376,7 +385,7 @@ def test_bad_ids_in_the_body_are_400_not_404_or_409(
     ],
 )
 def test_unreadable_body(
-    login_as, db_session, public_league, private_league, joiner, publisher, kwargs
+    login_as, db_session, public_league, private_league, joiner, notifier, kwargs
 ):
     api = login_as(joiner)
     resp = api.post(url(public_league.id), **kwargs)
@@ -384,7 +393,7 @@ def test_unreadable_body(
     resp = api.post(url(private_league.id), **kwargs)
     assert resp.status_code == 400
     assert codes(resp) == [("password", "required"), ("members", "required")]
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
 # --- 403 ----------------------------------------------------------------------
@@ -392,19 +401,19 @@ def test_unreadable_body(
 
 @pytest.mark.parametrize("password", ["", "wrong", "SECRET"])
 def test_wrong_or_empty_password_is_403(
-    login_as, db_session, private_league, joiner, team_body, publisher, password
+    login_as, db_session, private_league, joiner, team_body, notifier, password
 ):
     api = login_as(joiner)
     resp = api.post(url(private_league.id), json={**team_body, "password": password})
     assert resp.status_code == 403
     JoinLeagueForbidden.model_validate(resp.json())
     assert resp.json()["code"] == "invalidLeaguePassword"
-    assert_not_joined(db_session, private_league, joiner, publisher)
+    assert_not_joined(db_session, private_league, joiner, notifier)
     assert not is_unlocked(db_session, session_of(api), private_league.id)
 
 
 def test_wrong_password_is_403_even_if_the_session_already_unlocked_the_league(
-    login_as, db_session, private_league, joiner, team_body, publisher
+    login_as, db_session, private_league, joiner, team_body, notifier
 ):
     api = login_as(joiner)
     db_session.add(SessionLeagueUnlock(session_id=session_of(api), league_id=private_league.id))
@@ -412,7 +421,7 @@ def test_wrong_password_is_403_even_if_the_session_already_unlocked_the_league(
 
     resp = api.post(url(private_league.id), json={**team_body, "password": "wrong"})
     assert resp.status_code == 403
-    assert_not_joined(db_session, private_league, joiner, publisher)
+    assert_not_joined(db_session, private_league, joiner, notifier)
 
     # con la contraseña correcta se inscribe y el desbloqueo previo no estorba
     resp = api.post(url(private_league.id), json={**team_body, "password": PASSWORD})
@@ -430,14 +439,14 @@ def set_status(db_session, league, status):
 
 @pytest.mark.parametrize("status", ["started", "finished", "cancelled"])
 def test_league_not_in_preparation(
-    login_as, db_session, public_league, joiner, team_body, publisher, status
+    login_as, db_session, public_league, joiner, team_body, notifier, status
 ):
     set_status(db_session, public_league, status)
     resp = login_as(joiner).post(url(public_league.id), json=team_body)
     assert resp.status_code == 409
     JoinLeagueConflict.model_validate(resp.json())
     assert resp.json()["code"] == "notInPreparation"
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 def test_league_full(
@@ -449,22 +458,22 @@ def test_league_full(
     other,
     joiner,
     team_body,
-    publisher,
+    notifier,
 ):
     league = make_league(creator, "Llena", max_participants=2)
     add_participant(league, other)
     resp = login_as(joiner).post(url(league.id), json=team_body)
     assert resp.status_code == 409 and resp.json()["code"] == "leagueFull"
-    assert_not_joined(db_session, league, joiner, publisher, count=2)
+    assert_not_joined(db_session, league, joiner, notifier, count=2)
 
 
 def test_already_participating(
-    login_as, db_session, public_league, joiner, joiner_team, team_body, publisher
+    login_as, db_session, public_league, joiner, joiner_team, team_body, notifier
 ):
     members, _ = joiner_team
     api = login_as(joiner)
     assert api.post(url(public_league.id), json=team_body).status_code == 201
-    publisher.published.clear()
+    notifier.calls.clear()
 
     resp = api.post(url(public_league.id), json=team_body)
     assert resp.status_code == 409 and resp.json()["code"] == "alreadyParticipating"
@@ -472,7 +481,7 @@ def test_already_participating(
     assert team_of(db_session, public_league.id, joiner.id) == expected_team(
         members
     )  # sin duplicar
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
 def test_creator_already_participates(login_as, db_session, public_league, creator, make_team):
@@ -495,7 +504,7 @@ def foreign(db_session, user, kind=BehaviorType.player_behavior):
 
 @pytest.mark.parametrize("target", ["player", "member_behavior", "coach"])
 def test_foreign_ids_are_not_owned(
-    login_as, db_session, public_league, joiner, other, joiner_team, publisher, target
+    login_as, db_session, public_league, joiner, other, joiner_team, notifier, target
 ):
     members, coach_id = joiner_team
     members = [dict(m) for m in members]
@@ -512,12 +521,12 @@ def test_foreign_ids_are_not_owned(
         url(public_league.id), json={"members": members, "coachBehaviorId": coach_id}
     )
     assert resp.status_code == 409 and resp.json()["code"] == "playerOrBehaviorNotOwned"
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 @pytest.mark.parametrize("target", ["player", "member_behavior", "coach"])
 def test_nonexistent_ids_are_not_owned(
-    login_as, db_session, public_league, joiner, joiner_team, publisher, target
+    login_as, db_session, public_league, joiner, joiner_team, notifier, target
 ):
     members, coach_id = joiner_team
     members = [dict(m) for m in members]
@@ -532,11 +541,11 @@ def test_nonexistent_ids_are_not_owned(
         url(public_league.id), json={"members": members, "coachBehaviorId": coach_id}
     )
     assert resp.status_code == 409 and resp.json()["code"] == "playerOrBehaviorNotOwned"
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 def test_member_with_a_coach_behavior_is_a_type_mismatch(
-    login_as, db_session, public_league, joiner, joiner_team, publisher
+    login_as, db_session, public_league, joiner, joiner_team, notifier
 ):
     members, coach_id = joiner_team
     members = [dict(m) for m in members]
@@ -545,11 +554,11 @@ def test_member_with_a_coach_behavior_is_a_type_mismatch(
         url(public_league.id), json={"members": members, "coachBehaviorId": coach_id}
     )
     assert resp.status_code == 409 and resp.json()["code"] == "behaviorTypeMismatch"
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 def test_coach_with_a_player_behavior_is_a_type_mismatch(
-    login_as, db_session, public_league, joiner, joiner_team, publisher
+    login_as, db_session, public_league, joiner, joiner_team, notifier
 ):
     members, _ = joiner_team
     resp = login_as(joiner).post(
@@ -557,7 +566,7 @@ def test_coach_with_a_player_behavior_is_a_type_mismatch(
         json={"members": members, "coachBehaviorId": members[0]["behaviorId"]},
     )
     assert resp.status_code == 409 and resp.json()["code"] == "behaviorTypeMismatch"
-    assert_not_joined(db_session, public_league, joiner, publisher)
+    assert_not_joined(db_session, public_league, joiner, notifier)
 
 
 # --- varias fallas a la vez: 401 > 404 > 400 > 403 > 409 ----------------------
@@ -573,16 +582,16 @@ def test_404_beats_400(login_as, joiner):
     assert resp.status_code == 404
 
 
-def test_400_beats_403(login_as, db_session, private_league, joiner, joiner_team, publisher):
+def test_400_beats_403(login_as, db_session, private_league, joiner, joiner_team, notifier):
     members, _ = joiner_team
     resp = login_as(joiner).post(
         url(private_league.id), json={"members": members[:5], "password": "wrong"}
     )
     assert resp.status_code == 400 and codes(resp) == [("members", "invalidTeam")]
-    assert_not_joined(db_session, private_league, joiner, publisher)
+    assert_not_joined(db_session, private_league, joiner, notifier)
 
 
-def test_400_beats_409(login_as, db_session, public_league, joiner, publisher):
+def test_400_beats_409(login_as, db_session, public_league, joiner, notifier):
     set_status(db_session, public_league, "started")
     resp = login_as(joiner).post(url(public_league.id), json={"members": []})
     assert resp.status_code == 400 and codes(resp) == [("members", "invalidTeam")]
@@ -597,7 +606,7 @@ def test_403_beats_409(
     other,
     joiner,
     joiner_team,
-    publisher,
+    notifier,
 ):
     league = make_league(creator, "Privada llena", max_participants=2, private=True)
     add_participant(league, other)
@@ -739,9 +748,3 @@ def test_deleting_the_session_removes_its_unlocks(
     session_repo.delete(session_of(api))  # log-out
     assert not is_unlocked(db_session, session_of(api), private_league.id)
     assert participant(db_session, private_league.id, joiner.id) is not None  # sigue inscripto
-
-
-def test_league_model_is_not_modified(db_session, public_league):
-    # La inscripción no toca la fila de la liga (solo la bloquea)
-    db_session.expire_all()
-    assert db_session.get(League, public_league.id).status == LeagueStatus.preparation

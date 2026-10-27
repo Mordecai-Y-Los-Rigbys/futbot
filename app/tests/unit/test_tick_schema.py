@@ -23,7 +23,10 @@ def payload(**over) -> dict:
         "ballPosition": {"x": 50.0, "y": 30.0},
         "score1": 0,
         "score2": 0,
+        "penaltyScore1": 0,
+        "penaltyScore2": 0,
         "elapsedTime": 5,
+        "pauseRemainingSeconds": None,
         "phase": "playing",
         "event": None,
     }
@@ -49,19 +52,31 @@ def payload(**over) -> dict:
             "ballPosition": {"x": 100.4, "y": 30.0},  # pelota dentro del arco
             "event": {"type": "goal", "scoringClub": "Club Uno"},
         },
-        {"phase": "paused", "event": {"type": "pause", "reason": "halftime"}},
+        {
+            "phase": "paused",
+            "pauseRemainingSeconds": 15,
+            "event": {"type": "pause", "reason": "halftime", "durationSeconds": 15},
+        },
+        {"phase": "paused", "pauseRemainingSeconds": 3, "event": None},
+        {"phase": "paused", "pauseRemainingSeconds": 0, "event": None},
         {
             "score1": 2,
             "score2": 1,
             "phase": "finished",
-            "event": {"type": "matchEnd", "result": {"score1": 2, "score2": 1}},
+            "event": {
+                "type": "matchEnd",
+                "result": {"score1": 2, "score2": 1, "penalties": None},
+            },
         },
         # gol en el último tick: llega matchEnd, no goal, con la pelota en el arco
         {
             "score1": 1,
             "phase": "finished",
             "ballPosition": {"x": 100.4, "y": 30.0},
-            "event": {"type": "matchEnd", "result": {"score1": 1, "score2": 0}},
+            "event": {
+                "type": "matchEnd",
+                "result": {"score1": 1, "score2": 0, "penalties": None},
+            },
         },
     ],
 )
@@ -79,9 +94,22 @@ def without(key):
 
 
 @pytest.mark.parametrize(
-    "key", ["type", "players", "ballPosition", "score1", "score2", "elapsedTime", "phase", "event"]
+    "key",
+    [
+        "type",
+        "players",
+        "ballPosition",
+        "score1",
+        "score2",
+        "penaltyScore1",
+        "penaltyScore2",
+        "elapsedTime",
+        "pauseRemainingSeconds",
+        "phase",
+        "event",
+    ],
 )
-def test_every_key_is_required_including_a_null_event(key):
+def test_every_key_is_required_including_the_null_ones(key):
     with pytest.raises(ValidationError):
         TickPayload.model_validate(without(key))
 
@@ -94,6 +122,8 @@ def test_every_key_is_required_including_a_null_event(key):
         {"score1": "1"},  # sin conversión de tipos
         {"score1": True},
         {"score1": -1},
+        {"penaltyScore1": -1},
+        {"penaltyScore2": "0"},
         {"elapsedTime": 1.5},
         {"elapsedTime": "5"},
         {"phase": "waiting"},
@@ -109,7 +139,30 @@ def test_every_key_is_required_including_a_null_event(key):
             "event": {"type": "periodStart", "periodNumber": 5, "countdownSeconds": 10},
             "phase": "countdown",
         },
-        {"event": {"type": "pause", "reason": "lluvia"}, "phase": "paused"},
+        # pause con motivo desconocido
+        {
+            "event": {"type": "pause", "reason": "lluvia", "durationSeconds": 15},
+            "phase": "paused",
+            "pauseRemainingSeconds": 15,
+        },
+        # pause sin durationSeconds
+        {
+            "event": {"type": "pause", "reason": "hydration"},
+            "phase": "paused",
+            "pauseRemainingSeconds": 15,
+        },
+        # pause con durationSeconds no entero
+        {
+            "event": {"type": "pause", "reason": "hydration", "durationSeconds": "15"},
+            "phase": "paused",
+            "pauseRemainingSeconds": 15,
+        },
+        # matchEnd sin penalties
+        {
+            "phase": "finished",
+            "event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}},
+        },
+        {"pauseRemainingSeconds": -1, "phase": "paused"},
     ],
 )
 def test_invalid_payloads(over):
@@ -121,18 +174,33 @@ def test_invalid_payloads(over):
     "over",
     [
         # matchEnd sin phase finished, y al revés
-        {"event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}}},
+        {"event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0, "penalties": None}}},
         {"phase": "finished"},
         # el resultado no coincide con el marcador
         {
             "score1": 1,
             "phase": "finished",
-            "event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}},
+            "event": {
+                "type": "matchEnd",
+                "result": {"score1": 0, "score2": 0, "penalties": None},
+            },
         },
         # evento en una fase que no le corresponde
         {"event": {"type": "periodStart", "periodNumber": 1, "countdownSeconds": 10}},
         {"phase": "countdown", "event": {"type": "goal", "scoringClub": "Club Uno"}},
-        {"event": {"type": "pause", "reason": "hydration"}},
+        {"event": {"type": "pause", "reason": "hydration", "durationSeconds": 15}},
+        # pauseRemainingSeconds solo viaja con phase paused
+        {"pauseRemainingSeconds": 3},
+        {"phase": "countdown", "pauseRemainingSeconds": 3},
+        # phase paused sin pauseRemainingSeconds
+        {"phase": "paused"},
+        {"phase": "paused", "pauseRemainingSeconds": None, "event": None},
+        # en una pausa la pelota nunca está dentro del arco
+        {
+            "phase": "paused",
+            "pauseRemainingSeconds": 3,
+            "ballPosition": {"x": 100.4, "y": 30.0},
+        },
     ],
 )
 def test_phase_and_event_must_agree(over):
@@ -149,10 +217,12 @@ def on_the_wire(result: TickResult) -> dict:
 
 
 def test_every_tick_of_a_simulated_match_follows_the_contract():
+    # 10 s de juego con los valores por defecto: 4 períodos y 3 pausas de 15 s.
     ticks = simulate_match(
         make_team(), make_team(first_id=10), 10, seed=1, countdown_seconds=1
     ).ticks
     assert ticks
+    assert any(t.phase is Phase.PAUSED for t in ticks)
     for tick in ticks:
         TickPayload.model_validate(on_the_wire(tick))
 
@@ -178,3 +248,4 @@ def test_goal_in_the_last_tick_arrives_as_match_end_with_the_score_updated():
 
     assert parsed.event.type == "matchEnd"
     assert (parsed.event.result.score1, parsed.score1) == (1, 1)
+    assert parsed.event.result.penalties is None

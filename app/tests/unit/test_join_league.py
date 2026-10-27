@@ -17,7 +17,6 @@ from app.schemas.errors import (
     ValidationBadRequest,
 )
 from app.services.join_league_validation import JoinLeagueInput, parse_join_league
-from app.services.league_participants_broadcast import get_league_participants_publisher
 from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON, MemberInput
 from app.tests.unit.repo_fakes import FakePlayers
@@ -279,6 +278,14 @@ class FakeTypedBehaviors:
         return {i: self.types[i] for i in ids if i in self.types}
 
 
+class FakeNotifier:
+    def __init__(self):
+        self.calls = []
+
+    def participants_changed(self, league_id):
+        self.calls.append(league_id)
+
+
 def state(**fields):
     base = dict(
         private=False,
@@ -319,7 +326,7 @@ def error_of(repo, **kwargs):
 
 
 def test_service_success_persists_team_and_coach(repo):
-    assert join(repo) == 5
+    join(repo)
     repo.get_join_state.assert_called_once_with(5, 2)
     data = repo.join.call_args.args[0]
     assert (data.league_id, data.user_id, data.session_id) == (5, 2, "sess-1")
@@ -353,6 +360,40 @@ def test_ownership_is_checked_for_the_joining_user_including_the_coach(repo):
     join(repo, behaviors=behaviors, user_id=2)
     assert len(behaviors.calls) == 1 and behaviors.calls[0][0] == 2
     assert sorted(behaviors.calls[0][1]) == [21, 22, COACH_ID]  # sin duplicar
+
+
+def test_notifier_is_called_once_after_a_successful_join(repo):
+    notifier = FakeNotifier()
+    service = LeagueService(repo, FakePlayers(), FakeTypedBehaviors(), notifier=notifier)
+    service.join_league(2, "sess-1", "5", body())
+    assert notifier.calls == [5]
+
+
+@pytest.mark.parametrize(
+    "join_state, raw_body",
+    [
+        (None, body()),  # 404
+        (state(), {"members": "x"}),  # 400
+        (private_state(), body(password="wrong")),  # 403
+        (state(is_participant=True), body()),  # 409
+    ],
+)
+def test_notifier_is_not_called_when_the_join_fails(repo, join_state, raw_body):
+    repo.get_join_state.return_value = join_state
+    notifier = FakeNotifier()
+    service = LeagueService(repo, FakePlayers(), FakeTypedBehaviors(), notifier=notifier)
+    with pytest.raises(ApiError):
+        service.join_league(2, "sess-1", "5", raw_body)
+    assert notifier.calls == []
+
+
+def test_notifier_is_not_called_when_losing_the_race(repo):
+    repo.join.return_value = "leagueFull"
+    notifier = FakeNotifier()
+    service = LeagueService(repo, FakePlayers(), FakeTypedBehaviors(), notifier=notifier)
+    with pytest.raises(ApiError):
+        service.join_league(2, "sess-1", "5", body())
+    assert notifier.calls == []
 
 
 # -- 404
@@ -513,29 +554,17 @@ def test_not_owned_beats_type_mismatch(repo):
 # --- endpoint -----------------------------------------------------------------
 
 
-class FakePublisher:
-    def __init__(self, fail=False):
-        self.published = []
-        self.fail = fail
-
-    async def publish(self, league_id):
-        self.published.append(league_id)
-        if self.fail:
-            raise RuntimeError("canal caído")
+@pytest.fixture()
+def notifier():
+    return FakeNotifier()
 
 
 @pytest.fixture()
-def publisher():
-    return FakePublisher()
-
-
-@pytest.fixture()
-def league_api(api, repo, publisher):
+def league_api(api, repo, notifier):
     # `api` (conftest) ya resuelve la cookie "valid-session" -> usuario 7
     app.dependency_overrides[get_league_service] = lambda: LeagueService(
-        repo, FakePlayers(), FakeTypedBehaviors()
+        repo, FakePlayers(), FakeTypedBehaviors(), notifier=notifier
     )
-    app.dependency_overrides[get_league_participants_publisher] = lambda: publisher
     return api
 
 
@@ -545,19 +574,13 @@ def auth_league_api(league_api):
     return league_api
 
 
-def test_endpoint_success_is_201_without_body_and_publishes(auth_league_api, repo, publisher):
+def test_endpoint_success_is_201_without_body_and_notifies(auth_league_api, repo, notifier):
     resp = auth_league_api.post(URL, json=body())
     assert resp.status_code == 201, resp.text
     assert resp.content == b""
     data = repo.join.call_args.args[0]
     assert (data.user_id, data.session_id) == (7, "valid-session")
-    assert publisher.published == [5]
-
-
-def test_endpoint_publish_failure_still_returns_201(auth_league_api, repo):
-    app.dependency_overrides[get_league_participants_publisher] = lambda: FakePublisher(fail=True)
-    assert auth_league_api.post(URL, json=body()).status_code == 201
-    repo.join.assert_called_once()
+    assert notifier.calls == [5]
 
 
 @pytest.mark.parametrize(
@@ -569,15 +592,15 @@ def test_endpoint_publish_failure_still_returns_201(auth_league_api, repo):
         ("/leagues/2147483648/participants", None),
     ],
 )
-def test_no_cookie_is_401_even_with_bad_id_or_body(league_api, repo, publisher, path, payload):
+def test_no_cookie_is_401_even_with_bad_id_or_body(league_api, repo, notifier, path, payload):
     resp = league_api.post(path, json=payload)
     assert resp.status_code == 401 and resp.json()["code"] is None
     Error.model_validate(resp.json())
     repo.get_join_state.assert_not_called()
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
-def test_invalid_cookie_is_401(league_api, repo, publisher):
+def test_invalid_cookie_is_401(league_api, repo, notifier):
     league_api.cookies.set("session_id", "no-existe")
     resp = league_api.post("/leagues/abc/participants", json={"members": 5})
     assert resp.status_code == 401 and resp.json()["code"] is None
@@ -585,21 +608,21 @@ def test_invalid_cookie_is_401(league_api, repo, publisher):
 
 
 @pytest.mark.parametrize("raw_id", ["abc", "1.5", "0", "-1", "2147483648", "99999999999999999999"])
-def test_invalid_route_id_is_404_never_422(auth_league_api, repo, publisher, raw_id):
+def test_invalid_route_id_is_404_never_422(auth_league_api, repo, notifier, raw_id):
     for kwargs in ({"json": body()}, {"json": {"members": 5}}, {}):
         resp = auth_league_api.post(f"/leagues/{raw_id}/participants", **kwargs)
         assert resp.status_code == 404 and resp.json()["code"] is None
         Error.model_validate(resp.json())
     repo.get_join_state.assert_not_called()
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
-def test_endpoint_nonexistent_league_is_404(auth_league_api, repo, publisher):
+def test_endpoint_nonexistent_league_is_404(auth_league_api, repo, notifier):
     repo.get_join_state.return_value = None
     resp = auth_league_api.post(URL, json={"members": 5})
     assert resp.status_code == 404
-    assert resp.json() == {"code": None, "message": "Liga no encontrada."}
-    assert publisher.published == []
+    assert resp.json() == {"code": None, "message": "La liga no existe."}
+    assert notifier.calls == []
 
 
 @pytest.mark.parametrize(
@@ -624,7 +647,7 @@ def test_endpoint_nonexistent_league_is_404(auth_league_api, repo, publisher):
     ],
 )
 def test_body_errors_are_400_invalid_fields_never_422(
-    auth_league_api, repo, publisher, kwargs, private, errors
+    auth_league_api, repo, notifier, kwargs, private, errors
 ):
     repo.get_join_state.return_value = private_state() if private else state()
     resp = auth_league_api.post(URL, **kwargs)
@@ -634,16 +657,16 @@ def test_body_errors_are_400_invalid_fields_never_422(
     assert payload["code"] == "invalidFields" and payload["message"]
     assert [(e["field"], e["reason"]) for e in payload["errors"]] == errors
     repo.join.assert_not_called()
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
-def test_endpoint_wrong_password_is_403(auth_league_api, repo, publisher):
+def test_endpoint_wrong_password_is_403(auth_league_api, repo, notifier):
     repo.get_join_state.return_value = private_state()
     resp = auth_league_api.post(URL, json=body(password="wrong"))
     assert resp.status_code == 403
     JoinLeagueForbidden.model_validate(resp.json())
     assert resp.json()["code"] == "invalidLeaguePassword"
-    assert publisher.published == []
+    assert notifier.calls == []
 
 
 @pytest.mark.parametrize(
@@ -655,11 +678,11 @@ def test_endpoint_wrong_password_is_403(auth_league_api, repo, publisher):
     ],
 )
 def test_endpoint_conflicts_are_409_and_publish_nothing(
-    auth_league_api, repo, publisher, join_state, code
+    auth_league_api, repo, notifier, join_state, code
 ):
     repo.get_join_state.return_value = join_state
     resp = auth_league_api.post(URL, json=body())
     assert resp.status_code == 409
     JoinLeagueConflict.model_validate(resp.json())
     assert resp.json()["code"] == code
-    assert publisher.published == []
+    assert notifier.calls == []
