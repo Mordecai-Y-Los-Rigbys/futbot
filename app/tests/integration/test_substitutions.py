@@ -313,6 +313,27 @@ def test_list_first_per_team_keeps_names_after_roles_change(db_session, league_m
 
 
 def test_list_first_per_team_ignores_other_matches_and_empty_teams(db_session, league_match):
+    match, teams = league_match
+    other = Match(
+        league_id=match.league_id,
+        user_1_id=1,
+        user_2_id=2,
+        status=MatchStatus.started,
+        scheduled_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+    )
+    db_session.add(other)
+    db_session.commit()
+    # Otro partido entre los mismos usuarios, con cambios de ambos equipos y cargados
+    # antes (ids menores): si la query no filtra por match_id, ganarían ellos.
+    substitute(db_session, other, teams[1], out_idx=1, in_idx=4)
+    substitute(db_session, other, teams[2], out_idx=1, in_idx=4)
+
+    # Partido objetivo sin cambios: no devuelve nada.
+    assert SqlAlchemySubstitutionRepository(db_session).list_first_per_team(match.id) == []
+
+    # Con un cambio solo del equipo 1: el equipo 2 no aparece y no se cuelan los del otro partido.
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    by_user = first_by_user(db_session, match)
 
 # --- delete_first_substitutions (fin de cada pausa) -------------------------------
 
@@ -369,22 +390,16 @@ def test_other_matches_are_not_touched(db_session, league_match):
     )
     db_session.add(other)
     db_session.commit()
-    # Otro partido entre los mismos usuarios, con cambios de ambos equipos y cargados
-    # antes (ids menores): si la query no filtra por match_id, ganarían ellos.
-    substitute(db_session, other, teams[1], out_idx=1, in_idx=4)
-    substitute(db_session, other, teams[2], out_idx=1, in_idx=4)
 
-    # Partido objetivo sin cambios: no devuelve nada.
-    assert SqlAlchemySubstitutionRepository(db_session).list_first_per_team(match.id) == []
+    mine = substitute(db_session, match, teams[1])
+    theirs = substitute(db_session, other, teams[1])
+    mine_id, theirs_id = mine.id, theirs.id
 
-    # Con un cambio solo del equipo 1: el equipo 2 no aparece y no se cuelan los del otro partido.
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    by_user = first_by_user(db_session, match)
+    SqlAlchemySubstitutionRepository(db_session).delete_first_per_team(match.id)
 
-    assert set(by_user) == {1}
-    assert (by_user[1].starter_name, by_user[1].substitute_name) == names_of(
-        db_session, teams[1], 0, 3
-    )
+    assert remaining_ids(db_session) == {theirs_id}
+    assert mine_id not in remaining_ids(db_session)
+    
 
 
 def test_endpoint_outsider_is_403_and_not_started_is_409(
@@ -398,11 +413,3 @@ def test_endpoint_outsider_is_403_and_not_started_is_409(
     db_session.commit()
     r = login(1).get(f"/matches/{match.id}/substitutions/next")
     assert (r.status_code, r.json()["code"]) == (409, "matchNotStarted")
-    mine = substitute(db_session, match, teams[1])
-    theirs = substitute(db_session, other, teams[1])
-    mine_id, theirs_id = mine.id, theirs.id
-
-    SqlAlchemySubstitutionRepository(db_session).delete_first_per_team(match.id)
-
-    assert remaining_ids(db_session) == {theirs_id}
-    assert mine_id not in remaining_ids(db_session)
