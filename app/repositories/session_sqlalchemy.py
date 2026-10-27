@@ -1,6 +1,9 @@
 from datetime import timezone
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
+
+from app.models.session_league_access import SessionLeagueAccess
 
 from app.models.session import UserSession
 from app.repositories.session_abstract import (
@@ -47,5 +50,9 @@ class SqlAlchemySessionRepository(AbstractSessionRepository):
     def delete(self, session_id: str) -> None:
         record = self.db.get(UserSession, session_id)
         if record is not None:
+            # También funciona en los tests SQLite sin foreign_keys=ON.
+            self.db.execute(delete(SessionLeagueAccess).where(
+                SessionLeagueAccess.session_id == session_id
+            ))
             self.db.delete(record)
             self.db.commit()

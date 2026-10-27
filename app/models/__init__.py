@@ -22,3 +22,5 @@ __all__ = [
     "TeamMember",
     "MatchWsToken",
 ]
+
+from app.models.session_league_access import SessionLeagueAccess  # noqa: F401
