@@ -67,5 +67,15 @@ def test_maps_each_team_and_null_for_the_one_without_substitutions(matches, subs
 
 
 def test_same_result_for_both_users(matches, subs):
+    subs.list_first_per_team.return_value = [
+        FirstSubstitutionData(user_id=2, starter_name="C2", substitute_name="D2"),
+        FirstSubstitutionData(user_id=1, starter_name="C1", substitute_name="D1"),
+    ]
     s = SubstitutionService(matches, subs)
+
+    for user_id in (1, 2):
+        out = s.get_next(user_id, 5)
+        # club1 siempre es user_1 y club2 siempre user_2, sea quien sea el que consulta.
+        assert (out.club1.starter_name, out.club1.substitute_name) == ("C1", "D1")
+        assert (out.club2.starter_name, out.club2.substitute_name) == ("C2", "D2")
     assert s.get_next(1, 5) == s.get_next(2, 5)

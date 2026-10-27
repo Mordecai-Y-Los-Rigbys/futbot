@@ -109,6 +109,17 @@ def substitute(db, match, team, out_idx=0, in_idx=3):
     db.commit()
     return sub
 
+def first_by_user(db, match):
+    rows = SqlAlchemySubstitutionRepository(db).list_first_per_team(match.id)
+    return {r.user_id: r for r in rows}
+
+
+def names_of(db, team, out_idx, in_idx):
+    return (
+        db.get(Player, team[out_idx].player_id).name,
+        db.get(Player, team[in_idx].player_id).name,
+    )
+
 
 def assert_rejected(db, match, member_in, member_out):
     db.add(Substitution(match_id=match.id, member_in_id=member_in.id, member_out_id=member_out.id))
@@ -259,35 +270,68 @@ def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
 
     assert db_session.scalars(select(Substitution)).all() == []
 
-def test_list_first_per_team_returns_the_oldest_of_each_team(db_session, league_match):
+def test_list_first_per_team_picks_the_lowest_id_of_both_teams(db_session, league_match):
     match, teams = league_match
+    # Intercalados, para que "menor id" no coincida con "último cargado".
     first_1 = substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    substitute(db_session, match, teams[2], out_idx=1, in_idx=4)
-    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)
+    first_2 = substitute(db_session, match, teams[2], out_idx=1, in_idx=4)
+    second_1 = substitute(db_session, match, teams[1], out_idx=1, in_idx=4)
+    second_2 = substitute(db_session, match, teams[2], out_idx=0, in_idx=3)
+    assert first_1.id < second_1.id and first_2.id < second_2.id
 
-    rows = SqlAlchemySubstitutionRepository(db_session).list_first_per_team(match.id)
+    by_user = first_by_user(db_session, match)
 
-    by_user = {r.user_id: r for r in rows}
     assert set(by_user) == {1, 2}
-    # el más viejo del equipo 1 es first_1, no el segundo
-    name_out = db_session.get(Player, teams[1][0].player_id).name
-    name_in = db_session.get(Player, teams[1][3].player_id).name
-    assert (by_user[1].starter_name, by_user[1].substitute_name) == (name_out, name_in)
-    assert first_1.id is not None
+    for uid, (out_idx, in_idx) in {1: (0, 3), 2: (1, 4)}.items():
+        assert (by_user[uid].starter_name, by_user[uid].substitute_name) == names_of(
+            db_session, teams[uid], out_idx, in_idx
+        )
+
+
+def test_list_first_per_team_keeps_names_after_roles_change(db_session, league_match):
+    match, teams = league_match
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    expected = names_of(db_session, teams[1], 0, 3)
+
+    # Se aplica el cambio: el que salió pasa a suplente y el que entró a titular.
+    out_member, in_member = teams[1][0], teams[1][3]
+    out_member.role, in_member.role = in_member.role, out_member.role
+    db_session.commit()
+    db_session.expire_all()
+    assert out_member.role == MemberRole.substitute and in_member.role == MemberRole.forward
+
+    row = first_by_user(db_session, match)[1]
+    # starter = member_out_id y substitute = member_in_id, sin importar el rol actual.
+    assert (row.starter_name, row.substitute_name) == expected
 
 
 def test_list_first_per_team_ignores_other_matches_and_empty_teams(db_session, league_match):
     match, teams = league_match
+    other = Match(
+        league_id=match.league_id,
+        user_1_id=1,
+        user_2_id=2,
+        status=MatchStatus.started,
+        scheduled_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
+    )
+    db_session.add(other)
+    db_session.commit()
+    # Otro partido entre los mismos usuarios, con cambios de ambos equipos y cargados
+    # antes (ids menores): si la query no filtra por match_id, ganarían ellos.
+    substitute(db_session, other, teams[1], out_idx=1, in_idx=4)
+    substitute(db_session, other, teams[2], out_idx=1, in_idx=4)
+
+    # Partido objetivo sin cambios: no devuelve nada.
     assert SqlAlchemySubstitutionRepository(db_session).list_first_per_team(match.id) == []
 
+    # Con un cambio solo del equipo 1: el equipo 2 no aparece y no se cuelan los del otro partido.
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    by_user = first_by_user(db_session, match)
 
-def test_endpoint_end_to_end(login, db_session, friendly_match):
-    match, teams = friendly_match
-    substitute(db_session, match, teams[2])
-    r = login(1).get(f"/matches/{match.id}/substitutions/next")
-    assert r.status_code == 200
-    assert r.json()["club1"] is None and r.json()["club2"] is not None
-    assert set(r.json()["club2"]) == {"starterName", "substituteName"}
+    assert set(by_user) == {1}
+    assert (by_user[1].starter_name, by_user[1].substitute_name) == names_of(
+        db_session, teams[1], 0, 3
+    )
 
 
 def test_endpoint_outsider_is_403_and_not_started_is_409(
