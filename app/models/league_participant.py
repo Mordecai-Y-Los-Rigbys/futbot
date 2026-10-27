@@ -13,3 +13,6 @@ class LeagueParticipant(Base):
         ForeignKey("leagues.id", ondelete="CASCADE"), primary_key=True
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True, index=True)
+    # Behavior del director técnico del equipo. NULL: el equipo no tiene DT
+    # (coachBehaviorId es opcional, convención 10).
+    coach_behavior_id: Mapped[int | None] = mapped_column(ForeignKey("behaviors.id"), nullable=True)

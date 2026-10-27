@@ -44,10 +44,20 @@ def _event(result: TickResult, ctx: TickContext) -> dict | None:
     if result.event is Event.GOAL:
         club = ctx.club_1 if result.scoring_team is Team.HOME else ctx.club_2
         return {"type": "goal", "scoringClub": club}
+    if result.event is Event.PAUSE:
+        return {
+            "type": "pause",
+            "reason": result.pause_reason.value,
+            "durationSeconds": result.pause_duration_seconds,
+        }
     if result.event is Event.MATCH_END:
         return {
             "type": "matchEnd",
-            "result": {"score1": result.score_1, "score2": result.score_2},
+            "result": {
+                "score1": result.score_1,
+                "score2": result.score_2,
+                "penalties": None,  # TODO: PenaltyShootout cuando exista la tanda
+            },
         }
     return None
 
@@ -69,7 +79,10 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
         "ballPosition": _position(state.ball.position),
         "score1": result.score_1,
         "score2": result.score_2,
+        "penaltyScore1": 0,  # TODO: tanda de penales
+        "penaltyScore2": 0,
         "elapsedTime": int(result.elapsed),
+        "pauseRemainingSeconds": result.pause_remaining_seconds,  # None fuera de la pausa
         "phase": result.phase.value,
         "event": _event(result, ctx),
     }
