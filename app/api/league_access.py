@@ -7,8 +7,8 @@ from app.api.deps import get_current_user_id
 from app.database import get_db
 from app.helpers.ids import parse_path_id
 from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
-from app.schemas.errors import Error
-from app.schemas.league_access import UnlockLeagueBadRequest, UnlockLeagueForbidden
+from app.schemas.errors import Error, ValidationBadRequest
+from app.schemas.league_access import UnlockLeagueForbidden
 from app.services.league_access_service import LeagueAccessService
 
 router = APIRouter(tags=["leagues"])
@@ -24,7 +24,7 @@ def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessServ
     response_class=Response,
     operation_id="unlockLeague",
     responses={
-        400: {"model": UnlockLeagueBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         403: {"model": UnlockLeagueForbidden},
         404: {"model": Error},

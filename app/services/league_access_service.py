@@ -2,23 +2,8 @@ import hashlib
 import hmac
 from typing import Any
 
-from fastapi.responses import JSONResponse
-
-from app.errors import ApiError
+from app.errors import ApiError, ValidationApiError
 from app.repositories.league_access_abstract import LeagueAccessInfo, LeagueAccessRepository
-
-
-class LeagueAccessValidationError(ApiError):
-    def __init__(self, reason: str) -> None:
-        super().__init__(400, "invalidFields", "La contraseña no cumple el formato requerido.")
-        self.reason = reason
-
-    def to_response(self) -> JSONResponse:
-        return JSONResponse(status_code=400, content={
-            "code": self.code,
-            "message": self.message,
-            "errors": [{"field": "password", "reason": self.reason}],
-        })
 
 
 def has_league_access(
@@ -70,9 +55,9 @@ class LeagueAccessService:
         if self.requires_password(session_id, user_id, league):
             password = body.get("password") if isinstance(body, dict) else None
             if password is None:
-                raise LeagueAccessValidationError("required")
+                raise ValidationApiError([{"field": "password", "reason": "required"}])
             if not isinstance(password, str):
-                raise LeagueAccessValidationError("invalidType")
+                raise ValidationApiError([{"field": "password", "reason": "invalidType"}])
             matches = verify_league_password(password, league.password or "")
             if not password or league.password is None or not matches:
                 raise ApiError(403, "invalidLeaguePassword", "Contraseña de liga incorrecta.")
