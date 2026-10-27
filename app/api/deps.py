@@ -7,25 +7,32 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.errors import ApiError
+from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
+from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
+from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
+from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
+from app.repositories.player_abstract import AbstractPlayerRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
-from app.repositories.league_abstract import AbstractLeagueRepository
-from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
+from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
-from app.repositories.behavior_abstract import AbstractBehaviorRepository
-from app.repositories.player_abstract import AbstractPlayerRepository
 from app.services.auth_service import AuthService
-from app.services.player_service import PlayerService
 from app.services.behavior_service import BehaviorService
+from app.services.friendly_service import FriendlyService
 from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
-from app.services.session_service import SessionService
-from app.services.friendly_service import FriendlyService
 from app.services.match_connection_service import MatchConnectionService
+from app.services.player_service import PlayerService
+from app.services.session_service import SessionService
+from app.services.substitution_service import SubstitutionService
 from app.services.user_service import UserService
+
+
+def get_behavior_repository(db: Session = Depends(get_db)) -> AbstractBehaviorRepository:
+    return SqlAlchemyBehaviorRepository(db)
 
 
 def get_league_repository(db: Session = Depends(get_db)) -> AbstractLeagueRepository:
@@ -36,24 +43,8 @@ def get_player_repository(db: Session = Depends(get_db)) -> AbstractPlayerReposi
     return SqlAlchemyPlayerRepository(db)
 
 
-def get_behavior_repository(db: Session = Depends(get_db)) -> AbstractBehaviorRepository:
-    return SqlAlchemyBehaviorRepository(db)
-
-
 def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
     return BehaviorService(SqlAlchemyBehaviorRepository(db))
-
-
-def get_session_service(db: Session = Depends(get_db)) -> SessionService:
-    return SessionService(SqlAlchemySessionRepository(db))
-
-
-def get_league_service(
-    leagues: AbstractLeagueRepository = Depends(get_league_repository),
-    players: AbstractPlayerRepository = Depends(get_player_repository),
-    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
-) -> LeagueService:
-    return LeagueService(leagues, players, behaviors)
 
 
 def get_friendly_service(
@@ -64,9 +55,24 @@ def get_friendly_service(
     return FriendlyService(SqlAlchemyFriendlyRepository(db), players, behaviors)
 
 
+def get_league_service(
+    leagues: AbstractLeagueRepository = Depends(get_league_repository),
+    players: AbstractPlayerRepository = Depends(get_player_repository),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+) -> LeagueService:
+    return LeagueService(leagues, players, behaviors)
+
+
+def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
+    return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
+
+
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
     return PlayerService(SqlAlchemyPlayerRepository(db))
 
+
+def get_session_service(db: Session = Depends(get_db)) -> SessionService:
+    return SessionService(SqlAlchemySessionRepository(db))
 
 def get_auth_service(
     db: Session = Depends(get_db),
@@ -81,8 +87,11 @@ def get_auth_service(
     )
 
 
-def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
-    return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
+
+def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
+    return SubstitutionService(
+        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db)
+    )
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:

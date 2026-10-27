@@ -8,6 +8,7 @@ from app.repositories.match_abstract import (
     AbstractMatchRepository,
     MatchSetupData,
     MatchStateData,
+    MatchPlayersData
 )
 
 
@@ -70,3 +71,15 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
     def save_seed(self, match_id: int, seed: int) -> None:
         self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
         self.db.commit()
+    
+    def get_players(self, match_id: int) -> MatchPlayersData | None:
+        row = self.db.execute(
+            select(Match.id, Match.status, Match.user_1_id, Match.user_2_id).where(
+                Match.id == match_id
+            )
+        ).first()
+        if row is None:
+            return None
+        return MatchPlayersData(
+            id=row.id, status=row.status, user_1_id=row.user_1_id, user_2_id=row.user_2_id
+        )
