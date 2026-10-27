@@ -70,6 +70,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         self.participants.discard((league_id, user_id))
         self.removed.append((league_id, user_id))
 
+    def get_join_state(self, league_id, user_id):
+        raise NotImplementedError
+
+    def join(self, data):
+        raise NotImplementedError
+
 
 class FakeSessionService:
     """Reemplaza a SessionService: session_id -> user_id, sin base."""
