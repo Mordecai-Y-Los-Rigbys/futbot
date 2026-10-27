@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
-from app.models.session_league_access import SessionLeagueAccess
+from app.models.session_league_unlock import SessionLeagueUnlock
 from app.repositories.league_access_abstract import LeagueAccessInfo
 
 
@@ -29,22 +29,20 @@ class SqlAlchemyLeagueAccessRepository:
 
     def is_unlocked(self, session_id: str, league_id: int) -> bool:
         return self.db.scalar(
-            select(SessionLeagueAccess.league_id).where(
-                SessionLeagueAccess.session_id == session_id,
-                SessionLeagueAccess.league_id == league_id,
+            select(SessionLeagueUnlock.league_id).where(
+                SessionLeagueUnlock.session_id == session_id,
+                SessionLeagueUnlock.league_id == league_id,
             )
         ) is not None
 
-    def unlock(self, session_id: str, league_id: int, *, commit: bool = True) -> None:
+    def unlock(self, session_id: str, league_id: int) -> None:
         if not self.is_unlocked(session_id, league_id):
             # La PK compuesta evita duplicados incluso con solicitudes concurrentes.
-            # El savepoint no revierte la futura transacción de inscripción.
             try:
                 with self.db.begin_nested():
-                    self.db.add(SessionLeagueAccess(session_id=session_id, league_id=league_id))
+                    self.db.add(SessionLeagueUnlock(session_id=session_id, league_id=league_id))
                     self.db.flush()
             except IntegrityError:
                 if not self.is_unlocked(session_id, league_id):
                     raise  # No ocultar errores de FK u otras restricciones.
-        if commit:
-            self.db.commit()
+        self.db.commit()

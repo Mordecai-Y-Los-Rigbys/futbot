@@ -17,6 +17,6 @@ class LeagueAccessRepository(Protocol):
 
     def is_unlocked(self, session_id: str, league_id: int) -> bool: ...
 
-    def unlock(self, session_id: str, league_id: int, *, commit: bool = True) -> None:
-        """Idempotente. commit=False permite incluirlo en la transacción de inscripción."""
+    def unlock(self, session_id: str, league_id: int) -> None:
+        """Idempotente."""
         ...

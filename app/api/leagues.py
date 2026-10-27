@@ -109,7 +109,6 @@ def leave_league(
     service.leave_league(user_id=user_id, raw_league_id=id)
     return Response(status_code=204)
 
-router.include_router(league_access_router)
 @router.post(
     "/{id}/participants",
     status_code=201,
@@ -126,10 +125,13 @@ router.include_router(league_access_router)
     },
 )
 def join_league(
-    id: str,  # str: un id inválido es 404 (lo decide el servicio), nunca 422
+    id: str, 
     session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
     body: Any = Depends(get_json_body),
     service: LeagueService = Depends(get_league_service),
 ) -> Response:
     service.join_league(user_id=session.user_id, session_id=session.id, raw_league_id=id, body=body)
     return Response(status_code=201)
+
+
+router.include_router(league_access_router)

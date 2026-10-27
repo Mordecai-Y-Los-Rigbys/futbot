@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.models.session import UserSession
-from app.models.session_league_access import SessionLeagueAccess
+from app.models.session_league_unlock import SessionLeagueUnlock
 from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
 from app.services.league_access_service import has_league_access
 from app.services.session_service import SessionService
@@ -88,7 +88,7 @@ def test_unlock_is_idempotent_and_isolated(access_case, db_session, login_as, ma
     assert not allowed(db_session, api, user, another_league)
     for raw in ['{"password":"secret"}', '{"password":"wrong"}', '{', '']:
         assert api.post(f"/leagues/{league.id}/access", content=raw).status_code == 204
-    assert db_session.scalar(select(func.count()).select_from(SessionLeagueAccess)) == 1
+    assert db_session.scalar(select(func.count()).select_from(SessionLeagueUnlock)) == 1
 
 
 @pytest.mark.parametrize("role", ["creator", "participant", "public"])
@@ -160,18 +160,6 @@ def test_detail_stays_public_to_authenticated_users(access_case, db_session):
     response = api.get(f"/leagues/{league.id}")
     assert response.status_code == 200
     assert "password" not in response.json()
-    assert not unlocked(db_session, api, league)
-
-
-def test_unlock_can_join_an_existing_transaction(access_case, db_session):
-    league, _, api = access_case
-    repo = SqlAlchemyLeagueAccessRepository(db_session)
-    # Fuerza una escritura exterior (también en SQLite legacy transaction mode).
-    league.name = "Cambio temporal"
-    db_session.flush()
-    repo.unlock(api.cookies.get("session_id"), league.id, commit=False)
-    assert unlocked(db_session, api, league)
-    db_session.rollback()
     assert not unlocked(db_session, api, league)
 
 

@@ -24,5 +24,3 @@ __all__ = [
     "MatchWsToken",
     "SessionLeagueUnlock",
 ]
-
-from app.models.session_league_access import SessionLeagueAccess  # noqa: F401
