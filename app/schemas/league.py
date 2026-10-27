@@ -14,6 +14,7 @@ class LeagueCreator(CamelModel):
     id: int
     username: str
     name: str
+    avatar: int
 
 
 class LeagueSummary(CamelModel):
@@ -24,6 +25,7 @@ class LeagueSummary(CamelModel):
     participants_count: int
     max_participants: int
     private: bool
+    allow_draws: bool
     created_at: datetime
 
     @field_serializer("created_at")
@@ -31,6 +33,11 @@ class LeagueSummary(CamelModel):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+class LeagueDetail(LeagueSummary):
+    min_participants: int
+    joined: bool
 
 
 class LeaguePage(CamelModel):
