@@ -9,6 +9,7 @@ from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
     LeagueCreatorData,
+    LeagueLeaveInfo,
     LeagueDetailData,
     LeagueListItemData,
     LeaguePageData,
@@ -25,6 +26,9 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         self.page = LeaguePageData(items=[], total=0)
         self.created: list[CreateLeagueData] = []
         self.durations: dict[int, int] = {}
+        self.leave_info: dict[int, LeagueLeaveInfo] = {}
+        self.participants: set[tuple[int, int]] = set()
+        self.removed: list[tuple[int, int]] = []
         self.details: dict[int, LeagueDetailData] = {}
         self.detail_calls: list[tuple[int, int]] = []
 
@@ -55,6 +59,16 @@ class FakeLeagueRepository(AbstractLeagueRepository):
 
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
+    
+    def get_leave_info(self, league_id):
+        return self.leave_info.get(league_id)
+
+    def is_participant(self, league_id, user_id):
+        return (league_id, user_id) in self.participants
+
+    def remove_participant(self, league_id, user_id):
+        self.participants.discard((league_id, user_id))
+        self.removed.append((league_id, user_id))
 
 
 class FakeSessionService:

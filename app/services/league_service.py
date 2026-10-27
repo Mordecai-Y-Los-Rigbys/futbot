@@ -8,6 +8,11 @@ from app.repositories.league_abstract import (
     CreateLeagueMemberData,
     LeagueListItemData,
 )
+from app.domain.league import LeagueStatus
+from app.errors import ApiError
+from app.helpers.ids import parse_path_id
+from app.services.league_participants_notifier import LeagueParticipantsNotifier
+from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.league import LeagueCreator, LeagueDetail, LeaguePage, LeagueSummary
 from app.services.league_validation import parse_create_league
@@ -45,10 +50,12 @@ class LeagueService:
         repo: AbstractLeagueRepository,
         players: AbstractPlayerRepository,
         behaviors: AbstractBehaviorRepository,
+        notifier: LeagueParticipantsNotifier | None = None,
     ) -> None:
         self.repo = repo
         self.players = players
         self.behaviors = behaviors
+        self.notifier = notifier
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
         """Lista paginada de las ligas.
@@ -111,6 +118,33 @@ class LeagueService:
             )
         )
         return _to_summary(created)
+    
+    def leave_league(self, user_id: int, raw_league_id: str) -> None:
+        """Quita al usuario de una liga en preparación y libera su cupo.
+
+        Raises:
+            ApiError 404: id inválido o liga inexistente.
+            ApiError 409: notInPreparation, notParticipating o isCreator
+                (se evalúan en ese orden).
+        """
+        league_id = parse_path_id(raw_league_id, "La liga no existe.")  # 404
+
+        info = self.repo.get_leave_info(league_id)
+        if info is None:
+            raise ApiError(404, None, "La liga no existe.")
+
+        if info.status != LeagueStatus.preparation:
+            raise ApiError(409, "notInPreparation", "La liga ya no está en preparación.")
+        if not self.repo.is_participant(league_id, user_id):
+            raise ApiError(409, "notParticipating", "No participás en esta liga.")
+        if info.creator_id == user_id:
+            raise ApiError(409, "isCreator", "El creador no puede abandonar su propia liga.")
+
+        self.repo.remove_participant(league_id, user_id)
+
+        # Solo ante un abandono exitoso; un intento fallido no emite nada
+        if self.notifier is not None:
+            self.notifier.participants_changed(league_id)
 
     def get_league(self, league_id: int, user_id: int) -> LeagueDetail:
         """Detalle de una liga.

@@ -46,6 +46,15 @@ class FakeLeagues(AbstractLeagueRepository):
     def get_detail(self, league_id: int, user_id: int):
         raise NotImplementedError
 
+    def get_leave_info(self, league_id):
+        raise NotImplementedError
+
+    def is_participant(self, league_id, user_id):
+        raise NotImplementedError
+
+    def remove_participant(self, league_id, user_id):
+        raise NotImplementedError
+
 
 class FakeTeams(AbstractTeamRepository):
     def __init__(self, starters=None):

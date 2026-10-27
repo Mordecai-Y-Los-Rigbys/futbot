@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.league import LeagueStatus
@@ -13,6 +13,7 @@ from app.repositories.league_abstract import (
     LeagueCreatorData,
     LeagueListItemData,
     LeaguePageData,
+    LeagueLeaveInfo
     LeagueDetailData
 )
 
@@ -121,6 +122,41 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         # scalar() devuelve None si la liga no existe
         return self.db.scalar(select(League.match_duration).where(League.id == league_id))
     
+    def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
+        row = self.db.execute(
+            select(League.status, League.creator_id).where(League.id == league_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        return LeagueLeaveInfo(status=row.status, creator_id=row.creator_id)
+
+    def is_participant(self, league_id: int, user_id: int) -> bool:
+        found = self.db.scalar(
+            select(LeagueParticipant.user_id).where(
+                LeagueParticipant.league_id == league_id,
+                LeagueParticipant.user_id == user_id,
+            )
+        )
+        return found is not None
+
+    def remove_participant(self, league_id: int, user_id: int) -> None:
+        try:
+            # Explícito, sin depender del ON DELETE CASCADE (en SQLite requiere PRAGMA)
+            self.db.execute(
+                delete(TeamMember).where(
+                    TeamMember.league_id == league_id, TeamMember.user_id == user_id
+                )
+            )
+            self.db.execute(
+                delete(LeagueParticipant).where(
+                    LeagueParticipant.league_id == league_id,
+                    LeagueParticipant.user_id == user_id,
+                )
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
     
     def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
         participants_count = (
