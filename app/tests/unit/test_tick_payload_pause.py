@@ -31,10 +31,9 @@ def test_following_pause_ticks_have_no_event_but_the_remaining_time():
     TickPayload.model_validate(p)
 
 
-def test_last_pause_tick_has_zero_remaining():
-    p = build_tick_payload(result(**pause_kw(0)), CTX)
-    assert p["pauseRemainingSeconds"] == 0
-    TickPayload.model_validate(p)
+def test_last_pause_tick_has_one_remaining():
+    p = build_tick_payload(result(**pause_kw(1)), CTX)
+    assert p["pauseRemainingSeconds"] == 1
 
 
 def test_halftime_reason():

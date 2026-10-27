@@ -197,7 +197,7 @@ class MatchSession:
             # de la pausa) ya tiene todo en posiciones iniciales (contrato `goal`).
             self._reset_after_goal()
         # Congelado: no corren behaviors ni física, y el estado no cambia.
-        ticks_left = segment.ticks - 1 - offset
+        ticks_left = segment.ticks - offset
         remaining = math.ceil(ticks_left / C.TICKS_PER_SECOND)  # de N a 0
         event = Event.PAUSE if offset == 0 else None
         return self._result(

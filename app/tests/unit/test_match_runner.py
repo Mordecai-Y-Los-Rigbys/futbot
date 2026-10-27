@@ -311,7 +311,7 @@ def test_late_subscriber_gets_the_current_pause_then_the_restarted_countdown_the
 
     head = late.received[:15]  # lo que queda de la primera pausa
     assert [t["phase"] for t in head] == ["paused"] * 15
-    assert [t["pauseRemainingSeconds"] for t in head] == [1] * 14 + [0]
+    assert [t["pauseRemainingSeconds"] for t in head] == [1] * 15
 
     phases = [k for k, _ in itertools.groupby(t["phase"] for t in late.received)]
     assert phases[:3] == ["paused", "countdown", "playing"]

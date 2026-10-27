@@ -118,15 +118,17 @@ def test_pause_and_countdown_freeze_clock_state_and_behaviors(monkeypatch):
         assert all(t.elapsed == cd[0].elapsed for t in cd)
 
 
-def test_pause_remaining_goes_from_15_to_0_then_countdown_of_the_next_period():
+def test_pause_remaining_goes_from_15_to_1_then_countdown_of_the_next_period():
     session, _ = make(8, countdown=5, pause=15)
     ticks = drain(session)
     pause = [t for t in ticks if t.phase is Phase.PAUSED and t.period == 1]
     values = [t.pause_remaining_seconds for t in pause]
     assert len(pause) == 300
-    assert values[0] == 15 and values[-1] == 0
+    assert values[0] == 15 and values[-1] == 1
     assert values == sorted(values, reverse=True)
-    assert set(values) == set(range(16))  # baja de a un segundo, sin saltos
+    assert set(values) == set(range(1, 16))  # baja de a un segundo, sin saltos
+    # cada número dura 1 s exacto
+    assert all(values.count(v) == 20 for v in range(1, 16))
     after = ticks[index_of(ticks, pause[-1]) + 1 :][:100]
     assert all(t.phase is Phase.COUNTDOWN and t.period == 2 for t in after)
     assert after[0].event is Event.PERIOD_START
@@ -243,7 +245,7 @@ def test_friendly_of_3_minutes_end_to_end():
     pauses = [t for t in ticks if t.phase is Phase.PAUSED]
     assert len(pauses) == 3 * 300
     assert [t.pause_remaining_seconds for t in pauses[:300]][0] == 15
-    assert pauses[299].pause_remaining_seconds == 0
+    assert pauses[299].pause_remaining_seconds == 1
     assert sum(t.phase in (Phase.PLAYING, Phase.FINISHED) for t in ticks) == 3600
     assert ticks[-1].elapsed == 180.0 and ticks[-1].phase is Phase.FINISHED
     assert len(ticks) == 100 + 3600 + 3 * (300 + 100)
