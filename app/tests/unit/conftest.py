@@ -45,6 +45,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
 
+    def get_join_state(self, league_id, user_id):
+        raise NotImplementedError
+
+    def join(self, data):
+        raise NotImplementedError
+
 
 class FakeSessionService:
     """Reemplaza a SessionService: session_id -> user_id, sin base."""
