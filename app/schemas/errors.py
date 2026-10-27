@@ -79,3 +79,7 @@ class JoinFriendlyMatchBadRequest(BaseModel):
 class JoinFriendlyMatchConflict(BaseModel):
     code: Literal["notJoinable", "isOwnMatch", "alreadyPlaying", "playerOrBehaviorNotOwned"]
     message: str
+
+class NextSubstitutionsConflict(BaseModel):
+    code: Literal["matchNotStarted"]
+    message: str

@@ -13,7 +13,7 @@ from app.repositories.league_abstract import (
     LeagueCreatorData,
     LeagueListItemData,
     LeaguePageData,
-    LeagueLeaveInfo
+    LeagueLeaveInfo,
     LeagueDetailData
 )
 
