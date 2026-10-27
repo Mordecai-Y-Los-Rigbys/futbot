@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel
 
+from app.domain.behavior import BehaviorType
+
 
 class BehaviorData(BaseModel):
     id: int
@@ -38,3 +40,10 @@ class AbstractBehaviorRepository(ABC):
     @abstractmethod
     def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
         """Subconjunto de `ids` que son behaviors del usuario."""
+
+    @abstractmethod
+    def behavior_types(self, user_id: int, ids: list[int]) -> dict[int, BehaviorType]:
+        """Tipo de cada behavior de `ids` que pertenece al usuario.
+
+        Los ids ajenos o inexistentes no aparecen en el resultado.
+        """
