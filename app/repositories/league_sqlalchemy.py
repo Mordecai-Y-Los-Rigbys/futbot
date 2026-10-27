@@ -14,6 +14,7 @@ from app.repositories.league_abstract import (
     LeagueListItemData,
     LeaguePageData,
     LeagueLeaveInfo
+    LeagueDetailData
 )
 
 
@@ -37,12 +38,14 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
             id=record.creator.id,
             username=record.creator.username,
             club_name=record.creator.club_name,
+            avatar=record.creator.avatar,
         ),
         status=getattr(record.status, "value", record.status),
         participants_count=participants_count,
         max_participants=record.max_participants,
         private=record.private,
         created_at=created_at,
+        allow_draws=record.allow_draws,
     )
 
 
@@ -154,3 +157,34 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         except Exception:
             self.db.rollback()
             raise
+    
+    def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
+        participants_count = (
+            select(func.count(func.distinct(LeagueParticipant.user_id)))
+            .where(LeagueParticipant.league_id == League.id)
+            .correlate(League)
+            .scalar_subquery()
+        )
+        joined = (
+            select(LeagueParticipant.user_id)
+            .where(
+                LeagueParticipant.league_id == League.id,
+                LeagueParticipant.user_id == user_id,
+            )
+            .correlate(League)
+            .exists()
+        )
+        row = self.db.execute(
+            select(League, participants_count, joined)
+            .options(joinedload(League.creator))
+            .where(League.id == league_id)
+        ).first()
+        if row is None:
+            return None
+
+        league, count, is_joined = row
+        return LeagueDetailData(
+            **_to_data(league, count).model_dump(),
+            min_participants=league.min_participants,
+            joined=bool(is_joined),
+        )
