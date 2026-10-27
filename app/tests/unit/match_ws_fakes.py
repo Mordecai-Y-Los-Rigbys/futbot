@@ -6,6 +6,7 @@ from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
 )
+from app.repositories.substitution_abstract import AbstractSubstitutionRepository
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -36,6 +37,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history: list[str] = []
         self.seeds: dict[int, int] = {}
         self.players: dict[int, MatchPlayersData] = {}
+        self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
         self.states[match_id] = MatchStateData(id=match_id, status=MatchStatus(status).value)
@@ -65,3 +67,14 @@ class FakeMatchRepo(AbstractMatchRepository):
 
     def get_players(self, match_id):
         return self.players.get(match_id)
+    def delete_first_substitutions(self, match_id):
+        self.pause_ends.append(match_id)
+        return 0
+
+class FakeSubstitutionRepo(AbstractSubstitutionRepository):
+    def __init__(self):
+        self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
+
+    def delete_first_per_team(self, match_id):
+        self.pause_ends.append(match_id)
+        return 0

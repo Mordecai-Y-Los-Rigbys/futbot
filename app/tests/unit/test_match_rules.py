@@ -1,3 +1,5 @@
+"""Reglas de un solo período (sin pausas). Las pausas están en test_match_pauses.py."""
+
 import copy
 import statistics
 import time
@@ -19,12 +21,12 @@ MEASURED_TICKS = 200
 
 
 def test_duration_is_play_ticks_plus_countdown():
-    result = simulate_match(make_team(), make_team(first_id=10), 5, seed=1)
+    result = simulate_match(make_team(), make_team(first_id=10), 5, seed=1, periods=1)
     assert len(result.ticks) == CT + 5 * C.TICKS_PER_SECOND
 
 
 def test_sequence_countdown_playing_finished():
-    ticks = simulate_match(make_team(), make_team(first_id=10), 5, seed=1).ticks
+    ticks = simulate_match(make_team(), make_team(first_id=10), 5, seed=1, periods=1).ticks
     assert (ticks[0].phase, ticks[0].event) == (Phase.COUNTDOWN, Event.PERIOD_START)
     assert all(t.phase is Phase.COUNTDOWN for t in ticks[:CT])
     assert all(t.event is None for t in ticks[1:CT])
@@ -35,14 +37,14 @@ def test_sequence_countdown_playing_finished():
 
 
 def test_clock_does_not_run_during_countdown():
-    ticks = simulate_match(make_team(), make_team(first_id=10), 5, seed=1).ticks
+    ticks = simulate_match(make_team(), make_team(first_id=10), 5, seed=1, periods=1).ticks
     assert all(t.elapsed == 0 for t in ticks[:CT])
     assert ticks[CT].elapsed == pytest.approx(C.SECONDS_PER_TICK)
     assert ticks[-1].remaining == pytest.approx(0)
 
 
 def test_seed_goes_to_the_initial_state():
-    ticks = simulate_match(make_team(), make_team(first_id=10), 1, seed=99).ticks
+    ticks = simulate_match(make_team(), make_team(first_id=10), 1, seed=99, periods=1).ticks
     assert ticks[0].state.seed == 99
 
 
@@ -60,7 +62,7 @@ def test_goal_then_everyone_back_to_start_and_clock_keeps_running(monkeypatch):
 
     monkeypatch.setattr(match_rules, "step", fake_step)
     team_1, team_2 = make_team(), make_team(first_id=10)
-    session = build_session(team_1, team_2, 1, seed=5, countdown_seconds=0)
+    session = build_session(team_1, team_2, 1, seed=5, countdown_seconds=0, periods=1)
     ticks = [session.advance() for _ in range(5)]
 
     goal, after = ticks[2], ticks[3]
@@ -78,14 +80,14 @@ def test_goal_then_everyone_back_to_start_and_clock_keeps_running(monkeypatch):
 
 
 def test_same_seed_same_ticks():
-    a = simulate_match(make_team(), make_team(first_id=10), 5, seed=3)
-    b = simulate_match(make_team(), make_team(first_id=10), 5, seed=3)
+    a = simulate_match(make_team(), make_team(first_id=10), 5, seed=3, periods=1)
+    b = simulate_match(make_team(), make_team(first_id=10), 5, seed=3, periods=1)
     assert a == b
 
 
 def test_identical_teams_play_mirrored_until_the_first_tiebreak():
     ticks = simulate_match(
-        make_team(), make_team(first_id=10), 3, seed=1, countdown_seconds=0.5
+        make_team(), make_team(first_id=10), 3, seed=1, countdown_seconds=0.5, periods=1
     ).ticks
     compared = 0
     for t in ticks:
@@ -102,7 +104,9 @@ def test_identical_teams_play_mirrored_until_the_first_tiebreak():
 
 
 def test_ticks_take_less_than_100ms():
-    session = build_session(make_team(), make_team(first_id=10), 15, seed=1, countdown_seconds=0)
+    session = build_session(
+        make_team(), make_team(first_id=10), 15, seed=1, countdown_seconds=0, periods=1
+    )
 
     for _ in range(WARMUP_TICKS):
         session.advance()

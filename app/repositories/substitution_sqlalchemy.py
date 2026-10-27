@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.player import Player
@@ -40,3 +40,19 @@ class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
             FirstSubstitutionData(user_id=u, starter_name=out, substitute_name=inn)
             for u, out, inn in rows
         ]
+    def delete_first_per_team(self, match_id: int) -> int:
+        # El equipo se identifica por el usuario del integrante que sale: el
+        # trigger garantiza que el que entra es del mismo equipo.
+        first_ids = list(
+            self.db.scalars(
+                select(func.min(Substitution.id))
+                .join(TeamMember, TeamMember.id == Substitution.member_out_id)
+                .where(Substitution.match_id == match_id)
+                .group_by(TeamMember.user_id)
+            )
+        )
+        if not first_ids:
+            return 0
+        self.db.execute(delete(Substitution).where(Substitution.id.in_(first_ids)))
+        self.db.commit()
+        return len(first_ids)

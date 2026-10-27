@@ -10,6 +10,7 @@ class LeagueCreatorData(BaseModel):
     id: int
     username: str
     club_name: str
+    avatar: int
 
     model_config = {"from_attributes": True}
 
@@ -22,9 +23,15 @@ class LeagueListItemData(BaseModel):
     participants_count: int
     max_participants: int
     private: bool
+    allow_draws: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LeagueDetailData(LeagueListItemData):
+    min_participants: int
+    joined: bool
 
 
 class LeaguePageData(BaseModel):
@@ -47,6 +54,11 @@ class CreateLeagueData(BaseModel):
     private: bool
     password: str | None  # None si la liga es pública
     members: list[CreateLeagueMemberData]
+    
+
+class LeagueLeaveInfo(BaseModel):
+    status: LeagueStatus
+    creator_id: int
 
 
 class AbstractLeagueRepository(ABC):
@@ -73,4 +85,27 @@ class AbstractLeagueRepository(ABC):
 
         Es el valor `match_duration` que definió el creador al crear la liga
         (entre 1 y 10). Devuelve None si la liga no existe.
+        """
+    
+    @abstractmethod
+    def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
+        """Estado y creador de la liga. Devuelve None si la liga no existe."""
+    
+    @abstractmethod
+    def is_participant(self, league_id: int, user_id: int) -> bool:
+        """True si el usuario está inscripto en la liga (el creador incluido)."""
+    
+    @abstractmethod
+    def remove_participant(self, league_id: int, user_id: int) -> None:
+        """
+        Elimina la inscripción del usuario y el equipo que registró en esa liga,
+        en una única transacción (o nada).
+        """
+
+    @abstractmethod
+    def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
+        """Detalle de una liga en cualquier estado, pública o privada.
+
+        Incluye creador, participantes (creador incluido) y si `user_id`
+        participa. Devuelve None si la liga no existe. Nunca expone la contraseña.
         """

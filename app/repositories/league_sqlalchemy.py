@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.league import LeagueStatus
@@ -13,6 +13,8 @@ from app.repositories.league_abstract import (
     LeagueCreatorData,
     LeagueListItemData,
     LeaguePageData,
+    LeagueLeaveInfo
+    LeagueDetailData
 )
 
 
@@ -36,12 +38,14 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
             id=record.creator.id,
             username=record.creator.username,
             club_name=record.creator.club_name,
+            avatar=record.creator.avatar,
         ),
         status=getattr(record.status, "value", record.status),
         participants_count=participants_count,
         max_participants=record.max_participants,
         private=record.private,
         created_at=created_at,
+        allow_draws=record.allow_draws,
     )
 
 
@@ -117,3 +121,70 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
     def get_match_duration_minutes(self, league_id: int) -> int | None:
         # scalar() devuelve None si la liga no existe
         return self.db.scalar(select(League.match_duration).where(League.id == league_id))
+    
+    def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
+        row = self.db.execute(
+            select(League.status, League.creator_id).where(League.id == league_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        return LeagueLeaveInfo(status=row.status, creator_id=row.creator_id)
+
+    def is_participant(self, league_id: int, user_id: int) -> bool:
+        found = self.db.scalar(
+            select(LeagueParticipant.user_id).where(
+                LeagueParticipant.league_id == league_id,
+                LeagueParticipant.user_id == user_id,
+            )
+        )
+        return found is not None
+
+    def remove_participant(self, league_id: int, user_id: int) -> None:
+        try:
+            # Explícito, sin depender del ON DELETE CASCADE (en SQLite requiere PRAGMA)
+            self.db.execute(
+                delete(TeamMember).where(
+                    TeamMember.league_id == league_id, TeamMember.user_id == user_id
+                )
+            )
+            self.db.execute(
+                delete(LeagueParticipant).where(
+                    LeagueParticipant.league_id == league_id,
+                    LeagueParticipant.user_id == user_id,
+                )
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+    
+    def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
+        participants_count = (
+            select(func.count(func.distinct(LeagueParticipant.user_id)))
+            .where(LeagueParticipant.league_id == League.id)
+            .correlate(League)
+            .scalar_subquery()
+        )
+        joined = (
+            select(LeagueParticipant.user_id)
+            .where(
+                LeagueParticipant.league_id == League.id,
+                LeagueParticipant.user_id == user_id,
+            )
+            .correlate(League)
+            .exists()
+        )
+        row = self.db.execute(
+            select(League, participants_count, joined)
+            .options(joinedload(League.creator))
+            .where(League.id == league_id)
+        ).first()
+        if row is None:
+            return None
+
+        league, count, is_joined = row
+        return LeagueDetailData(
+            **_to_data(league, count).model_dump(),
+            min_participants=league.min_participants,
+            joined=bool(is_joined),
+        )

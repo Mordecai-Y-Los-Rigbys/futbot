@@ -42,6 +42,18 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def create(self, data):
         raise NotImplementedError
+    
+    def get_detail(self, league_id: int, user_id: int):
+        raise NotImplementedError
+
+    def get_leave_info(self, league_id):
+        raise NotImplementedError
+
+    def is_participant(self, league_id, user_id):
+        raise NotImplementedError
+
+    def remove_participant(self, league_id, user_id):
+        raise NotImplementedError
 
 
 class FakeTeams(AbstractTeamRepository):
@@ -91,6 +103,12 @@ def test_friendly_uses_the_fixed_duration_and_never_asks_the_league():
     assert setup.duration_seconds == FRIENDLY_MATCH_DURATION * 60
     assert leagues.calls == []
     assert teams.calls == [(1, None, 1), (1, None, 2)]
+
+
+def test_setup_uses_four_periods_and_15_second_pauses():
+    service, _, _ = build(setup_data())
+    setup = service.load_match_setup(1)
+    assert (setup.periods, setup.pause_seconds) == (4, 15)
 
 
 def test_each_team_has_three_starters_with_their_behaviors():

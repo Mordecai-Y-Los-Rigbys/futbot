@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import get_current_user_id, get_json_body, get_league_service
 from app.api.pagination import parse_page
@@ -8,10 +8,12 @@ from app.schemas.errors import (
     CreateLeagueBadRequest,
     CreateLeagueConflict,
     Error,
+    LeaveLeagueConflict,
     ListPageBadRequest,
 )
-from app.schemas.league import LeaguePage, LeagueSummary
-from app.services.league_service import LeagueService
+from app.helpers.ids import parse_path_id
+from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
+from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
 
@@ -35,6 +37,27 @@ def list_leagues(
     return service.list_leagues(name=name, page=parse_page(page))
 
 
+@router.get(
+    "/{league_id}",
+    response_model=LeagueDetail,
+    operation_id="getLeague",
+    summary="Obtener una liga",
+    responses={
+        401: {"model": Error},
+        404: {"model": Error},
+    },
+)
+def get_league(
+    league_id: str,
+    user_id: int = Depends(get_current_user_id),  # 401 antes que 404
+    service: LeagueService = Depends(get_league_service),
+) -> LeagueDetail:
+    return service.get_league(
+        league_id=parse_path_id(league_id, LEAGUE_NOT_FOUND_MESSAGE),
+        user_id=user_id,
+    )
+    
+    
 @router.post(
     "",
     response_model=LeagueSummary,
@@ -53,3 +76,25 @@ def create_league(
     service: LeagueService = Depends(get_league_service),
 ) -> LeagueSummary:
     return service.create_league(creator_id=user_id, body=body)
+
+
+
+@router.delete(
+    "/{id}/participants/me",
+    status_code=204,
+    response_class=Response,
+    operation_id="leaveLeague",
+    summary="Abandonar una liga",
+    responses={
+        401: {"model": Error},
+        404: {"model": Error},
+        409: {"model": LeaveLeagueConflict},
+    },
+)
+def leave_league(
+    id: str,
+    user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    service: LeagueService = Depends(get_league_service),
+) -> Response:
+    service.leave_league(user_id=user_id, raw_league_id=id)
+    return Response(status_code=204)

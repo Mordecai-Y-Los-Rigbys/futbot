@@ -14,3 +14,6 @@ class AbstractSubstitutionRepository(ABC):
     def list_first_per_team(self, match_id: int) -> list[FirstSubstitutionData]:
         """La sustitución más antigua (menor id) de cada equipo en el partido.
         Un equipo sin sustituciones no aparece."""
+    def delete_first_per_team(self, match_id: int) -> int:
+        """Al terminar una pausa: borra el cambio más antiguo de cada equipo
+        en este partido. Devuelve cuántos borró."""

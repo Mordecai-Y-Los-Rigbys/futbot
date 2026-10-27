@@ -48,11 +48,13 @@ class PeriodStartEvent(_Strict):
 class PauseEvent(_Strict):
     type: Literal["pause"]
     reason: Literal["hydration", "halftime"]
+    durationSeconds: int = Field(ge=1)
 
 
 class MatchResult(_Strict):
     score1: int
     score2: int
+    penalties: None  # TODO: PenaltyShootout cuando exista la tanda
 
 
 class MatchEndEvent(_Strict):
@@ -72,7 +74,10 @@ class TickPayload(_Strict):
     ballPosition: Position
     score1: int = Field(ge=0)
     score2: int = Field(ge=0)
+    penaltyScore1: int = Field(ge=0)
+    penaltyScore2: int = Field(ge=0)
     elapsedTime: int = Field(ge=0)
+    pauseRemainingSeconds: Optional[int] = Field(ge=0)  # requerido, null fuera de `paused`
     phase: Literal["countdown", "playing", "paused", "finished"]
     event: Optional[TickEvent]  # requerido: la clave siempre viaja, aunque sea null
 
@@ -93,9 +98,14 @@ class TickPayload(_Strict):
         if isinstance(event, PauseEvent) and self.phase != "paused":
             raise ValueError("`pause` solo viaja con `phase: paused`")
 
+        # `pauseRemainingSeconds` es un número en `paused` y null en el resto.
+        if (self.phase == "paused") != (self.pauseRemainingSeconds is not None):
+            raise ValueError("`pauseRemainingSeconds` viaja solo con `phase: paused`")
+
         # Cancha. La pelota puede estar dentro del arco (x apenas fuera de
         # [0, 100]) en el tick de un gol, y también en el último tick si el
-        # gol cae ahí: matchEnd tiene prioridad sobre goal.
+        # gol cae ahí: matchEnd tiene prioridad sobre goal. En una pausa la
+        # pelota siempre está dentro de la cancha.
         ball_in_goal = isinstance(event, (GoalEvent, MatchEndEvent))
         margin = GOAL_MARGIN if ball_in_goal else 0.0
         ball = self.ballPosition
