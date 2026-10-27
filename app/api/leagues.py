@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import get_current_user_id, get_json_body, get_league_service
 from app.api.pagination import parse_page
+from app.api.league_access import router as league_access_router
 from app.schemas.errors import (
     CreateLeagueBadRequest,
     CreateLeagueConflict,
@@ -98,3 +99,5 @@ def leave_league(
 ) -> Response:
     service.leave_league(user_id=user_id, raw_league_id=id)
     return Response(status_code=204)
+
+router.include_router(league_access_router)
