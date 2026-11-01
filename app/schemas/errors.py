@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Error(BaseModel):
@@ -83,3 +83,27 @@ class JoinFriendlyMatchConflict(BaseModel):
 class NextSubstitutionsConflict(BaseModel):
     code: Literal["matchNotStarted"]
     message: str
+
+FieldReason = Literal[
+    "required",
+    "invalidType",
+    "tooLong",
+    "outOfRange",
+    "invalidEmail",
+    "invalidValue",
+    "invalidSum",
+    "lessThanMin",
+    "invalidTeam",
+    "notStarter",
+    "notSubstitute",
+]
+
+
+class FieldError(BaseModel):
+    field: str
+    reason: FieldReason
+
+class ValidationBadRequest(BaseModel):
+    code: Literal["invalidFields"]
+    message: str
+    errors: list[FieldError] = Field(min_length=1)

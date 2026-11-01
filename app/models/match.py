@@ -9,6 +9,7 @@ from sqlalchemy import (
     func,
     String,
     BigInteger,
+    SmallInteger
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -73,6 +74,21 @@ class Match(Base):
             "league_id IS NULL OR user_2_id IS NOT NULL",
             name="ck_matches_league_match_has_rival",
         ),
+        # Los penales se guardan completos o no se guardan.
+        CheckConstraint(
+            "(penalty_score_1 IS NULL) = (penalty_score_2 IS NULL) "
+            "AND (penalty_score_1 IS NULL) = (penalty_winner IS NULL)",
+            name="ck_matches_penalties_all_or_none",
+        ),
+        # Solo un partido terminado y empatado en el juego tiene tanda.
+        CheckConstraint(
+            "penalty_winner IS NULL OR (status = 'finished' AND score_1 = score_2)",
+            name="ck_matches_penalties_only_if_tied_and_finished",
+        ),
+        CheckConstraint(
+            "penalty_winner IS NULL OR penalty_winner IN (1, 2)",
+            name="ck_matches_penalty_winner_valid",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -96,6 +112,11 @@ class Match(Base):
     score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     league: Mapped[League | None] = relationship(League)
+    # Tanda de penales (solo si el partido se definió por penales).
+    # penalty_winner: 1 = club1, 2 = club2. Los goles de la tanda NO son score_1/score_2.
+    penalty_score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    penalty_score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    penalty_winner: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     user_1: Mapped[User] = relationship(User, foreign_keys=[user_1_id])
     user_2: Mapped[User | None] = relationship(User, foreign_keys=[user_2_id])
     created_at: Mapped[datetime] = mapped_column(
