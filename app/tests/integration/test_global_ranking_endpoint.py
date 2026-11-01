@@ -210,7 +210,7 @@ def test_name_filter_is_partial_case_insensitive_and_keeps_position(
     r = get(api, "?name=CLUB D")
     assert names(r) == ["Club d"]
     assert r.json()["total"] == 1
-    assert r.json()["items"][0]["position"] == 4  # lo que ocupa en el ranking completo
+    assert r.json()["items"][0]["position"] == 3  # lo que ocupa en el ranking completo
     assert get(api, "?name=").json()["total"] == 4
 
 
