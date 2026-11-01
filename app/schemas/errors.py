@@ -83,3 +83,8 @@ class JoinFriendlyMatchConflict(BaseModel):
 class NextSubstitutionsConflict(BaseModel):
     code: Literal["matchNotStarted"]
     message: str
+
+class ValidationBadRequest(BaseModel):
+    code: Literal["invalidFields"]
+    message: str
+    errors: list[FieldError] = Field(min_length=1)
