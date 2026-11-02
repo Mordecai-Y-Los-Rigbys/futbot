@@ -8,6 +8,7 @@ import pytest
 
 from app.simulation import constants as C
 from app.simulation import match_rules
+from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.geometry import Vec
 from app.simulation.match_rules import Event, Phase, build_session
 from app.simulation.physics import create_initial_state
@@ -18,6 +19,30 @@ from app.simulation.run import default_team as make_team
 CT = round(C.COUNTDOWN_SECONDS * C.TICKS_PER_SECOND)
 WARMUP_TICKS = 5
 MEASURED_TICKS = 200
+HOME_FORWARD_ID = 3
+AWAY_FORWARD_ID = 13  
+HOME_FORWARD = (Team.HOME, 3)
+AWAY_FORWARD = (Team.AWAY, 3)
+
+
+def spy_behaviors(monkeypatch):
+    """Anota el mapa de behaviors de cada tick de juego."""
+    seen = []
+    real = match_rules.run_behaviors
+
+    def spy(state, behaviors, clock, *args, **kwargs):
+        seen.append(behaviors)
+        return real(state, behaviors, clock, *args, **kwargs)
+
+    monkeypatch.setattr(match_rules, "run_behaviors", spy)
+    return seen
+
+
+def new_session(countdown=0):
+    return build_session(
+        make_team(), make_team(first_id=10), 2, seed=1,
+        countdown_seconds=countdown, periods=1,
+    )
 
 
 def test_duration_is_play_ticks_plus_countdown():
@@ -119,3 +144,75 @@ def test_ticks_take_less_than_100ms():
 
     p95 = statistics.quantiles(durations, n=20)[-1]  # el 95% de los ticks tarda menos que esto
     assert p95 < 0.1
+
+
+def test_replace_behavior_applies_from_the_next_tick(monkeypatch):
+    seen = spy_behaviors(monkeypatch)
+    session = new_session()
+    new = compile_behavior("pass")
+
+    session.advance()
+    old = seen[0][HOME_FORWARD]
+    session.replace_behavior(HOME_FORWARD_ID, new)
+    session.advance()
+
+    assert seen[0][HOME_FORWARD] is old
+    assert seen[1][HOME_FORWARD] is new
+
+
+def test_replace_behavior_only_changes_that_player(monkeypatch):
+    seen = spy_behaviors(monkeypatch)
+    session = new_session()
+
+    session.advance()
+    session.replace_behavior(AWAY_FORWARD_ID, compile_behavior("pass"))
+    session.advance()
+
+    before, after = seen[0], seen[1]
+    changed = [key for key in before if after[key] is not before[key]]
+    assert changed == [AWAY_FORWARD]
+
+
+def test_two_replacements_keep_the_last_one(monkeypatch):
+    seen = spy_behaviors(monkeypatch)
+    session = new_session()
+    first, second = compile_behavior("pass"), compile_behavior("pass")
+
+    session.replace_behavior(HOME_FORWARD_ID, first)
+    session.replace_behavior(HOME_FORWARD_ID, second)
+    session.advance()
+
+    assert seen[0][HOME_FORWARD] is second
+
+
+def test_replace_behavior_does_not_mutate_the_previous_map(monkeypatch):
+    seen = spy_behaviors(monkeypatch)
+    session = new_session()
+
+    session.advance()
+    old_map = seen[0]
+    old = old_map[HOME_FORWARD]
+    session.replace_behavior(HOME_FORWARD_ID, compile_behavior("pass"))
+
+    assert old_map[HOME_FORWARD] is old
+
+
+def test_replace_behavior_of_unknown_player_raises():
+    session = new_session()
+    with pytest.raises(ValueError):
+        session.replace_behavior(999, compile_behavior("pass"))
+
+
+def test_replacement_during_countdown_applies_on_the_first_tick(
+        monkeypatch
+        ):
+    seen = spy_behaviors(monkeypatch)
+    session = new_session(countdown=1)
+    new = compile_behavior("pass")
+
+    session.advance()  # tick 0, countdown: no corren behaviors
+    session.replace_behavior(HOME_FORWARD_ID, new)
+    while not seen:
+        session.advance()
+
+    assert seen[0][HOME_FORWARD] is new
