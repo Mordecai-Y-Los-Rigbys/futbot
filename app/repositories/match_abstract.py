@@ -16,6 +16,12 @@ class MatchSetupData(BaseModel):
     club_1_name: str
     club_2_name: str | None
 
+class MatchPlayersData(BaseModel):
+    id: int
+    status: MatchStatus
+    user_1_id: int
+    user_2_id: int | None
+
 
 class AbstractMatchRepository(ABC):
     @abstractmethod
@@ -37,3 +43,7 @@ class AbstractMatchRepository(ABC):
     @abstractmethod
     def save_seed(self, match_id: int, seed: int) -> None:
         """Guarda la semilla con la que se juega el partido (para reproducirlo)."""
+
+    @abstractmethod
+    def get_players(self, match_id: int) -> MatchPlayersData | None:
+        """Estado y usuarios del partido, o None si no existe."""

@@ -1,9 +1,7 @@
-"""Validación del body de POST /leagues/{id}/participants (convenciones 6, 7 y 9).
+"""Validación del body de POST /leagues/{id}/participants.
 
-A diferencia de las validaciones viejas (league_validation, friendly_validation),
-acá NO se corta en el primer error: se juntan todos los campos que fallan, con
-un único `reason` por campo y en el orden del schema (`password`, `members`,
-`coachBehaviorId`), y se lanzan juntos como 400 `invalidFields`.
+Devuelve los datos tipados o lanza un 400 invalidFields con todos los
+campos que fallan, en el orden del schema (convenciones 6, 7 y 9).
 """
 
 from collections import Counter
