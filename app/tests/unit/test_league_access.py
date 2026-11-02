@@ -6,11 +6,15 @@ import pytest
 from app.errors import ApiError
 from app.repositories.league_access_abstract import LeagueAccessInfo
 from app.services.league_access_service import (
-    LeagueAccessService, has_league_access, verify_league_password,
+    LeagueAccessService,
+    has_league_access,
+    verify_league_password,
 )
 
 
-@pytest.mark.parametrize("private,creator,participant,unlocked", list(product([False, True], repeat=4)))
+@pytest.mark.parametrize(
+    "private,creator,participant,unlocked", list(product([False, True], repeat=4))
+)
 def test_access_matrix(private, creator, participant, unlocked):
     repo = Mock()
     repo.is_participant.return_value = participant
@@ -34,7 +38,10 @@ def test_require_access_returns_expected_403():
 @pytest.mark.parametrize("password", ["secret", "ñ🔐", "a" * 72])
 def test_constant_time_comparison_of_fixed_length_digests(password):
     import hmac
-    with patch("app.services.league_access_service.hmac.compare_digest", wraps=hmac.compare_digest) as compare:
+
+    with patch(
+        "app.services.league_access_service.hmac.compare_digest", wraps=hmac.compare_digest
+    ) as compare:
         assert verify_league_password(password, password)
         assert not verify_league_password(password + "x", password)
         assert all(len(arg) == 32 for call in compare.call_args_list for arg in call.args)

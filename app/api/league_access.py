@@ -1,21 +1,14 @@
 import json
 
 from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user_id
-from app.database import get_db
+from app.api.deps import get_current_user_id, get_league_access_service
 from app.helpers.ids import parse_path_id
-from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
 from app.schemas.errors import Error, ValidationBadRequest
 from app.schemas.league_access import UnlockLeagueForbidden
 from app.services.league_access_service import LeagueAccessService
 
 router = APIRouter(tags=["leagues"])
-
-
-def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessService:
-    return LeagueAccessService(SqlAlchemyLeagueAccessRepository(db))
 
 
 @router.post(
@@ -29,14 +22,20 @@ def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessServ
         403: {"model": UnlockLeagueForbidden},
         404: {"model": Error},
     },
-    openapi_extra={"requestBody": {
-        "required": False,
-        "content": {"application/json": {"schema": {
-            "type": "object",
-            "required": ["password"],
-            "properties": {"password": {"type": "string", "nullable": True}},
-        }}},
-    }},
+    openapi_extra={
+        "requestBody": {
+            "required": False,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["password"],
+                        "properties": {"password": {"type": "string", "nullable": True}},
+                    }
+                }
+            },
+        }
+    },
 )
 async def unlock_league(
     id: str,
@@ -44,7 +43,7 @@ async def unlock_league(
     user_id: int = Depends(get_current_user_id),
     service: LeagueAccessService = Depends(get_league_access_service),
 ) -> Response:
-    # Request sin Body/Pydantic: FastAPI no puede validar JSON antes del 401/404.
+    # El body se lee a mano para resolver el 401 y el 404 antes de validarlo.
     league = service.get_league(parse_path_id(id, "La liga no existe."))
     session_id = request.cookies["session_id"]  # ya validada por get_current_user_id
     body = None

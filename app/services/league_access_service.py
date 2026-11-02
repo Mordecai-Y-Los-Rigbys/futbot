@@ -12,11 +12,7 @@ def has_league_access(
     league: LeagueAccessInfo,
     repository: LeagueAccessRepository,
 ) -> bool:
-    """Regla compartida REST/WS. Requiere una sesión vigente del user_id indicado.
-
-    La autenticación debe ejecutarse antes de esta regla, también en WebSocket.
-    No registra desbloqueos: consultar acceso no equivale a llamar a /access.
-    """
+    """True si el usuario puede ver la liga (convención 11). Requiere sesión validada."""
     return (
         not league.private
         or league.creator_id == user_id
@@ -26,8 +22,7 @@ def has_league_access(
 
 
 def verify_league_password(received: str, expected: str) -> bool:
-    # Se comparan digests de igual longitud. Soporta Unicode sin normalizar,
-    # recortar ni cambiar la contraseña que actualmente guarda League.
+    # Se comparan hashes de largo fijo para no filtrar la longitud de la contraseña.
     return hmac.compare_digest(
         hashlib.sha256(received.encode("utf-8", errors="surrogatepass")).digest(),
         hashlib.sha256(expected.encode("utf-8", errors="surrogatepass")).digest(),
@@ -47,9 +42,7 @@ class LeagueAccessService:
     def requires_password(self, session_id: str, user_id: int, league: LeagueAccessInfo) -> bool:
         return not has_league_access(session_id, user_id, league, self.repository)
 
-    def unlock(
-        self, session_id: str, user_id: int, league: LeagueAccessInfo, body: Any
-    ) -> None:
+    def unlock(self, session_id: str, user_id: int, league: LeagueAccessInfo, body: Any) -> None:
         if not league.private:
             return
         if self.requires_password(session_id, user_id, league):

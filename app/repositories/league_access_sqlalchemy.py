@@ -14,26 +14,33 @@ class SqlAlchemyLeagueAccessRepository:
 
     def get_league(self, league_id: int) -> LeagueAccessInfo | None:
         row = self.db.execute(
-            select(League.id, League.creator_id, League.private, League.password)
-            .where(League.id == league_id)
+            select(League.id, League.creator_id, League.private, League.password).where(
+                League.id == league_id
+            )
         ).one_or_none()
         return LeagueAccessInfo(*row) if row is not None else None
 
     def is_participant(self, league_id: int, user_id: int) -> bool:
-        return self.db.scalar(
-            select(LeagueParticipant.user_id).where(
-                LeagueParticipant.league_id == league_id,
-                LeagueParticipant.user_id == user_id,
+        return (
+            self.db.scalar(
+                select(LeagueParticipant.user_id).where(
+                    LeagueParticipant.league_id == league_id,
+                    LeagueParticipant.user_id == user_id,
+                )
             )
-        ) is not None
+            is not None
+        )
 
     def is_unlocked(self, session_id: str, league_id: int) -> bool:
-        return self.db.scalar(
-            select(SessionLeagueUnlock.league_id).where(
-                SessionLeagueUnlock.session_id == session_id,
-                SessionLeagueUnlock.league_id == league_id,
+        return (
+            self.db.scalar(
+                select(SessionLeagueUnlock.league_id).where(
+                    SessionLeagueUnlock.session_id == session_id,
+                    SessionLeagueUnlock.league_id == league_id,
+                )
             )
-        ) is not None
+            is not None
+        )
 
     def unlock(self, session_id: str, league_id: int) -> None:
         if not self.is_unlocked(session_id, league_id):
