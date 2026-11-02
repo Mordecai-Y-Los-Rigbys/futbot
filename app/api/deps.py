@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Cookie, Depends, Request
@@ -114,6 +115,23 @@ def get_current_user_id(
         raise ApiError(401, None, "Sin sesión válida.")
 
     return user_id
+
+
+@dataclass(frozen=True)
+class CurrentSession:
+    """La sesión de la cookie, ya validada. `id` es el valor de `session_id`."""
+
+    id: str
+    user_id: int
+
+
+def get_current_session(
+    session_id: str | None = Cookie(default=None),
+    user_id: int = Depends(get_current_user_id),  # 401 si la cookie falta o no sirve
+) -> CurrentSession:
+    """Como get_current_user_id, pero también devuelve el id de la sesión
+    (lo necesitan los desbloqueos de ligas privadas, convención 11)."""
+    return CurrentSession(id=session_id or "", user_id=user_id)
 
 
 async def get_json_body(

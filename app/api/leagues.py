@@ -2,14 +2,23 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from app.api.deps import get_current_user_id, get_json_body, get_league_service
+from app.api.deps import (
+    CurrentSession,
+    get_current_session,
+    get_current_user_id,
+    get_json_body,
+    get_league_service,
+)
 from app.api.pagination import parse_page
 from app.schemas.errors import (
     CreateLeagueBadRequest,
     CreateLeagueConflict,
     Error,
+    JoinLeagueConflict,
+    JoinLeagueForbidden,
     LeaveLeagueConflict,
     ListPageBadRequest,
+    ValidationBadRequest,
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
@@ -98,3 +107,27 @@ def leave_league(
 ) -> Response:
     service.leave_league(user_id=user_id, raw_league_id=id)
     return Response(status_code=204)
+
+@router.post(
+    "/{id}/participants",
+    status_code=201,
+    response_class=Response,
+    operation_id="joinLeague",
+    summary="Inscribirse a una liga con un equipo",
+    responses={
+        201: {"description": "Inscripción realizada."},
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": JoinLeagueForbidden},
+        404: {"model": Error},
+        409: {"model": JoinLeagueConflict},
+    },
+)
+def join_league(
+    id: str,  # str: un id inválido es 404 (lo decide el servicio), nunca 422
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    body: Any = Depends(get_json_body),
+    service: LeagueService = Depends(get_league_service),
+) -> Response:
+    service.join_league(user_id=session.user_id, session_id=session.id, raw_league_id=id, body=body)
+    return Response(status_code=201)
