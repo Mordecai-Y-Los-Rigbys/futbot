@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import func, select
 
+from app.models.player import Player
 from app.models.session import UserSession
 from app.models.session_league_unlock import SessionLeagueUnlock
 from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
@@ -140,7 +141,7 @@ def test_session_end_removes_unlocks(access_case, db_session, login_as, expired)
         db_session.commit()
         assert api.post(f"/leagues/{league.id}/access").status_code == 401
     else:
-        # No hay endpoint de logout todavía: ejercitamos su servicio real.
+        # No hay endpoint de log-out: se borra la sesión con el servicio.
         SessionService(SqlAlchemySessionRepository(db_session)).delete(sid)
         assert api.post(f"/leagues/{league.id}/access").status_code == 401
     assert not unlocked(db_session, api, league)
@@ -161,6 +162,59 @@ def test_detail_stays_public_to_authenticated_users(access_case, db_session):
     assert response.status_code == 200
     assert "password" not in response.json()
     assert not unlocked(db_session, api, league)
+
+
+ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
+
+
+def team_of(db_session, make_behaviors, user):
+    """Body válido de inscripción: 6 jugadores y behaviors de jugador del usuario."""
+    players = [
+        Player(
+            user_id=user.id, name=f"J{i}", power=60, agility=60, control=60, strength=60, speed=60
+        )
+        for i in range(6)
+    ]
+    db_session.add_all(players)
+    db_session.commit()
+    behaviors = make_behaviors(user.id, [f"b{user.id}-{i}" for i in range(6)])
+    return {
+        "members": [
+            {"playerId": p.id, "role": r, "behaviorId": b.id}
+            for p, r, b in zip(players, ROLES, behaviors)
+        ]
+    }
+
+
+def test_join_unlocks_and_leaving_keeps_access(access_case, db_session, make_behaviors):
+    league, user, api = access_case
+    body = {**team_of(db_session, make_behaviors, user), "password": "secret"}
+
+    assert api.post(f"/leagues/{league.id}/participants", json=body).status_code == 201
+    assert unlocked(db_session, api, league)
+    assert api.delete(f"/leagues/{league.id}/participants/me").status_code == 204
+
+    # Ya no participa, pero la sesión conserva el desbloqueo de la inscripción:
+    # /access no evalúa la contraseña.
+    assert allowed(db_session, api, user, league)
+    assert api.post(f"/leagues/{league.id}/access", json={"password": "wrong"}).status_code == 204
+
+
+def test_leaving_from_another_session_loses_access(
+    access_case, db_session, make_behaviors, login_as
+):
+    league, user, joined_session = access_case
+    body = {**team_of(db_session, make_behaviors, user), "password": "secret"}
+    assert joined_session.post(f"/leagues/{league.id}/participants", json=body).status_code == 201
+
+    other_session = login_as(user)  # nunca desbloqueó la liga
+    assert other_session.delete(f"/leagues/{league.id}/participants/me").status_code == 204
+
+    assert not allowed(db_session, other_session, user, league)
+    response = other_session.post(f"/leagues/{league.id}/access", json={"password": "wrong"})
+    assert response.status_code == 403
+    assert response.json()["code"] == "invalidLeaguePassword"
+    assert allowed(db_session, joined_session, user, league)  # la otra sesión sí lo conserva
 
 
 def test_access_openapi_contract():
