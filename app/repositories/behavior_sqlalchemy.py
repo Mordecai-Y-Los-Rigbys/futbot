@@ -1,8 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.domain.behavior import BehaviorType
-from app.models.behavior import Behavior
+from app.models.behavior import Behavior, BehaviorType
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
