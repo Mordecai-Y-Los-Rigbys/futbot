@@ -1,6 +1,7 @@
 import pytest
 from app.errors import ApiError
-from app.services.player_validation import INVALID_JSON, parse_create_player, CreatePlayerData
+from app.services.player_validation import parse_create_player, CreatePlayerData
+from app.services.league_validation import INVALID_JSON
 
 
 def valid_payload():
