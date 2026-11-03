@@ -145,3 +145,17 @@ def test_invalid_cookie_is_401(client, expiry):
     client.cookies.set("session_id", "no-existe")
     r = client.post("/friendlies", json={"name": 5})
     assert r.status_code == 401 and r.json()["code"] is None
+
+
+def test_response_club1_has_creator_avatar(client, login, db_session, setup, expiry):
+    user, players, behaviors = setup
+    user.avatar = 3
+    db_session.commit()
+    login(user.id)
+
+    r = client.post("/friendlies", json=payload(players, behaviors))
+
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["club1"] == {"id": user.id, "username": "user1", "name": "club1", "avatar": 3}
+    assert body["club2"] is None
