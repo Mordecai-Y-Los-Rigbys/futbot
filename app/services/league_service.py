@@ -1,4 +1,3 @@
-import secrets
 from typing import Any
 
 from app.errors import ApiError
@@ -19,6 +18,7 @@ from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.league import LeagueCreator, LeagueDetail, LeaguePage, LeagueSummary
 from app.services.join_league_validation import parse_join_league
+from app.services.league_access_service import verify_league_password
 from app.services.league_validation import parse_create_league
 from app.services.team_ownership import ensure_owned_team, ensure_owned_typed_team
 
@@ -34,10 +34,7 @@ _JOIN_CONFLICT_MESSAGES: dict[str, str] = {
 
 
 def _password_matches(given: str, stored: str | None) -> bool:
-    # compare_digest: tiempo constante, no filtra cuántos caracteres coinciden.
-    if stored is None:
-        return False
-    return secrets.compare_digest(given.encode("utf-8"), stored.encode("utf-8"))
+    return stored is not None and verify_league_password(given, stored)
 
 
 def _raise_join_conflict(conflict: JoinLeagueStateConflict | None) -> None:
