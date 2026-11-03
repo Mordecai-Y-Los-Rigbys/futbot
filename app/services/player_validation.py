@@ -2,8 +2,7 @@ from typing import Any
 
 from app.errors import ApiError
 from app.repositories.player_abstract import CreatePlayerData
-
-INVALID_JSON = object()  # sentinel: el body no se pudo parsear
+from app.services.league_validation import INVALID_JSON
 
 MAX_NAME_LEN = 20
 MIN_STAT, MAX_STAT = 20, 100
