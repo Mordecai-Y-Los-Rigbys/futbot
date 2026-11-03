@@ -16,13 +16,13 @@ from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 
 @pytest.fixture()
 def create_user(db_session):
-    def _create(username: str, club_name: str | None = None) -> User:
+    def _create(username: str, club_name: str | None = None, avatar: int = 1) -> User:
         user = User(
             username=username,
             email=f"{username}@test.com",
             password_hash="x",
             club_name=club_name or f"club-{username}",
-            avatar=1,
+            avatar=avatar,
         )
         db_session.add(user)
         db_session.commit()

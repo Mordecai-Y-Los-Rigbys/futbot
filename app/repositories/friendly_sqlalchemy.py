@@ -49,7 +49,12 @@ def _utc(created_at: datetime) -> datetime:
 
 
 def _club(user: User) -> FriendlyClubData:
-    return FriendlyClubData(id=user.id, username=user.username, club_name=user.club_name)
+    return FriendlyClubData(
+        id=user.id, 
+        username=user.username, 
+        club_name=user.club_name,
+        avatar=user.avatar
+    )
 
 
 class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):

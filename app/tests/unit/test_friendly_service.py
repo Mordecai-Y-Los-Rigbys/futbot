@@ -43,7 +43,7 @@ def repo():
         id=100,
         name="Partido amistoso 1",
         status="scheduled",
-        club1=FriendlyClubData(id=1, username="usuario1", club_name="Club Atletico"),
+        club1=FriendlyClubData(id=1, username="usuario1", club_name="Club Atletico", avatar=3),
         created_at=NOW,
     )
     return r
@@ -53,7 +53,7 @@ def test_success_returns_the_match_schema(repo, players, behaviors):
     out = FriendlyService(repo, players, behaviors).create_friendly(1, body())
     dumped = out.model_dump(by_alias=True)
     assert dumped["id"] == 100 and dumped["status"] == "scheduled"
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico"}
+    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 3}
     for k in ("leagueId", "club2", "scheduledAt", "result"):
         assert dumped[k] is None
     assert out.model_dump_json(by_alias=True).count("2026-10-03T18:00:00Z") == 1
