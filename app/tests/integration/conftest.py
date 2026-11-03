@@ -6,13 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
+from app.domain.match import MatchStatus
 from app.main import app
 from app.models.league import League, LeagueStatus
 from app.models.league_participant import LeagueParticipant
+from app.models.match import Match
 from app.models.user import User
 from app.repositories.session_abstract import CreateSessionData
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
-
+from app.tests.integration.match_factories import add_league, add_team
 
 @pytest.fixture()
 def create_user(db_session):
@@ -142,3 +144,41 @@ def no_retry_delay(monkeypatch):
     from app.services import friendly_expiry
 
     monkeypatch.setattr(friendly_expiry, "EXPIRY_RETRY_DELAY", 0)
+
+@pytest.fixture()
+def league_match(db_session, make_user, make_behaviors):
+    """Partido de liga `started` entre 1 y 2, con sus equipos de liga."""
+    make_user(1), make_user(2)
+    league = add_league(db_session)
+    teams = {}
+    for uid in (1, 2):
+        db_session.add(LeagueParticipant(league_id=league.id, user_id=uid))
+        db_session.flush()
+        behavior = make_behaviors(uid, ["b"], code="pass")[0]
+        teams[uid] = add_team(db_session, uid, behavior, league_id=league.id)
+    match = Match(
+        league_id=league.id,
+        user_1_id=1,
+        user_2_id=2,
+        status=MatchStatus.started,
+        scheduled_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    db_session.add(match)
+    db_session.commit()
+    return match, teams
+
+
+@pytest.fixture()
+def friendly_match(db_session, make_user, make_behaviors):
+    """Amistoso `started` entre 1 y 2, con sus equipos del amistoso."""
+    make_user(1), make_user(2)
+    match = Match(user_1_id=1, user_2_id=2, status=MatchStatus.started)
+    db_session.add(match)
+    db_session.commit()
+    teams = {
+        uid: add_team(
+            db_session, uid, make_behaviors(uid, ["fb"], code="pass")[0], match_id=match.id
+        )
+        for uid in (1, 2)
+    }
+    return match, teams

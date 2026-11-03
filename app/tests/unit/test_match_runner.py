@@ -387,7 +387,7 @@ def test_queued_behavior_applies_from_the_next_tick(monkeypatch):
     assert used[k:] and all(b is new for b in used[k:])
     
     
-def test_behavior_queued_during_a_pause_applies_on_the_next_tick(monkeypatch):
+def test_behavior_queued_during_a_pause_applies_on_the_first_play_tick_after_it(monkeypatch):
     used = spy_forward(monkeypatch)
     new = compile_behavior("pass")
     ws = FakeWs()
@@ -422,7 +422,8 @@ def test_two_queued_changes_keep_the_last_one(monkeypatch):
 
     ws.probe = probe
     run(runner)
-
+    
+    assert used[mark["k"]:]  
     assert all(b is second for b in used[mark["k"]:])
     
 

@@ -1,10 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import (
     get_current_user_id,
     get_json_body,
+    get_match_behavior_service,
     get_match_connection_service,
     get_substitution_service
 )
@@ -14,10 +15,14 @@ from app.schemas.errors import (
     JoinMatchBadRequest,
     JoinMatchConflict,
     JoinMatchForbidden,
-    NextSubstitutionsConflict
+    MatchBehaviorConflict,
+    MatchBehaviorForbidden,
+    NextSubstitutionsConflict,
+    ValidationBadRequest
 )
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import NextSubstitutions
+from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.substitution_service import SubstitutionService
 
@@ -66,3 +71,27 @@ def get_next_substitutions(
     service: SubstitutionService = Depends(get_substitution_service),
 ) -> NextSubstitutions:
     return service.get_next(user_id, parse_path_id(match_id, "El partido no existe."))
+
+
+@router.put(
+    "/{match_id}/behavior",
+    status_code=204,
+    response_class=Response,
+    operation_id="reassignMatchBehavior",
+    summary="Cambiar el behavior de un titular durante el partido",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": MatchBehaviorForbidden},
+        404: {"model": Error},
+        409: {"model": MatchBehaviorConflict},
+    },
+)
+def reassign_match_behavior(
+    match_id: str,  
+    user_id: int = Depends(get_current_user_id),  
+    body: Any = Depends(get_json_body),
+    service: MatchBehaviorService = Depends(get_match_behavior_service),
+) -> Response:
+    service.reassign(user_id, parse_path_id(match_id, "El partido no existe."), body)
+    return Response(status_code=204)
