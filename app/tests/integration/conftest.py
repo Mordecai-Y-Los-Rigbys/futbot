@@ -16,6 +16,7 @@ from app.repositories.session_abstract import CreateSessionData
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.tests.integration.match_factories import add_league, add_team
 
+
 @pytest.fixture()
 def create_user(db_session):
     def _create(username: str, club_name: str | None = None) -> User:
@@ -144,6 +145,7 @@ def no_retry_delay(monkeypatch):
     from app.services import friendly_expiry
 
     monkeypatch.setattr(friendly_expiry, "EXPIRY_RETRY_DELAY", 0)
+
 
 @pytest.fixture()
 def league_match(db_session, make_user, make_behaviors):

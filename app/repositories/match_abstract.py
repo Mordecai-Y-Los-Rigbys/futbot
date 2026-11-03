@@ -16,12 +16,14 @@ class MatchSetupData(BaseModel):
     club_1_name: str
     club_2_name: str | None
 
+
 class MatchPlayersData(BaseModel):
     id: int
     status: MatchStatus
     user_1_id: int
     user_2_id: int | None
     league_id: int | None
+
 
 class AbstractMatchRepository(ABC):
     @abstractmethod

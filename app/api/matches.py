@@ -7,7 +7,7 @@ from app.api.deps import (
     get_json_body,
     get_match_behavior_service,
     get_match_connection_service,
-    get_substitution_service
+    get_substitution_service,
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
@@ -18,7 +18,7 @@ from app.schemas.errors import (
     MatchBehaviorConflict,
     MatchBehaviorForbidden,
     NextSubstitutionsConflict,
-    ValidationBadRequest
+    ValidationBadRequest,
 )
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import NextSubstitutions
@@ -88,8 +88,8 @@ def get_next_substitutions(
     },
 )
 def reassign_match_behavior(
-    match_id: str,  
-    user_id: int = Depends(get_current_user_id),  
+    match_id: str,
+    user_id: int = Depends(get_current_user_id),
     body: Any = Depends(get_json_body),
     service: MatchBehaviorService = Depends(get_match_behavior_service),
 ) -> Response:

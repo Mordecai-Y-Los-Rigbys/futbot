@@ -21,7 +21,7 @@ class FakeRunner:
 
 
 @pytest.fixture()
-def runner(client): 
+def runner(client):
     fake = FakeRunner()
     app.dependency_overrides[get_match_runner] = lambda: fake
     return fake
@@ -45,10 +45,10 @@ def test_starter_change_is_204_queued_and_does_not_touch_the_lineup(
     assert r.status_code == 204
     assert runner.queued == [(match.id, starter.player_id)]
     db_session.refresh(starter)
-    assert starter.behavior_id != new.id  
+    assert starter.behavior_id != new.id
 
 
-@pytest.mark.parametrize("team, index", [(1, 3), (2, 0)])  
+@pytest.mark.parametrize("team, index", [(1, 3), (2, 0)])
 def test_player_that_is_not_my_starter_is_403(
     team, index, league_match, login_as, make_user, make_behaviors, runner
 ):

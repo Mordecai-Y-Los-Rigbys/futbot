@@ -78,6 +78,7 @@ def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
     return SessionService(SqlAlchemySessionRepository(db))
 
+
 def get_auth_service(
     db: Session = Depends(get_db),
     session_service: SessionService = Depends(get_session_service),
@@ -91,11 +92,8 @@ def get_auth_service(
     )
 
 
-
 def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
-    return SubstitutionService(
-        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db)
-    )
+    return SubstitutionService(SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db))
 
 
 def get_match_behavior_service(

@@ -32,8 +32,16 @@ def matches():
 def teams():
     t = create_autospec(AbstractTeamRepository, instance=True)
     t.get_starters.return_value = [
-        StarterData(player_id=3, role=MemberRole.forward, power=60, agility=60,
-                    control=60, strength=60, speed=60, behavior_code="pass")
+        StarterData(
+            player_id=3,
+            role=MemberRole.forward,
+            power=60,
+            agility=60,
+            control=60,
+            strength=60,
+            speed=60,
+            behavior_code="pass",
+        )
     ]
     return t
 

@@ -184,11 +184,7 @@ class MatchSession:
             return self._result(seq, segment, event)
         return self._play(seq, segment)
 
-    def replace_behavior(
-        self,
-        player_id: int,
-        behavior: CompiledBehavior
-    ) -> None:
+    def replace_behavior(self, player_id: int, behavior: CompiledBehavior) -> None:
         """Reemplaza el comportamiento de un jugador en tiempo real."""
         for player in self._state.players:
             if player.player_id == player_id:

@@ -31,6 +31,7 @@ def substitute(db, match, team, out_idx=0, in_idx=3):
     db.commit()
     return sub
 
+
 def first_by_user(db, match):
     rows = SqlAlchemySubstitutionRepository(db).list_first_per_team(match.id)
     return {r.user_id: r for r in rows}
@@ -197,6 +198,7 @@ def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
 
     assert db_session.scalars(select(Substitution)).all() == []
 
+
 def test_list_first_per_team_picks_the_lowest_id_of_both_teams(db_session, league_match):
     match, teams = league_match
     # Intercalados, para que "menor id" no coincida con "último cargado".
@@ -255,6 +257,7 @@ def test_list_first_per_team_ignores_other_matches_and_empty_teams(db_session, l
     substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
     by_user = first_by_user(db_session, match)
 
+
 # --- delete_first_substitutions (fin de cada pausa) -------------------------------
 
 
@@ -275,6 +278,7 @@ def test_delete_first_substitution_of_each_team(db_session, league_match):
     assert repo.delete_first_per_team(match.id) == 2  # la pausa siguiente
     assert remaining_ids(db_session) == set()
     assert repo.delete_first_per_team(match.id) == 0  # sin cambios, no falla
+
 
 def test_only_the_team_with_substitutions_loses_one(db_session, league_match):
     match, teams = league_match
@@ -319,7 +323,6 @@ def test_other_matches_are_not_touched(db_session, league_match):
 
     assert remaining_ids(db_session) == {theirs_id}
     assert mine_id not in remaining_ids(db_session)
-    
 
 
 def test_endpoint_outsider_is_403_and_not_started_is_409(

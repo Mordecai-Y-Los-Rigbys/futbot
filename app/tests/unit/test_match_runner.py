@@ -39,7 +39,7 @@ PAUSED_TOTAL = 20 + 40 + 3 * (20 + 20)  # cuenta + 2 s de juego + 3 × (pausa + 
 # Igual, pero con pausas de 2 s (40 ticks): permite entrar "a la mitad" con remaining < duración.
 LATE = dict(periods=4, pause_seconds=2, duration=2)
 
-HOME_FORWARD_ID = 3 
+HOME_FORWARD_ID = 3
 HOME_FORWARD = (Team.HOME, 3)
 # ticks 20 a 39 son de juego
 PLAYING_TICK = 25
@@ -265,9 +265,7 @@ def test_pause_ticks_follow_the_contract_and_only_they_carry_the_remaining_time(
     assert first["event"] == {"type": "pause", "reason": "hydration", "durationSeconds": 1}
     assert first["pauseRemainingSeconds"] == 1
     reasons = [
-        t["event"]["reason"]
-        for t in ws.received
-        if t["event"] and t["event"]["type"] == "pause"
+        t["event"]["reason"] for t in ws.received if t["event"] and t["event"]["type"] == "pause"
     ]
     assert reasons == ["hydration", "halftime", "hydration"]
 
@@ -385,8 +383,8 @@ def test_queued_behavior_applies_from_the_next_tick(monkeypatch):
     assert mark["queued"] is True
     assert k > 0 and all(b is not new for b in used[:k])
     assert used[k:] and all(b is new for b in used[k:])
-    
-    
+
+
 def test_behavior_queued_during_a_pause_applies_on_the_first_play_tick_after_it(monkeypatch):
     used = spy_forward(monkeypatch)
     new = compile_behavior("pass")
@@ -403,9 +401,9 @@ def test_behavior_queued_during_a_pause_applies_on_the_first_play_tick_after_it(
     run(runner)
 
     k = mark["k"]
-    assert all(b is not new for b in used[:k]) 
-    assert used[k] is new 
-    
+    assert all(b is not new for b in used[:k])
+    assert used[k] is new
+
 
 def test_two_queued_changes_keep_the_last_one(monkeypatch):
     used = spy_forward(monkeypatch)
@@ -422,10 +420,10 @@ def test_two_queued_changes_keep_the_last_one(monkeypatch):
 
     ws.probe = probe
     run(runner)
-    
-    assert used[mark["k"]:]  
-    assert all(b is second for b in used[mark["k"]:])
-    
+
+    assert used[mark["k"] :]
+    assert all(b is second for b in used[mark["k"] :])
+
 
 def test_queue_behavior_when_the_match_is_not_running():
     runner = build(FakeManager([]), FakeMatchRepo())
@@ -448,7 +446,7 @@ def test_unknown_player_is_logged_and_the_match_goes_on(caplog):
     assert len(ws.received) == TOTAL
     assert manager.match_closed == [(1, 1000, "matchEnd")]
     assert "ya no está en cancha" in caplog.text
-    
+
 
 def test_changes_from_another_thread_never_break_a_tick(monkeypatch):
     used = spy_forward(monkeypatch)

@@ -1,4 +1,3 @@
-
 from typing import Any, Protocol
 
 from app.domain.behavior import BehaviorType
@@ -16,9 +15,7 @@ class BehaviorQueue(Protocol):
 
     def is_running(self, match_id: int) -> bool: ...
 
-    def queue_behavior(
-        self, match_id: int, player_id: int, behavior: CompiledBehavior
-    ) -> bool: ...
+    def queue_behavior(self, match_id: int, player_id: int, behavior: CompiledBehavior) -> bool: ...
 
 
 def _not_in_progress() -> ApiError:

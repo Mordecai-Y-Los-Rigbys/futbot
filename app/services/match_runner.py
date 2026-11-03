@@ -212,4 +212,6 @@ class MatchRunner:
             try:
                 session.replace_behavior(player_id, behavior)
             except ValueError:
-                logger.warning("Partido %s: el jugador %s ya no está en cancha", match_id, player_id)
+                logger.warning(
+                    "Partido %s: el jugador %s ya no está en cancha", match_id, player_id
+                )

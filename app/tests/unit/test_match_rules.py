@@ -20,7 +20,7 @@ CT = round(C.COUNTDOWN_SECONDS * C.TICKS_PER_SECOND)
 WARMUP_TICKS = 5
 MEASURED_TICKS = 200
 HOME_FORWARD_ID = 3
-AWAY_FORWARD_ID = 13  
+AWAY_FORWARD_ID = 13
 HOME_FORWARD = (Team.HOME, 3)
 AWAY_FORWARD = (Team.AWAY, 3)
 
@@ -40,8 +40,12 @@ def spy_behaviors(monkeypatch):
 
 def new_session(countdown=0):
     return build_session(
-        make_team(), make_team(first_id=10), 2, seed=1,
-        countdown_seconds=countdown, periods=1,
+        make_team(),
+        make_team(first_id=10),
+        2,
+        seed=1,
+        countdown_seconds=countdown,
+        periods=1,
     )
 
 
@@ -203,9 +207,7 @@ def test_replace_behavior_of_unknown_player_raises():
         session.replace_behavior(999, compile_behavior("pass"))
 
 
-def test_replacement_during_countdown_applies_on_the_first_tick(
-        monkeypatch
-        ):
+def test_replacement_during_countdown_applies_on_the_first_tick(monkeypatch):
     seen = spy_behaviors(monkeypatch)
     session = new_session(countdown=1)
     new = compile_behavior("pass")

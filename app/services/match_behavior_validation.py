@@ -5,7 +5,7 @@ from app.errors import ValidationApiError
 from app.services.field_validation import field_error, id_reason
 from app.services.league_validation import INVALID_JSON
 
-FIELDS = ("playerId", "behaviorId") 
+FIELDS = ("playerId", "behaviorId")
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class ReassignBehaviorInput:
 
 def parse_reassign_behavior(body: Any) -> ReassignBehaviorInput:
     """Valida el body y devuelve los ids ya tipados."""
-    if body is INVALID_JSON or not isinstance(body, dict): 
+    if body is INVALID_JSON or not isinstance(body, dict):
         raise ValidationApiError([field_error(f, "required") for f in FIELDS])
 
     errors = [field_error(f, reason) for f in FIELDS if (reason := id_reason(body, f))]
