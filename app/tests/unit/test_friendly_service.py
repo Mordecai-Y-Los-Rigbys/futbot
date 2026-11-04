@@ -73,7 +73,8 @@ def test_name_too_long_is_400_before_touching_the_repo(repo, players, behaviors)
     b["name"] = "x" * 21
     with pytest.raises(ApiError) as e:
         FriendlyService(repo, players, behaviors).create_friendly(1, b)
-    assert (e.value.status_code, e.value.code) == (400, "nameTooLong")
+    assert (e.value.status_code, e.value.code) == (400, "invalidFields")
+    assert e.value.errors == [{"field": "name", "reason": "tooLong"}]
     repo.user_is_playing.assert_not_called()
     repo.create_with_team.assert_not_called()
 
