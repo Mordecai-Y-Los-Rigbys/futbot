@@ -22,11 +22,6 @@ class CreateFriendlyMatchConflict(BaseModel):
     message: str
 
 
-class JoinMatchBadRequest(BaseModel):
-    code: Literal["invalidFieldType"]
-    message: str
-
-
 class JoinMatchForbidden(BaseModel):
     code: Literal["invalidLeaguePassword"]
     message: str

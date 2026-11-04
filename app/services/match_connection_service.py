@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.domain.match import MatchStatus
-from app.errors import ApiError
+from app.errors import ValidationApiError
 from app.repositories.match_connection_abstract import (
     AbstractMatchConnectionRepository,
     CreateMatchWsTokenData,
@@ -26,7 +26,7 @@ class MatchConnectionService:
         """Devuelve un tokenWs. Orden: 404 > 400 > 403 > 409."""
         match = self.repo.get_access(match_id)
         if match is None:
-            raise ApiError(404, None, "El partido no existe.")
+            raise ValidationApiError([{"field": "password", "reason": "invalidType"}])
 
         if self._password_applies(match, user_id):
             self._check_password(match, body)
