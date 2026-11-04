@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.domain.match import MatchStatus
-from app.errors import ValidationApiError
+from app.errors import ApiError, ValidationApiError
 from app.repositories.match_connection_abstract import (
     AbstractMatchConnectionRepository,
     CreateMatchWsTokenData,
@@ -26,7 +26,7 @@ class MatchConnectionService:
         """Devuelve un tokenWs. Orden: 404 > 400 > 403 > 409."""
         match = self.repo.get_access(match_id)
         if match is None:
-            raise ValidationApiError([{"field": "password", "reason": "invalidType"}])
+            raise ApiError(404, None, "El partido no existe.")
 
         if self._password_applies(match, user_id):
             self._check_password(match, body)
@@ -61,7 +61,7 @@ class MatchConnectionService:
     def _check_password(match: MatchAccessData, body: Any) -> None:
         password = body.get("password") if isinstance(body, dict) else None
         if password is not None and not isinstance(password, str):
-            raise ApiError(400, "invalidFieldType", "La contraseña debe ser un string.")
+            raise ValidationApiError([{"field": "password", "reason": "invalidType"}])
         expected = (match.league_password or "").encode()
         if password is None or not secrets.compare_digest(password.encode(), expected):
             raise ApiError(403, "invalidLeaguePassword", "La contraseña de la liga es incorrecta.")
