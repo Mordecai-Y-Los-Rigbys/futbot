@@ -49,6 +49,12 @@ def _coach_errors(body: dict) -> FieldErrors:
     return []
 
 
+def _unreadable_body_errors(private: bool) -> FieldErrors:
+    """Convención 9: cada campo requerido como `required`, en el orden del schema."""
+    fields = (["password"] if private else []) + ["members"]
+    return [field_error(f, "required") for f in fields]
+
+
 def parse_join_league(body: Any, private: bool) -> JoinLeagueInput:
     """Valida el body de una inscripción y devuelve los datos ya tipados.
 
