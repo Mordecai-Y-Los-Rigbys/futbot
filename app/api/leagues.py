@@ -12,13 +12,11 @@ from app.api.deps import (
 from app.api.pagination import parse_page
 from app.api.league_access import router as league_access_router
 from app.schemas.errors import (
-    CreateLeagueBadRequest,
     CreateLeagueConflict,
     Error,
     JoinLeagueConflict,
     JoinLeagueForbidden,
     LeaveLeagueConflict,
-    ListPageBadRequest,
     ValidationBadRequest,
 )
 from app.helpers.ids import parse_path_id
@@ -34,7 +32,7 @@ router = APIRouter(prefix="/leagues", tags=["leagues"])
     operation_id="listLeagues",
     summary="Listar ligas",
     responses={
-        400: {"model": ListPageBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )
@@ -75,7 +73,7 @@ def get_league(
     operation_id="createLeague",
     summary="Crear una liga",
     responses={
-        400: {"model": CreateLeagueBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         409: {"model": CreateLeagueConflict},
     },

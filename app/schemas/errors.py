@@ -8,46 +8,12 @@ class Error(BaseModel):
     message: str
 
 
-class ListPageBadRequest(BaseModel):
-    code: Literal["pageNotAnInteger", "pageBelowMinimum", "pageTooLarge"]
-    message: str
-
-
-class CreateLeagueBadRequest(BaseModel):
-    code: Literal[
-        "invalidFieldType",
-        "incompleteForm",
-        "nameTooLong",
-        "minParticipantsTooLow",
-        "maxLessThanMin",
-        "matchDurationOutOfRange",
-        "passwordTooLong",
-        "invalidTeam",
-    ]
-    message: str
-
-
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
 
 class LeaveLeagueConflict(BaseModel):
     code: Literal["notInPreparation", "notParticipating", "isCreator"]
-    message: str
-
-class CreatePlayerBadRequest(BaseModel):
-    code: Literal[
-        "invalidFieldType",
-        "incompleteForm",
-        "nameTooLong",
-        "statOutOfRange",
-        "statSumMismatch",
-    ]
-    message: str
-
-
-class CreateFriendlyMatchBadRequest(BaseModel):
-    code: Literal["invalidFieldType", "incompleteForm", "nameTooLong", "invalidTeam"]
     message: str
 
 
@@ -68,11 +34,6 @@ class JoinMatchForbidden(BaseModel):
 
 class JoinMatchConflict(BaseModel):
     code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
-    message: str
-
-
-class JoinFriendlyMatchBadRequest(BaseModel):
-    code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]
     message: str
 
 
