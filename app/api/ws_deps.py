@@ -8,6 +8,7 @@ from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryReposi
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.repositories.match_ws_token_sqlalchemy import SqlAlchemyMatchWsTokenRepository
+from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_handshake_service import MatchHandshakeService
 from app.services.friendly_expiry import FriendlyExpiryService
@@ -77,7 +78,15 @@ def _load_setup(match_id: int) -> MatchSetup:
         ).load_match_setup(match_id)
 
 
-_match_runner = MatchRunner(_connection_manager, _load_setup, _match_repo_scope)
+@contextmanager
+def _substitution_repo_scope() -> Iterator[SqlAlchemySubstitutionRepository]:
+    with SessionLocal() as db:
+        yield SqlAlchemySubstitutionRepository(db)
+
+
+_match_runner = MatchRunner(
+    _connection_manager, _load_setup, _match_repo_scope, _substitution_repo_scope
+)
 
 
 async def _start_simulation(match_id: int) -> None:

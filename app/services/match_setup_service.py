@@ -13,6 +13,8 @@ from app.simulation.constants import (
     STARTER_ROLES,
     COUNTDOWN_SECONDS,
     FRIENDLY_MATCH_DURATION,
+    PAUSE_SECONDS,
+    PERIODS,
 )
 from app.simulation.match_rules import TeamSetup
 from app.simulation.physics import PlayerSetup
@@ -23,13 +25,14 @@ from app.simulation.state import Stats
 class MatchSetup:
     """Todo lo que necesita el runner para jugar un partido."""
 
-    team_1: TeamSetup  # club1 = user_1
-    team_2: TeamSetup  # club2 = user_2
+    team_1: TeamSetup
+    team_2: TeamSetup
     duration_seconds: float
     countdown_seconds: float
     club_1_name: str
     club_2_name: str
-
+    periods: int = PERIODS
+    pause_seconds: float = PAUSE_SECONDS
 
 class MatchSetupService:
     """Arma los equipos y la duración de un partido a partir de la base."""
@@ -68,6 +71,8 @@ class MatchSetupService:
             countdown_seconds=COUNTDOWN_SECONDS,
             club_1_name=match.club_1_name,
             club_2_name=match.club_2_name,
+            periods=PERIODS,
+            pause_seconds=PAUSE_SECONDS,
         )
 
     def _duration_minutes(self, match: MatchSetupData) -> int:

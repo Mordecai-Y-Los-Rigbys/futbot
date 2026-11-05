@@ -21,6 +21,7 @@ ITEM_FIELDS = {
     "participantsCount",
     "maxParticipants",
     "private",
+    "allowDraws",
     "createdAt",
 }
 
@@ -270,7 +271,7 @@ def test_creator_uses_username_and_club_name(api, create_user, make_league):
     creator = create_user("mgonzalez", "Boca Juniors FC")
     make_league(creator)
     c = api.get("/leagues").json()["items"][0]["creator"]
-    assert c == {"id": creator.id, "username": "mgonzalez", "name": "Boca Juniors FC"}
+    assert c == {"id": creator.id, "username": "mgonzalez", "name": "Boca Juniors FC", "avatar": creator.avatar}
 
 
 def test_participants_count_of_new_league_is_1(api, owner, make_league):

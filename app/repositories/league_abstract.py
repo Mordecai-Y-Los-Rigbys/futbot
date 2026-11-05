@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
@@ -10,6 +11,7 @@ class LeagueCreatorData(BaseModel):
     id: int
     username: str
     club_name: str
+    avatar: int
 
     model_config = {"from_attributes": True}
 
@@ -22,9 +24,15 @@ class LeagueListItemData(BaseModel):
     participants_count: int
     max_participants: int
     private: bool
+    allow_draws: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LeagueDetailData(LeagueListItemData):
+    min_participants: int
+    joined: bool
 
 
 class LeaguePageData(BaseModel):
@@ -47,6 +55,46 @@ class CreateLeagueData(BaseModel):
     private: bool
     password: str | None  # None si la liga es pública
     members: list[CreateLeagueMemberData]
+    
+
+class LeagueLeaveInfo(BaseModel):
+    status: LeagueStatus
+    creator_id: int
+
+
+# Conflictos de inscripción que dependen del estado de la liga, en el orden
+# en que se evalúan (enum de JoinLeagueConflict del contrato).
+JoinLeagueStateConflict = Literal["notInPreparation", "leagueFull", "alreadyParticipating"]
+
+
+class LeagueJoinState(BaseModel):
+    """Lo que necesita POST /leagues/{id}/participants para decidir 403 y 409."""
+
+    private: bool
+    password: str | None
+    status: LeagueStatus
+    max_participants: int
+    participants_count: int
+    is_participant: bool  # el usuario que se inscribe ya participa
+
+    def conflict(self) -> JoinLeagueStateConflict | None:
+        """Primer 409 de estado que aplica, o None si la liga admite al usuario."""
+        if self.status != LeagueStatus.preparation:
+            return "notInPreparation"
+        if self.participants_count >= self.max_participants:
+            return "leagueFull"
+        if self.is_participant:
+            return "alreadyParticipating"
+        return None
+
+
+class JoinLeagueData(BaseModel):
+    league_id: int
+    user_id: int
+    session_id: str
+    members: list[CreateLeagueMemberData]
+    coach_behavior_id: int | None  # None: el equipo no tiene DT
+    unlock_session: bool  # True si la liga es privada: queda desbloqueada en la sesión
 
 
 class AbstractLeagueRepository(ABC):
@@ -73,4 +121,48 @@ class AbstractLeagueRepository(ABC):
 
         Es el valor `match_duration` que definió el creador al crear la liga
         (entre 1 y 10). Devuelve None si la liga no existe.
+        """
+    
+    @abstractmethod
+    def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
+        """Estado y creador de la liga. Devuelve None si la liga no existe."""
+    
+    @abstractmethod
+    def is_participant(self, league_id: int, user_id: int) -> bool:
+        """True si el usuario está inscripto en la liga (el creador incluido)."""
+    
+    @abstractmethod
+    def remove_participant(self, league_id: int, user_id: int) -> None:
+        """
+        Elimina la inscripción del usuario y el equipo que registró en esa liga,
+        en una única transacción (o nada).
+        """
+
+    @abstractmethod
+    def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
+        """Detalle de una liga en cualquier estado, pública o privada.
+
+        Incluye creador, participantes (creador incluido) y si `user_id`
+        participa. Devuelve None si la liga no existe. Nunca expone la contraseña.
+        """
+
+    @abstractmethod
+    def get_join_state(self, league_id: int, user_id: int) -> LeagueJoinState | None:
+        """Estado de la liga visto por `user_id` que quiere inscribirse.
+
+        Devuelve None si la liga no existe.
+        """
+
+    @abstractmethod
+    def join(self, data: JoinLeagueData) -> JoinLeagueStateConflict | None:
+        """Inscribe al usuario con su equipo y su DT, en una única transacción.
+
+        Vuelve a evaluar estado, cupo y participación previa con la liga
+        bloqueada, para que dos inscripciones simultáneas no superen el cupo.
+        Si `unlock_session`, también registra el desbloqueo de la liga en la
+        sesión dentro de la misma transacción.
+
+        Returns:
+            None si inscribió; el código del conflicto si, al bloquear la
+            liga, ya no admitía al usuario (en ese caso no persiste nada).
         """
