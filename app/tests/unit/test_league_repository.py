@@ -6,8 +6,10 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
+
 from app.models.league import LeagueStatus
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository, _escape_like
+from app.repositories.league_abstract import LeagueLeaveInfo
 
 
 def compiled(stmt):
@@ -22,8 +24,11 @@ def fake_league(id=1, status=LeagueStatus.preparation, created_at=None):
         status=status,
         max_participants=8,
         private=False,
+        allow_draws=True,  # nuevo
         created_at=created_at or datetime(2026, 1, 1),  # naive, como en SQLite/DateTime
-        creator=SimpleNamespace(id=7, username="mgonzalez", club_name="Boca Juniors FC"),
+        creator=SimpleNamespace(
+            id=7, username="mgonzalez", club_name="Boca Juniors FC", avatar=1  # avatar nuevo
+        ),
     )
 
 
@@ -81,6 +86,8 @@ def test_maps_rows_to_dtos(repo, db):
     assert item.participants_count == 4
     assert item.creator.username == "mgonzalez"
     assert item.creator.club_name == "Boca Juniors FC"
+    assert item.creator.avatar == 1
+    assert item.allow_draws is True
 
 
 def test_naive_created_at_is_normalized_to_utc(repo, db):
@@ -178,3 +185,103 @@ def test_always_two_statements_regardless_of_rows(repo, db, rows):
     repo.list_page(name=None, offset=0, limit=50)
     assert db.scalar.call_count == 1
     assert db.execute.call_count == 1
+    
+
+# --- abandonar liga -----------------------------------------------------------
+
+
+def test_get_leave_info_returns_none_if_league_missing(repo, db):
+    db.execute.return_value.one_or_none.return_value = None
+    assert repo.get_leave_info(5) is None
+
+
+def test_get_leave_info_maps_status_and_creator(repo, db):
+    db.execute.return_value.one_or_none.return_value = SimpleNamespace(
+        status=LeagueStatus.started, creator_id=3
+    )
+    assert repo.get_leave_info(5) == LeagueLeaveInfo(status=LeagueStatus.started, creator_id=3)
+
+
+@pytest.mark.parametrize("found, expected", [(7, True), (None, False)])
+def test_is_participant(repo, db, found, expected):
+    db.scalar.return_value = found
+    assert repo.is_participant(5, 7) is expected
+
+
+def test_remove_participant_deletes_team_then_participation_and_commits(repo, db):
+    repo.remove_participant(5, 7)
+
+    first, second = (c.args[0] for c in db.execute.call_args_list)
+    sql_team, params_team = compiled(first)
+    sql_part, params_part = compiled(second)
+    assert sql_team.startswith("DELETE FROM team_members")  # el equipo, antes que la inscripción
+    assert sql_part.startswith("DELETE FROM league_participants")
+    assert set(params_team.values()) == {5, 7}
+    assert set(params_part.values()) == {5, 7}
+    db.commit.assert_called_once()
+    db.rollback.assert_not_called()
+
+
+def test_remove_participant_rolls_back_and_reraises_on_error(repo, db):
+    db.execute.side_effect = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        repo.remove_participant(5, 7)
+
+    db.rollback.assert_called_once()
+    db.commit.assert_not_called()
+
+
+# --- get_detail ---------------------------------------------------------------
+
+
+def detail_row(league=None, count=4, joined=True):
+    return (league or fake_league(id=5), count, joined)
+
+
+def test_get_detail_maps_the_row(repo, db):
+    league = fake_league(id=5, status=LeagueStatus.finished)
+    league.min_participants = 3
+    db.execute.return_value.first.return_value = detail_row(league, count=4, joined=True)
+
+    detail = repo.get_detail(league_id=5, user_id=7)
+
+    assert detail.id == 5
+    assert detail.status == "finished"
+    assert detail.participants_count == 4
+    assert detail.min_participants == 3
+    assert detail.joined is True
+    assert detail.allow_draws is True
+    assert detail.creator.avatar == 1
+
+
+def test_get_detail_returns_none_when_the_league_does_not_exist(repo, db):
+    db.execute.return_value.first.return_value = None
+    assert repo.get_detail(league_id=99, user_id=7) is None
+
+
+def test_get_detail_normalizes_naive_created_at(repo, db):
+    league = fake_league()
+    league.min_participants = 3
+    db.execute.return_value.first.return_value = detail_row(league)
+    assert repo.get_detail(league_id=1, user_id=7).created_at.tzinfo is timezone.utc
+
+
+def test_get_detail_is_a_single_query_filtered_by_id(repo, db):
+    db.execute.return_value.first.return_value = None
+    repo.get_detail(league_id=5, user_id=7)
+
+    assert db.execute.call_count == 1
+    sql, params = compiled(db.execute.call_args.args[0])
+    assert "leagues.id =" in sql
+    assert 5 in params.values()
+
+
+def test_get_detail_does_not_filter_by_status_or_privacy(repo, db):
+    db.execute.return_value.first.return_value = None
+    repo.get_detail(league_id=5, user_id=7)
+
+    sql, _ = compiled(db.execute.call_args.args[0])
+    where = sql.split("WHERE", 1)[1]
+    assert "status" not in where
+    assert "private" not in where
