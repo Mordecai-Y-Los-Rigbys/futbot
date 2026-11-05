@@ -1,13 +1,9 @@
 from typing import Any, Dict, List
-from fastapi import Request, status
+from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app.schemas.auth import (
-    LogInBadRequest,
-    LogInFieldError,
-    MAX_EMAIL_LENGTH,
-)
+from app.schemas.auth import MAX_EMAIL_LENGTH
 
 REGISTER_FIELDS = ("username", "email", "password", "clubName", "avatar")
 
@@ -54,14 +50,6 @@ class ValidationApiError(ApiError):
 
 async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return exc.to_response()
-
-
-def is_unreadable_body(errors: List[Dict[str, Any]]) -> bool:
-    """JSON roto, body vacío o body que no es un objeto: el error es del body entero."""
-    return any(
-        err.get("type") in UNREADABLE_BODY_TYPES or tuple(err.get("loc", ())) == ("body",)
-        for err in errors
-    )
 
 
 # ------------------------------------------------------------------
@@ -135,7 +123,7 @@ def handle_register_validation_error(exc: RequestValidationError) -> JSONRespons
 
 def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
     """Traduce los errores de /auth/log-in al formato invalidFields del contrato."""
-    by_field: dict[str, LogInFieldError] = {}
+    by_field: Dict[str, Dict[str, str]] = {}
     for err in exc.errors():
         loc = tuple(err.get("loc", ()))
         if len(loc) >= 2 and loc[0] == "body" and loc[1] in LOGIN_FIELDS and loc[1] not in by_field:
@@ -143,18 +131,14 @@ def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
             if reason == "tooLong":
                 # Login no define tooLong (contrato): un email demasiado largo no es un email válido
                 reason = "invalidEmail"
-            by_field[loc[1]] = LogInFieldError(field=loc[1], reason=reason)
+            by_field[loc[1]] = {"field": loc[1], "reason": reason}
 
-    field_errors = sorted(by_field.values(), key=lambda fe: LOGIN_FIELDS.index(fe.field))
+    field_errors = sorted(by_field.values(), key=lambda fe: LOGIN_FIELDS.index(fe["field"]))
     if not field_errors:
         # Body ilegible (JSON roto, vacío, array): faltan ambos campos
-        field_errors = [LogInFieldError(field=f, reason="required") for f in LOGIN_FIELDS]
+        field_errors = [{"field": f, "reason": "required"} for f in LOGIN_FIELDS]
 
-    payload = LogInBadRequest(message="Revisá los campos marcados.", errors=field_errors)
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content=payload.model_dump(),
-    )
+    return ValidationApiError(field_errors).to_response()
 
 
 # ------------------------------------------------------------------
@@ -162,19 +146,31 @@ def handle_login_validation_error(exc: RequestValidationError) -> JSONResponse:
 # ------------------------------------------------------------------
 
 
+def _field_path(loc: tuple) -> str:
+    """("body", "members", 0, "playerId") -> "members[0].playerId"."""
+    path = ""
+    for part in loc[1:]:
+        if isinstance(part, int):
+            path += f"[{part}]"
+        else:
+            path += f".{part}" if path else str(part)
+    return path
+
+
 def handle_generic_validation_error(exc: RequestValidationError) -> JSONResponse:
-    errors = exc.errors()
-    only_missing = all(err.get("type") == "missing" for err in errors)
+    """Respaldo para endpoints con modelos de Pydantic sin handler propio."""
+    by_field: Dict[str, Dict[str, str]] = {}
+    for err in exc.errors():
+        if err.get("type") in UNREADABLE_BODY_TYPES:
+            continue
+        field = _field_path(tuple(err.get("loc", ())))
+        if field and field not in by_field:
+            by_field[field] = {"field": field, "reason": determine_rejection_reason(err, field)}
 
-    if only_missing or is_unreadable_body(errors):
-        code, message = "incompleteForm", "Completá todos los campos."
-    else:
-        code, message = "invalidFieldType", "Algún campo tiene un tipo inválido."
-
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": code, "message": message},
-    )
+    if not by_field:
+        # Body ilegible: sin el schema del endpoint no se sabe qué campos faltan
+        by_field["body"] = {"field": "body", "reason": "required"}
+    return ValidationApiError(list(by_field.values())).to_response()
 
 
 VALIDATION_HANDLERS = {
