@@ -9,6 +9,7 @@ from app.repositories.league_abstract import (
     JoinLeagueData,
     JoinLeagueStateConflict,
     LeagueListItemData,
+    LeagueParticipantData,
 )
 from app.domain.league import LeagueStatus
 from app.errors import ApiError
@@ -16,7 +17,13 @@ from app.helpers.ids import parse_path_id
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
-from app.schemas.league import LeagueCreator, LeagueDetail, LeaguePage, LeagueSummary
+from app.schemas.league import (
+    LeagueCreator,
+    LeagueDetail,
+    LeaguePage,
+    LeagueParticipant,
+    LeagueSummary,
+)
 from app.services.join_league_validation import parse_join_league
 from app.services.league_access_service import verify_league_password
 from app.services.league_validation import parse_create_league
@@ -61,6 +68,15 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
     )
 
 
+def _to_participant(data: LeagueParticipantData) -> LeagueParticipant:
+    return LeagueParticipant(
+        id=data.id,
+        username=data.username,
+        name=data.club_name,
+        avatar=data.avatar,
+    )
+    
+    
 class LeagueService:
     """Casos de uso de las ligas: listar, crear y obtener una."""
 
@@ -184,6 +200,13 @@ class LeagueService:
             min_participants=data.min_participants,
             joined=data.joined,
         )
+        
+    def list_participants(self, league_id: int) -> list[LeagueParticipant]:
+        """Participantes actuales de la liga, creador incluido, por id de usuario.
+
+        El 404 y el acceso a ligas privadas se resuelven antes de llamarlo.
+        """
+        return [_to_participant(p) for p in self.repo.list_participants(league_id)]
 
     def join_league(self, user_id: int, session_id: str, raw_league_id: str, body: Any) -> None:
         """Inscribe al usuario en una liga con su equipo (POST /leagues/{id}/participants).
