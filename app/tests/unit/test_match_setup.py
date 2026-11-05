@@ -60,6 +60,12 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
+    
+    def join(self, data):
+        raise NotImplementedError
+
+    def list_participants(self, league_id):
+        raise NotImplementedError
 
 
 class FakeTeams(AbstractTeamRepository):

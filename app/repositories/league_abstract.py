@@ -28,6 +28,13 @@ class LeagueListItemData(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+    
+
+class LeagueParticipantData(BaseModel):
+    id: int
+    username: str
+    club_name: str
+    avatar: int
 
 
 class LeagueDetailData(LeagueListItemData):
@@ -165,4 +172,11 @@ class AbstractLeagueRepository(ABC):
         Returns:
             None si inscribió; el código del conflicto si, al bloquear la
             liga, ya no admitía al usuario (en ese caso no persiste nada).
+        """
+        
+    @abstractmethod
+    def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
+        """Participantes actuales de la liga (creador incluido), por id de usuario ascendente.
+
+        Lista vacía si la liga no existe: el 404 lo resuelve quien llama.
         """
