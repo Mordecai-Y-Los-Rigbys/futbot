@@ -12,6 +12,7 @@ class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
 
+
 class LeaveLeagueConflict(BaseModel):
     code: Literal["notInPreparation", "notParticipating", "isCreator"]
     message: str
@@ -82,6 +83,8 @@ class JoinLeagueConflict(BaseModel):
         "behaviorTypeMismatch",
     ]
     message: str
+
+
 class NextSubstitutionsConflict(BaseModel):
     code: Literal["matchNotStarted"]
     message: str

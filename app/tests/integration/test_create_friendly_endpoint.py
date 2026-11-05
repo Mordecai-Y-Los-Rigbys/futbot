@@ -7,7 +7,6 @@ from app.main import app
 from app.models.match import Match
 from app.models.team_member import TeamMember
 from app.models.player import Player
-from app.models.team_member import TeamMember
 
 pytestmark = pytest.mark.integration
 

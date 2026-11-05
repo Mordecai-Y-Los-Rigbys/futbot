@@ -319,7 +319,7 @@ def test_query_count_does_not_grow_with_leagues(
             assert api.get("/leagues").status_code == 200
         return len(statements)
 
-    first = make_league(create_user("c0"), "L0")
+    make_league(create_user("c0"), "L0")
     one = measure()
 
     for i in range(1, 50):
