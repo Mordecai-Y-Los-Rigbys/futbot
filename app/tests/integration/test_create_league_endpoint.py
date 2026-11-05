@@ -107,5 +107,51 @@ def test_invalid_payload_persists_nothing(login_as, create_user, team_of, db_ses
     resp = login_as(creator).post("/leagues", json=body_for(team_of(creator), minParticipants=2))
 
     assert resp.status_code == 400
-    assert resp.json()["code"] == "minParticipantsTooLow"
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [{"field": "minParticipants", "reason": "outOfRange"}]
+    assert count(db_session, League) == 0
+
+
+def test_every_invalid_field_is_reported_in_order(login_as, create_user, team_of, db_session):
+    creator = create_user("creator")
+    members = team_of(creator)
+    members[0]["playerId"] = "x"
+
+    resp = login_as(creator).post(
+        "/leagues",
+        json=body_for(
+            members, name="", minParticipants=5, maxParticipants=4, private=True, password=None
+        ),
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["errors"] == [
+        {"field": "name", "reason": "required"},
+        {"field": "maxParticipants", "reason": "lessThanMin"},
+        {"field": "password", "reason": "required"},
+        {"field": "members[0].playerId", "reason": "invalidType"},
+    ]
+    assert count(db_session, League) == 0
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"content": "{", "headers": {"Content-Type": "application/json"}}, {"json": [1]}],
+)
+def test_unreadable_body_reports_every_required_field(login_as, create_user, db_session, kwargs):
+    resp = login_as(create_user("creator")).post("/leagues", **kwargs)
+
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [
+        {"field": f, "reason": "required"}
+        for f in (
+            "name",
+            "minParticipants",
+            "maxParticipants",
+            "matchDuration",
+            "private",
+            "members",
+        )
+    ]
     assert count(db_session, League) == 0

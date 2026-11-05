@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_current_user_id, get_player_service, get_json_body
 from app.api.pagination import parse_page
-from app.schemas.errors import Error, ListPageBadRequest, CreatePlayerBadRequest
+from app.schemas.errors import Error, ValidationBadRequest
 from app.schemas.player import PlayerPage, PlayerResponse
 from app.services.player_service import PAGE_SIZE, PlayerService
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/players", tags=["players"])
     operation_id="createPlayer",
     summary="Crear un jugador",
     responses={
-        400: {"model": CreatePlayerBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )
@@ -33,7 +33,7 @@ def create_player(
     "/me",
     response_model=PlayerPage,
     responses={
-        400: {"model": ListPageBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )

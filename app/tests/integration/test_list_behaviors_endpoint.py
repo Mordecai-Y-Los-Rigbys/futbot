@@ -114,3 +114,29 @@ def test_max_page_offset_does_not_overflow(login, make_behaviors):
     assert r.status_code == 200
     assert r.json()["items"] == []
     assert r.json()["total"] == 1
+
+
+@pytest.mark.parametrize(
+    "page, reason",
+    [
+        ("abc", "invalidType"),
+        ("", "invalidType"),
+        ("0", "outOfRange"),
+        ("2147483648", "outOfRange"),
+    ],
+)
+def test_invalid_page_is_400_invalid_fields(login, make_behaviors, page, reason):
+    make_behaviors(1, ["a"])
+
+    r = login(1).get(URL, params={"page": page})
+
+    assert r.status_code == 400
+    assert r.json()["code"] == "invalidFields"
+    assert r.json()["errors"] == [{"field": "page", "reason": reason}]
+
+
+def test_invalid_page_without_session_is_401(client):
+    r = client.get(URL, params={"page": "abc"})
+
+    assert r.status_code == 401
+    assert r.json()["code"] is None

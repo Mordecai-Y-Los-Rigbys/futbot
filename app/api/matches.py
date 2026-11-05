@@ -11,10 +11,10 @@ from app.api.deps import (
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
     Error,
-    JoinMatchBadRequest,
     JoinMatchConflict,
     JoinMatchForbidden,
-    NextSubstitutionsConflict
+    NextSubstitutionsConflict,
+    ValidationBadRequest,
 )
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import NextSubstitutions
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/matches", tags=["matches"])
     operation_id="joinMatch",
     summary="Crear una conexión a un partido y obtener el token del WebSocket",
     responses={
-        400: {"model": JoinMatchBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         403: {"model": JoinMatchForbidden},
         404: {"model": Error},

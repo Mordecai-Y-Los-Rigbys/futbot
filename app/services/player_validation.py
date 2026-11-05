@@ -1,9 +1,15 @@
 from typing import Any
 
-from app.errors import ApiError
+from app.errors import ValidationApiError
 from app.repositories.player_abstract import CreatePlayerData
-
-INVALID_JSON = object()  # sentinel: el body no se pudo parsear
+from app.services.field_validation import (
+    INVALID_JSON,
+    all_required,
+    field_error,
+    int_reason,
+    is_readable,
+    str_reason,
+)
 
 MAX_NAME_LEN = 20
 MIN_STAT, MAX_STAT = 20, 100
@@ -11,68 +17,34 @@ EXPECTED_SUM = 300
 STATS = ("power", "agility", "control", "strength", "speed")
 
 
-def _bad(code: str, message: str) -> ApiError:
-    return ApiError(400, code, message)
-
-
-def _is_int(v: Any) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
-
-
 def parse_create_player(body: Any) -> CreatePlayerData:
     """Valida el body de POST /players y devuelve los datos para crear el jugador.
 
-    Las reglas se evalúan en este orden y se lanza solo la primera que falla
-    (convención 6): invalidFieldType > incompleteForm > nameTooLong >
-    statOutOfRange > statSumMismatch. El nombre se guarda sin espacios al
-    principio ni al final.
+    Informa todos los campos que fallan, en el orden del schema (convención 6).
+    `stats` / `invalidSum` solo se evalúa si las cinco stats son válidas. El
+    nombre se guarda sin espacios al principio ni al final.
 
     Raises:
-        ApiError 400: con el código de la primera regla que falla.
+        ValidationApiError 400: invalidFields con todos los campos que fallan.
     """
 
-    if body is INVALID_JSON or (body is not None and not isinstance(body, dict)):
-        raise _bad("invalidFieldType", "El body debe ser un objeto JSON válido.")
+    if not is_readable(body):
+        raise ValidationApiError(all_required(("name", *STATS)))
 
-    body = body or {}
-
-    # Validación de tipos (invalidFieldType)
-    if "name" in body and not isinstance(body["name"], str):
-        raise _bad("invalidFieldType", "`name` debe ser un string.")
-
+    reasons = {"name": str_reason(body, "name", MAX_NAME_LEN, strip=True)}
     for stat in STATS:
-        if stat in body and not _is_int(body[stat]):
-            raise _bad("invalidFieldType", f"`{stat}` debe ser un número entero.")
+        reasons[stat] = int_reason(body, stat, MIN_STAT, MAX_STAT)
 
-    #  Formulario incompleto (incompleteForm)
-    if "name" not in body:
-        raise _bad("incompleteForm", "Falta `name`.")
-    if body["name"].strip() == "":
-        raise _bad("incompleteForm", "`name` no puede estar vacío.")
+    errors = [field_error(f, r) for f, r in reasons.items() if r]
+    stats_ok = not any(reasons[s] for s in STATS)
+    if stats_ok and sum(body[s] for s in STATS) != EXPECTED_SUM:
+        errors.append(field_error("stats", "invalidSum"))
 
-    for stat in STATS:
-        if stat not in body:
-            raise _bad("incompleteForm", f"Falta `{stat}`.")
-
-    # Límites y rangos
-    name = body["name"].strip()
-    if len(name) > MAX_NAME_LEN:
-        raise _bad("nameTooLong", f"`name` no puede superar {MAX_NAME_LEN} caracteres.")
-
-    for stat in STATS:
-        val = body[stat]
-        if not (MIN_STAT <= val <= MAX_STAT):
-            raise _bad("statOutOfRange", f"`{stat}` debe estar entre {MIN_STAT} y {MAX_STAT}.")
-
-    # Suma de stats
-    total_sum = sum(body[stat] for stat in STATS)
-    if total_sum != EXPECTED_SUM:
-        raise _bad(
-            "statSumMismatch", f"La suma de las estadísticas debe ser exactamente {EXPECTED_SUM}."
-        )
+    if errors:
+        raise ValidationApiError(errors)
 
     return CreatePlayerData(
-        name=name,
+        name=body["name"].strip(),
         power=body["power"],
         agility=body["agility"],
         control=body["control"],

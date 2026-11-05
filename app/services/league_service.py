@@ -11,10 +11,8 @@ from app.repositories.league_abstract import (
     LeagueListItemData,
 )
 from app.domain.league import LeagueStatus
-from app.errors import ApiError
 from app.helpers.ids import parse_path_id
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
-from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.league import LeagueCreator, LeagueDetail, LeaguePage, LeagueSummary
 from app.services.join_league_validation import parse_join_league
@@ -106,13 +104,13 @@ class LeagueService:
             body: JSON del request, todavía sin validar.
 
         Raises:
-            ApiError 400: el body no cumple el contrato (ver parse_create_league).
+            ValidationApiError 400: invalidFields (ver parse_create_league).
             ApiError 409: playerOrBehaviorNotOwned.
 
         Returns:
             La liga creada.
         """
-        data = parse_create_league(body)  # todos los 400, en orden
+        data = parse_create_league(body)  # 400
 
         # 409: solo si no falló ningún 400
         ensure_owned_team(self.players, self.behaviors, creator_id, data.members)
