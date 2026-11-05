@@ -90,7 +90,8 @@ def test_invalid_body_is_400_and_creates_nothing(client, login, db_session, setu
     user, players, behaviors = setup
     login(user.id)
     r = client.post("/friendlies", json=payload(players, behaviors, name="x" * 21))
-    assert r.status_code == 400 and r.json()["code"] == "nameTooLong"
+    assert r.status_code == 400 and r.json()["code"] == "invalidFields"
+    assert r.json()["errors"] == [{"field": "name", "reason": "tooLong"}]
     assert db_session.query(Match).count() == 0
     assert expiry.calls == []
 
@@ -145,3 +146,40 @@ def test_invalid_cookie_is_401(client, expiry):
     client.cookies.set("session_id", "no-existe")
     r = client.post("/friendlies", json={"name": 5})
     assert r.status_code == 401 and r.json()["code"] is None
+
+
+def test_every_invalid_field_is_reported_in_order(client, login, db_session, setup, expiry):
+    user, players, behaviors = setup
+    login(user.id)
+    body = payload(players, behaviors, name=5)
+    body["members"][1]["behaviorId"] = 0
+    body["members"][4] = "x"
+
+    r = client.post("/friendlies", json=body)
+
+    assert r.status_code == 400
+    assert r.json()["errors"] == [
+        {"field": "name", "reason": "invalidType"},
+        {"field": "members[1].behaviorId", "reason": "outOfRange"},
+        {"field": "members[4]", "reason": "invalidType"},
+    ]
+    assert db_session.query(Match).count() == 0
+    assert expiry.calls == []
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"content": "{", "headers": {"Content-Type": "application/json"}}, {"json": "x"}],
+)
+def test_unreadable_body_reports_name_and_members(client, login, db_session, setup, expiry, kwargs):
+    user, _, _ = setup
+    login(user.id)
+
+    r = client.post("/friendlies", **kwargs)
+
+    assert r.status_code == 400
+    assert r.json()["errors"] == [
+        {"field": "name", "reason": "required"},
+        {"field": "members", "reason": "required"},
+    ]
+    assert db_session.query(Match).count() == 0
