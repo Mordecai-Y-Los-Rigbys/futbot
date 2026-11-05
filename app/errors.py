@@ -6,8 +6,6 @@ from fastapi.responses import JSONResponse
 from app.schemas.auth import (
     LogInBadRequest,
     LogInFieldError,
-    RegisterUserBadRequest,
-    RegisterUserFieldError,
     MAX_EMAIL_LENGTH,
 )
 
@@ -108,32 +106,26 @@ def _register_field(error_detail: Dict[str, Any]) -> str | None:
     return None
 
 
-def build_field_error(error_detail: Dict[str, Any]) -> RegisterUserFieldError | None:
+def build_field_error(error_detail: Dict[str, Any]) -> Dict[str, str] | None:
     field = _register_field(error_detail)
     if field is None:
         return None
-    return RegisterUserFieldError(
-        field=field, reason=determine_rejection_reason(error_detail, field)
-    )
+    return {"field": field, "reason": determine_rejection_reason(error_detail, field)}
 
 
 def handle_register_validation_error(exc: RequestValidationError) -> JSONResponse:
-    by_field: dict[str, RegisterUserFieldError] = {}
+    by_field: Dict[str, Dict[str, str]] = {}
     for err in exc.errors():
         fe = build_field_error(err)
-        if fe is not None and fe.field not in by_field:
-            by_field[fe.field] = fe
+        if fe is not None and fe["field"] not in by_field:
+            by_field[fe["field"]] = fe
 
-    field_errors = sorted(by_field.values(), key=lambda fe: REGISTER_FIELDS.index(fe.field))
+    field_errors = sorted(by_field.values(), key=lambda fe: REGISTER_FIELDS.index(fe["field"]))
     if not field_errors:
         # Body ilegible (JSON roto, vacío, array): se reportan los cinco campos
-        field_errors = [RegisterUserFieldError(field=f, reason="required") for f in REGISTER_FIELDS]
+        field_errors = [{"field": f, "reason": "required"} for f in REGISTER_FIELDS]
 
-    payload = RegisterUserBadRequest(message="Revisá los campos marcados.", errors=field_errors)
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content=payload.model_dump(by_alias=True),
-    )
+    return ValidationApiError(field_errors).to_response()
 
 
 # ------------------------------------------------------------------

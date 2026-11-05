@@ -23,19 +23,6 @@ class User(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
-class RegisterUserFieldError(BaseModel):
-
-    field: Literal["username", "email", "password", "clubName", "avatar"]
-    reason: Literal["required", "tooLong", "invalidEmail", "invalidType", "outOfRange"]
-
-
-class RegisterUserBadRequest(BaseModel):
-
-    code: Literal["invalidFields"] = "invalidFields"
-    message: str
-    errors: list[RegisterUserFieldError]
-
-
 class ErrorResponse(BaseModel):
 
     code: str | None
