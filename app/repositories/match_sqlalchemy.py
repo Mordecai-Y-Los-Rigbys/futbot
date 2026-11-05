@@ -1,20 +1,57 @@
 from sqlalchemy import select, update
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.domain.match import MatchStatus
 from app.models.match import Match
 from app.models.user import User
+from app.repositories.friendly_sqlalchemy import to_club_data
+from app.repositories.league_access_abstract import LeagueAccessInfo
 from app.repositories.match_abstract import (
     AbstractMatchRepository,
+    MatchDetailData,
+    MatchPlayersData,
     MatchSetupData,
-    MatchStateData,
-    MatchPlayersData
+    MatchStateData
 )
 
 
 class SqlAlchemyMatchRepository(AbstractMatchRepository):
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def get_detail(self, match_id: int) -> MatchDetailData | None:
+        match = self.db.get(
+            Match,
+            match_id,
+            options=[
+                joinedload(Match.user_1),
+                joinedload(Match.user_2),
+                joinedload(Match.league),
+            ],
+        )
+        if match is None:
+            return None
+        league = match.league
+        return MatchDetailData(
+            id=match.id,
+            league_id=match.league_id,
+            name=match.name,
+            status=match.status,
+            club1=to_club_data(match.user_1),
+            club2=to_club_data(match.user_2) if match.user_2 is not None else None,
+            scheduled_at=match.scheduled_at,
+            created_at=match.created_at,
+            score_1=match.score_1,
+            score_2=match.score_2,
+            league=(
+                LeagueAccessInfo(
+                    league.id,
+                    league.creator_id,
+                    league.private,
+                    league.password
+                ) if league is not None else None
+            ),
+        )
 
     def get_state(self, match_id: int) -> MatchStateData | None:
         record = self.db.get(Match, match_id)
@@ -71,7 +108,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
     def save_seed(self, match_id: int, seed: int) -> None:
         self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
         self.db.commit()
-    
+
     def get_players(self, match_id: int) -> MatchPlayersData | None:
         row = self.db.execute(
             select(Match.id, Match.status, Match.user_1_id, Match.user_2_id).where(
