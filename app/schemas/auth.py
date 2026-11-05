@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
+MAX_EMAIL_LENGTH = 254
+
 
 class RegisterUserRequest(BaseModel):
 
@@ -19,19 +21,6 @@ class User(BaseModel):
     club_name: str = Field(serialization_alias="clubName")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-
-
-class RegisterUserFieldError(BaseModel):
-
-    field: Literal["username", "email", "password", "clubName", "avatar"]
-    reason: Literal["required", "tooLong", "invalidEmail", "invalidType"]
-
-
-class RegisterUserBadRequest(BaseModel):
-
-    code: Literal["invalidFields"] = "invalidFields"
-    message: str
-    errors: list[RegisterUserFieldError]
 
 
 class ErrorResponse(BaseModel):
