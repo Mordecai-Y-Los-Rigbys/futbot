@@ -23,7 +23,9 @@ def test_openapi_documents_the_auth_error_schemas():
 
     schemas = app.openapi()["components"]["schemas"]
     assert "LogInBadRequest" in schemas
-    assert "RegisterUserBadRequest" in schemas
+    register_400 = app.openapi()["paths"]["/auth/register"]["post"]["responses"]["400"]
+    schema = register_400["content"]["application/json"]["schema"]
+    assert schema["$ref"].endswith("/ValidationBadRequest")
 
 
 def test_register_success_exact_limits(client):
