@@ -31,9 +31,11 @@ class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
 
+
 class LeaveLeagueConflict(BaseModel):
     code: Literal["notInPreparation", "notParticipating", "isCreator"]
     message: str
+
 
 class CreatePlayerBadRequest(BaseModel):
     code: Literal[
@@ -126,6 +128,21 @@ class JoinLeagueConflict(BaseModel):
         "behaviorTypeMismatch",
     ]
     message: str
+
+
 class NextSubstitutionsConflict(BaseModel):
     code: Literal["matchNotStarted"]
+    message: str
+
+
+# --- PUT /matches/{id}/behavior ------------------------------------------------
+
+
+class MatchBehaviorForbidden(BaseModel):
+    code: Literal["notAPlayerInMatch", "playerNotStarter"]
+    message: str
+
+
+class MatchBehaviorConflict(BaseModel):
+    code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
