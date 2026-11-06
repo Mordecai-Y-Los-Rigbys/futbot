@@ -30,6 +30,7 @@ from app.services.match_connection_service import MatchConnectionService
 from app.services.player_service import PlayerService
 from app.services.session_service import SessionService
 from app.services.substitution_service import SubstitutionService
+from app.api.ws_deps import get_match_runner
 from app.services.user_service import UserService
 
 
@@ -94,9 +95,12 @@ def get_auth_service(
 
 
 
-def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
+def get_substitution_service(
+    db: Session = Depends(get_db),
+    runner=Depends(get_match_runner),
+) -> SubstitutionService:
     return SubstitutionService(
-        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db)
+        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db), runner
     )
 
 
