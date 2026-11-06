@@ -282,7 +282,7 @@ def test_failure_deleting_substitutions_does_not_stop_the_match(caplog):
     def boom(match_id):
         raise RuntimeError("base caída")
 
-    substitutions.delete_first_per_team = boom
+    substitutions.delete_by_match = boom
     ws = FakeWs()
     run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
     assert len(ws.received) == PAUSED_TOTAL
