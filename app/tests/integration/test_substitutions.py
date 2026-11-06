@@ -16,6 +16,8 @@ from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
 from app.models.substitution import Substitution
+from app.api.ws_deps import get_match_runner
+from app.main import app
 from app.models.team_member import MemberRole, TeamMember
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 
@@ -456,3 +458,45 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
     assert r.json()["club1"] == dict(
         zip(("starterName", "substituteName"), names_of(db_session, teams[1], 0, 3))
     )
+
+
+
+def test_put_endpoint_persists_and_replaces_the_team_pending_substitution(
+    login, friendly_match, db_session
+):
+    match, teams = friendly_match
+
+    class Runtime:
+        def get_runtime_state(self, match_id):
+            assert match_id == match.id
+            return type("State", (), {"in_penalties": False, "pauses_left": 2})()
+
+    app.dependency_overrides[get_match_runner] = lambda: Runtime()
+    try:
+        api = login(1)
+        first = api.put(
+            f"/matches/{match.id}/substitutions",
+            json={
+                "starterId": teams[1][0].player_id,
+                "substituteId": teams[1][3].player_id,
+            },
+        )
+        assert first.status_code == 204
+
+        second = api.put(
+            f"/matches/{match.id}/substitutions",
+            json={
+                "starterId": teams[1][1].player_id,
+                "substituteId": teams[1][4].player_id,
+            },
+        )
+        assert second.status_code == 204
+
+        rows = db_session.scalars(
+            select(Substitution).where(Substitution.match_id == match.id)
+        ).all()
+        assert len(rows) == 1
+        assert rows[0].member_out_id == teams[1][1].id
+        assert rows[0].member_in_id == teams[1][4].id
+    finally:
+        app.dependency_overrides.pop(get_match_runner, None)
