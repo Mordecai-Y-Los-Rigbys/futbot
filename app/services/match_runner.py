@@ -21,9 +21,11 @@ from app.services.match_broadcast import (
     build_tick_payload,
 )
 from app.services.match_connection_manager import MatchConnectionManager
-from app.services.match_setup_service import MatchSetup
+from app.services.match_setup_service import MatchSetup, to_player_setup
 from app.simulation import constants as C
+from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.match_rules import MatchSession, Phase, TickResult, build_session
+from app.simulation.state import Team
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +133,7 @@ class MatchRunner:
                 club_2=setup.club_2_name,
                 countdown_seconds=round(setup.countdown_seconds),
             )
-            await self._play(match_id, session, context)
+            await self._play(match_id, session, context, setup)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -151,12 +153,17 @@ class MatchRunner:
         with self._repo_scope() as repo:
             repo.save_seed(match_id, seed)
 
-    async def _play(self, match_id: int, session: MatchSession, context: TickContext) -> None:
+    async def _play(
+        self, match_id: int, session: MatchSession, context: TickContext, setup: MatchSetup
+    ) -> None:
         loop = asyncio.get_running_loop()
         started = False
         previous_phase: Phase | None = None
         start = self._monotonic()
         while True:
+            if session.next_tick_starts_pause:
+                # Antes del primer tick de la pausa, para que ya muestre al suplente.
+                await self._start_pause(match_id, session, setup)
             began = self._monotonic()
             result = await loop.run_in_executor(self._executor, session.advance)
             with self._runtime_lock:
@@ -197,6 +204,34 @@ class MatchRunner:
     def _mark_started(self, match_id: int) -> None:
         with self._repo_scope() as repo:
             repo.mark_started(match_id)
+
+    async def _start_pause(self, match_id: int, session: MatchSession, setup: MatchSetup) -> None:
+        """Aplica la sustitución de cada equipo. Si falla, el partido sigue sin cambios."""
+        try:
+            substitutions = await run_in_threadpool(self._apply_substitutions, match_id)
+            for user_id, player, behavior in substitutions:
+                if user_id == setup.user_1_id:
+                    team = Team.HOME
+                elif user_id == setup.user_2_id:
+                    team = Team.AWAY
+                else:
+                    logger.warning("El usuario %s no juega el partido %s", user_id, match_id)
+                    continue
+                session.substitute(team, player.role, player, behavior)
+        except Exception:
+            logger.exception("No se pudieron aplicar los cambios del partido %s", match_id)
+
+    def _apply_substitutions(self, match_id: int) -> list:
+        with self._substitution_scope() as repo:
+            applied = repo.apply_by_match(match_id)
+        return [
+            (
+                item.user_id,
+                to_player_setup(item.incoming),
+                compile_behavior(item.incoming.behavior_code),
+            )
+            for item in applied
+        ]
 
     def _end_pause(self, match_id: int) -> None:
         try:
