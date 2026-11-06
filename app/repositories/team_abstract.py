@@ -16,5 +16,19 @@ class StarterData(BaseModel):
 
 class AbstractTeamRepository(ABC):
     @abstractmethod
-    def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:
+    def get_team_player_ids(
+        self, match_id: int, league_id: int | None, user_id: int, *, substitutes: bool
+    ) -> set[int]:
+        """IDs de jugadores titulares o suplentes de la alineación efectiva actual."""
+
+    @abstractmethod
+    def get_member_id(
+        self, match_id: int, league_id: int | None, user_id: int, player_id: int
+    ) -> int | None:
+        """ID de la fila team_members que representa al jugador en el equipo."""
+
+    @abstractmethod
+    def get_starters(
+        self, match_id: int, league_id: int | None, user_id: int
+    ) -> list[StarterData]:
         """Titulares del usuario: del equipo del partido (amistoso) o de la liga."""
