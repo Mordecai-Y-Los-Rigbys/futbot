@@ -19,6 +19,7 @@ from app.repositories.player_abstract import AbstractPlayerRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
+from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
@@ -100,7 +101,10 @@ def get_substitution_service(
     runner=Depends(get_match_runner),
 ) -> SubstitutionService:
     return SubstitutionService(
-        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db), runner
+        SqlAlchemyMatchRepository(db),
+        SqlAlchemyTeamRepository(db),
+        SqlAlchemySubstitutionRepository(db),
+        runner,
     )
 
 
