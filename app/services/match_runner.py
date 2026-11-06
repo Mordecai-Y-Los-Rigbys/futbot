@@ -4,6 +4,8 @@ import asyncio
 import logging
 import secrets
 import time
+from dataclasses import dataclass
+from threading import Lock
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager
@@ -30,6 +32,12 @@ END_REASON = "matchEnd"
 ERROR_CODE = 1011
 ERROR_REASON = "matchError"
 MAX_TICK_COMPUTE = 0.1  # segundos: criterio de rendimiento
+
+
+@dataclass(frozen=True)
+class MatchRuntimeState:
+    pauses_left: int
+    in_penalties: bool = False
 
 
 class MatchRunner:
@@ -65,6 +73,8 @@ class MatchRunner:
         self._seed_factory = seed_factory
         self._send_timeout = send_timeout
         self._tasks: dict[int, asyncio.Task] = {}
+        self._runtime_states: dict[int, MatchRuntimeState] = {}
+        self._runtime_lock = Lock()
 
     def start(self, match_id: int) -> asyncio.Task:
         """Arranca el partido (idempotente). Hay que llamarlo con el event loop corriendo."""
@@ -75,6 +85,10 @@ class MatchRunner:
         self._tasks[match_id] = task
         task.add_done_callback(lambda t, mid=match_id: self._forget(mid, t))
         return task
+
+    def get_runtime_state(self, match_id: int) -> MatchRuntimeState | None:
+        with self._runtime_lock:
+            return self._runtime_states.get(match_id)
 
     def is_running(self, match_id: int) -> bool:
         """True si el partido se está jugando en este proceso."""
@@ -92,6 +106,8 @@ class MatchRunner:
     def _forget(self, match_id: int, task: asyncio.Task) -> None:
         if self._tasks.get(match_id) is task:
             del self._tasks[match_id]
+            with self._runtime_lock:
+                self._runtime_states.pop(match_id, None)
 
     async def _run(self, match_id: int) -> None:
         try:
@@ -143,6 +159,11 @@ class MatchRunner:
         while True:
             began = self._monotonic()
             result = await loop.run_in_executor(self._executor, session.advance)
+            with self._runtime_lock:
+                self._runtime_states[match_id] = MatchRuntimeState(
+                    pauses_left=session.pauses_remaining,
+                    in_penalties=(result.phase.value == "penalties"),
+                )
             compute = self._monotonic() - began
             if compute > MAX_TICK_COMPUTE:
                 logger.warning(
