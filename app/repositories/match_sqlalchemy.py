@@ -74,12 +74,13 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
     
     def get_players(self, match_id: int) -> MatchPlayersData | None:
         row = self.db.execute(
-            select(Match.id, Match.status, Match.user_1_id, Match.user_2_id).where(
+            select(Match.id, Match.league_id, Match.status, Match.user_1_id, Match.user_2_id).where(
                 Match.id == match_id
             )
         ).first()
         if row is None:
             return None
         return MatchPlayersData(
-            id=row.id, status=row.status, user_1_id=row.user_1_id, user_2_id=row.user_2_id
+            id=row.id, league_id=row.league_id, status=row.status, user_1_id=row.user_1_id, user_2_id=row.user_2_id
         )
+
