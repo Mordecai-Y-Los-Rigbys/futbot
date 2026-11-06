@@ -13,6 +13,7 @@ from app.repositories.league_abstract import (
     LeagueDetailData,
     LeagueListItemData,
     LeaguePageData,
+    LeagueFixtureData
 )
 from app.services.league_service import LeagueService
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers, FakeTeams
@@ -31,6 +32,8 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         self.removed: list[tuple[int, int]] = []
         self.details: dict[int, LeagueDetailData] = {}
         self.detail_calls: list[tuple[int, int]] = []
+        self.fixtures: dict[int, LeagueFixtureData] = {}
+        self.fixture_calls: list[int] = []
 
     def list_page(self, name, offset, limit):
         self.calls.append({"name": name, "offset": offset, "limit": limit})
@@ -75,6 +78,10 @@ class FakeLeagueRepository(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
+    
+    def get_fixture(self, league_id):
+        self.fixture_calls.append(league_id)
+        return self.fixtures.get(league_id)
 
 
 class FakeSessionService:
