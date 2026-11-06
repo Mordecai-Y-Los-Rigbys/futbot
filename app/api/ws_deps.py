@@ -101,7 +101,7 @@ _friendly_start = FriendlyStartService(_start_repo_scope, _start_simulation)
 def _league_match_start_repo_scope() -> Iterator[SqlAlchemyLeagueMatchStartRepository]:
     with SessionLocal() as db:
         yield SqlAlchemyLeagueMatchStartRepository(db)
-        
+
 
 _league_match_start = LeagueMatchStartService(_league_match_start_repo_scope, _start_simulation)
 

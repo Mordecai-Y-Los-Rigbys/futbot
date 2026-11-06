@@ -33,12 +33,12 @@ class LeagueMatchStartService:
     Si la app se reinicia, `recover()` reprograma los partidos de liga que
     siguen `scheduled`. Los que ya tendrían que haber arrancado, arrancan enseguida.
     """
-    
+
     def __init__(self, repo_scope: RepoScope, on_start: OnStart | None = None) -> None:
         self._repo_scope = repo_scope
         self._on_start = on_start
         self._tasks: dict[int, asyncio.Task] = {}
-        
+
     def schedule(self, match_id: int, scheduled_at: datetime) -> None:
         """Llamar con el event loop corriendo y el partido ya guardado.
 
@@ -46,10 +46,8 @@ class LeagueMatchStartService:
         """
         self.unschedule(match_id)
         delay = (scheduled_at - _utcnow()).total_seconds()
-        self._tasks[match_id] = asyncio.get_running_loop().create_task(
-            self._run(match_id, delay)
-        )
-        
+        self._tasks[match_id] = asyncio.get_running_loop().create_task(self._run(match_id, delay))
+
     def unschedule(self, match_id: int) -> None:
         """Cancela el arranque pendiente del partido, si lo hay."""
         task = self._tasks.pop(match_id, None)

@@ -17,7 +17,7 @@ from app.api.ws_deps import (
     get_friendly_expiry,
     get_friendly_start,
     get_league_match_start,
-    get_match_runner
+    get_match_runner,
 )
 from app.api.matches import router as matches_router
 from app.api.users import router as users_router
