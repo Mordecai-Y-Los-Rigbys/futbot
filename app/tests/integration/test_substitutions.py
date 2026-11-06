@@ -20,6 +20,7 @@ from app.api.ws_deps import get_match_runner
 from app.main import app
 from app.models.team_member import MemberRole, TeamMember
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
+from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 
 pytestmark = pytest.mark.integration
 
@@ -500,3 +501,145 @@ def test_put_endpoint_persists_and_replaces_the_team_pending_substitution(
         assert rows[0].member_in_id == teams[1][4].id
     finally:
         app.dependency_overrides.pop(get_match_runner, None)
+
+
+
+# --- ejecución de la sustitución (apply_by_match) -----------------------------
+
+
+def roles_of(db, team):
+    return [db.get(TeamMember, m.id).role for m in team]
+
+
+def test_apply_swaps_the_roles_and_each_member_keeps_its_behavior(
+    db_session, friendly_match, make_behaviors
+):
+    match, teams = friendly_match
+    team = teams[1]
+    out_behavior = make_behaviors(1, ["sale"], code="go_to(1, 1)")[0]
+    in_behavior = make_behaviors(1, ["entra"], code="go_to(2, 2)")[0]
+    team[0].behavior_id = out_behavior.id
+    team[3].behavior_id = in_behavior.id
+    db_session.commit()
+    substitute(db_session, match, team, out_idx=0, in_idx=3)
+
+    applied = SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)
+
+    assert roles_of(db_session, team)[0] is MemberRole.substitute
+    assert roles_of(db_session, team)[3] is MemberRole.forward  # toma el rol del titular
+    assert db_session.get(TeamMember, team[0].id).behavior_id == out_behavior.id
+    assert db_session.get(TeamMember, team[3].id).behavior_id == in_behavior.id
+    assert len(applied) == 1
+    assert applied[0].user_id == 1
+    assert applied[0].incoming.player_id == team[3].player_id
+    assert applied[0].incoming.role is MemberRole.forward
+    assert applied[0].incoming.behavior_code == "go_to(2, 2)"
+    assert applied[0].incoming.power == 60
+
+
+def test_the_substitution_is_still_listed_during_the_pause_and_gone_when_it_ends(
+    db_session, friendly_match
+):
+    match, teams = friendly_match
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    repo = SqlAlchemySubstitutionRepository(db_session)
+
+    repo.apply_by_match(match.id)  # empieza la pausa
+
+    shown = by_user(db_session, match)[1]
+    assert (shown.starter_name, shown.substitute_name) == names_of(
+        db_session, teams[1], out_idx=0, in_idx=3
+    )
+
+    assert repo.delete_by_match(match.id) == 1  # termina la pausa
+    assert by_user(db_session, match) == {}
+
+
+def test_applying_twice_does_not_swap_back(db_session, friendly_match):
+    match, teams = friendly_match
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    repo = SqlAlchemySubstitutionRepository(db_session)
+
+    assert len(repo.apply_by_match(match.id)) == 1
+    assert repo.apply_by_match(match.id) == []
+
+    assert roles_of(db_session, teams[1])[0] is MemberRole.substitute
+    assert roles_of(db_session, teams[1])[3] is MemberRole.forward
+
+
+def test_each_team_applies_only_its_own_substitution(db_session, friendly_match):
+    match, teams = friendly_match
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    substitute(db_session, match, teams[2], out_idx=2, in_idx=5)
+
+    applied = SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)
+
+    assert [a.user_id for a in applied] == [1, 2]
+    assert roles_of(db_session, teams[1]) == [
+        MemberRole.substitute,
+        MemberRole.midfield,
+        MemberRole.defense,
+        MemberRole.forward,
+        MemberRole.substitute,
+        MemberRole.substitute,
+    ]
+    assert roles_of(db_session, teams[2]) == [
+        MemberRole.forward,
+        MemberRole.midfield,
+        MemberRole.substitute,
+        MemberRole.substitute,
+        MemberRole.substitute,
+        MemberRole.defense,
+    ]
+
+
+def test_the_change_persists_in_the_league_team_for_the_next_match(db_session, league_match):
+    match, teams = league_match
+    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)
+
+    SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)
+    SqlAlchemySubstitutionRepository(db_session).delete_by_match(match.id)
+
+    league_team = db_session.scalars(
+        select(TeamMember).where(
+            TeamMember.league_id == match.league_id, TeamMember.user_id == 1
+        )
+    ).all()
+    by_player = {m.player_id: m.role for m in league_team}
+    assert by_player[teams[1][4].player_id] is MemberRole.midfield
+    assert by_player[teams[1][1].player_id] is MemberRole.substitute
+
+
+def test_there_are_always_three_starters_and_three_substitutes_after_three_substitutions(
+    db_session, friendly_match
+):
+    match, teams = friendly_match
+    team = teams[1]
+    repo = SqlAlchemySubstitutionRepository(db_session)
+
+    for out_idx, in_idx in ((0, 3), (1, 4), (2, 5)):  # una por pausa
+        substitute(db_session, match, team, out_idx=out_idx, in_idx=in_idx)
+        repo.apply_by_match(match.id)  # empieza la pausa
+        repo.delete_by_match(match.id)  # termina la pausa
+
+        roles = roles_of(db_session, team)
+        assert sorted(r.value for r in roles if r is not MemberRole.substitute) == [
+            "defense",
+            "forward",
+            "midfield",
+        ]
+        assert roles.count(MemberRole.substitute) == 3
+
+
+def test_after_applying_the_team_repository_sees_the_new_lineup(db_session, friendly_match):
+    match, teams = friendly_match
+    team = teams[1]
+    substitute(db_session, match, team, out_idx=0, in_idx=3)
+    SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)
+
+    teams_repo = SqlAlchemyTeamRepository(db_session)
+    starters = teams_repo.get_team_player_ids(match.id, None, 1, substitutes=False)
+    substitutes = teams_repo.get_team_player_ids(match.id, None, 1, substitutes=True)
+
+    assert team[3].player_id in starters
+    assert team[0].player_id in substitutes
