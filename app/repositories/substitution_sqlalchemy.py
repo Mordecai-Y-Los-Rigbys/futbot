@@ -1,4 +1,5 @@
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
 
 from app.models.player import Player
@@ -39,3 +40,23 @@ class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
         result = self.db.execute(delete(Substitution).where(Substitution.match_id == match_id))
         self.db.commit()
         return result.rowcount
+
+    def upsert(
+        self, match_id: int, user_id: int, member_in_id: int, member_out_id: int
+    ) -> None:
+        # INSERT .. ON CONFLICT hace atómico el reemplazo incluso ante PUT concurrentes.
+        statement = pg_insert(Substitution).values(
+            match_id=match_id,
+            user_id=user_id,
+            member_in_id=member_in_id,
+            member_out_id=member_out_id,
+        )
+        statement = statement.on_conflict_do_update(
+            index_elements=[Substitution.match_id, Substitution.user_id],
+            set_={
+                "member_in_id": statement.excluded.member_in_id,
+                "member_out_id": statement.excluded.member_out_id,
+            },
+        )
+        self.db.execute(statement)
+        self.db.commit()
