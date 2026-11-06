@@ -126,6 +126,7 @@ class JoinLeagueConflict(BaseModel):
         "behaviorTypeMismatch",
     ]
     message: str
-class NextSubstitutionsConflict(BaseModel):
-    code: Literal["matchNotStarted"]
+    
+class SubstitutionsConflict(BaseModel):
+    code: Literal["matchNotStarted", "matchInPenalties", "noPausesLeft"]
     message: str

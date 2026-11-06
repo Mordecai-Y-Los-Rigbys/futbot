@@ -20,6 +20,7 @@ Si el último tick de un período es un gol, el reacomodo del gol se aplica en
 el primer tick de la pausa: la pelota nunca queda dentro del arco en `paused`.
 """
 
+import copy
 import enum
 import math
 from collections.abc import Mapping, Sequence
@@ -35,7 +36,7 @@ from app.simulation.physics import (
     reset_positions,
     step,
 )
-from app.simulation.state import Goal, MatchState, PlayerKey, Team
+from app.simulation.state import Goal, MatchState, PlayerKey, PlayerState, Team
 from app.domain.team_member import MemberRole
 
 
@@ -127,6 +128,7 @@ class MatchSession:
         self._score_2 = 0
         self._pending_reset = False
         self._finished = False
+        self._last_phase: Phase | None = None
 
     def _build_segments(self) -> list[_Segment]:
         base = self._play_ticks // self._periods
@@ -150,6 +152,66 @@ class MatchSession:
     @property
     def total_ticks(self) -> int:
         return sum(s.ticks for s in self._segments)
+
+    @property
+    def pauses_remaining(self) -> int:
+        """Pausas disponibles, contando también el último tick de la pausa actual."""
+        remaining = sum(
+            1 for segment in self._segments[self._seg_index:] if segment.phase is Phase.PAUSED
+        )
+        # advance() adelanta el índice al producir el último tick del segmento.
+        # Ese tick sigue perteneciendo a la pausa y todavía admite solicitudes.
+        if (
+            self._last_phase is Phase.PAUSED
+            and (
+                self._seg_index >= len(self._segments)
+                or self._segments[self._seg_index].phase is not Phase.PAUSED
+            )
+        ):
+            remaining += 1
+        return remaining
+
+    @property
+    def next_tick_starts_pause(self) -> bool:
+        """True si el próximo `advance()` produce el primer tick de una pausa.
+
+        Es el momento de aplicar las sustituciones: tiene que ser antes de
+        ese tick para que ya muestre al suplente en la cancha.
+        """
+        return (
+            self._offset == 0
+            and self._seg_index < len(self._segments)
+            and self._segments[self._seg_index].phase is Phase.PAUSED
+        )
+
+    def substitute(
+        self,
+        team: Team,
+        role: MemberRole,
+        player: PlayerSetup,
+        behavior: CompiledBehavior,
+    ) -> None:
+        """El suplente `player` toma el lugar del titular de `role` en `team`.
+
+        Entra en la posición del titular, con su propio comportamiento y sin
+        heredar su movimiento ni sus cooldowns. El número de camiseta sale del
+        rol, así que el jugador conserva el `key` del titular. Siempre quedan
+        tres titulares por equipo.
+        """
+        key: PlayerKey = (team, role.number)  # un suplente no tiene número: ValueError
+        state = copy.deepcopy(self._state)  # los ticks ya emitidos no deben cambiar
+        starter = state.player(key)
+        replacement = PlayerState(
+            player_id=player.player_id,
+            team=team,
+            role=role,
+            stats=player.stats,
+            position=starter.position,
+            facing=starter.facing,
+        )
+        state.players[state.players.index(starter)] = replacement
+        self._state = state
+        self._behaviors = {**self._behaviors, key: behavior}
 
     @property
     def pause_starts(self) -> list[float]:
@@ -178,11 +240,14 @@ class MatchSession:
             self._restart()
 
         if segment.phase is Phase.PAUSED:
-            return self._pause_tick(seq, segment, offset)
-        if segment.phase is Phase.COUNTDOWN:
+            result = self._pause_tick(seq, segment, offset)
+        elif segment.phase is Phase.COUNTDOWN:
             event = Event.PERIOD_START if offset == 0 else None
-            return self._result(seq, segment, event)
-        return self._play(seq, segment)
+            result = self._result(seq, segment, event)
+        else:
+            result = self._play(seq, segment)
+        self._last_phase = result.phase
+        return result
 
     def _restart(self) -> None:
         """Saque normal: posiciones iniciales, pelota libre y quieta, sin

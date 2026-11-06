@@ -3,12 +3,12 @@
 import pytest
 
 from app.domain.team_member import MemberRole
-from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import MatchSetupData
-from app.repositories.team_abstract import AbstractTeamRepository, StarterData
+from app.repositories.team_abstract import StarterData
 from app.services.match_setup_service import MatchSetupService
 from app.simulation.constants import STARTER_ROLES, FRIENDLY_MATCH_DURATION
 from app.tests.unit.match_ws_fakes import FakeMatchRepo
+from app.tests.unit.repo_fakes import FakeLeagues, FakeTeams
 
 
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
@@ -26,50 +26,6 @@ def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
 
 def full_team(first_id: int) -> list[StarterData]:
     return [starter(first_id + i, r.value) for i, r in enumerate(STARTER_ROLES)]
-
-
-class FakeLeagues(AbstractLeagueRepository):
-    def __init__(self, durations=None):
-        self.durations = durations or {}
-        self.calls = []
-
-    def get_match_duration_minutes(self, league_id):
-        self.calls.append(league_id)
-        return self.durations.get(league_id)
-
-    def list_page(self, name, offset, limit):
-        raise NotImplementedError
-
-    def create(self, data):
-        raise NotImplementedError
-    
-    def get_detail(self, league_id: int, user_id: int):
-        raise NotImplementedError
-
-    def get_leave_info(self, league_id):
-        raise NotImplementedError
-
-    def is_participant(self, league_id, user_id):
-        raise NotImplementedError
-
-    def remove_participant(self, league_id, user_id):
-        raise NotImplementedError
-
-    def get_join_state(self, league_id, user_id):
-        raise NotImplementedError
-
-    def join(self, data):
-        raise NotImplementedError
-
-
-class FakeTeams(AbstractTeamRepository):
-    def __init__(self, starters=None):
-        self.starters = starters or {}  # {user_id: [StarterData]}
-        self.calls = []
-
-    def get_starters(self, match_id, league_id, user_id):
-        self.calls.append((match_id, league_id, user_id))
-        return self.starters.get(user_id, [])
 
 
 def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
