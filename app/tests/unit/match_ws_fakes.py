@@ -78,3 +78,6 @@ class FakeSubstitutionRepo(AbstractSubstitutionRepository):
     def delete_by_match(self, match_id):
         self.pause_ends.append(match_id)
         return 0
+
+    def upsert(self, match_id, user_id, member_in_id, member_out_id):
+        return None
