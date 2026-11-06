@@ -6,6 +6,12 @@ class FakeTeams(AbstractTeamRepository):
         self.starters = starters or {}
         self.calls = []
 
+    def get_team_player_ids(self, match_id, league_id, user_id, *, substitutes):
+        return set()
+
+    def get_member_id(self, match_id, league_id, user_id, player_id):
+        return None
+
     def get_starters(self, match_id, league_id, user_id):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
