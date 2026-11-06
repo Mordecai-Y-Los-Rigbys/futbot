@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import (
     get_current_user_id,
@@ -15,6 +15,8 @@ from app.schemas.errors import (
     JoinMatchConflict,
     JoinMatchForbidden,
     SubstitutionsConflict,
+    SubstituteConflict,
+    ValidationBadRequest,
 )
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import Substitutions
@@ -66,3 +68,47 @@ def get_substitutions(
     service: SubstitutionService = Depends(get_substitution_service),
 ) -> Substitutions:
     return service.get_substitutions(user_id, parse_path_id(match_id, "El partido no existe."))
+
+
+
+@router.put(
+    "/{match_id}/substitutions",
+    status_code=204,
+    response_class=Response,
+    operation_id="requestMatchSubstitution",
+    summary="Pedir una sustitución para el equipo del usuario",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": SubstituteConflict},
+    },
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["starterId", "substituteId"],
+                        "properties": {
+                            "starterId": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+                            "substituteId": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+                        },
+                    }
+                }
+            },
+        }
+    },
+)
+def request_substitution(
+    match_id: str,
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),
+    service: SubstitutionService = Depends(get_substitution_service),
+) -> Response:
+    service.request_substitution(
+        user_id, parse_path_id(match_id, "El partido no existe."), body
+    )
+    return Response(status_code=204)
