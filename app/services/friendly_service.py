@@ -24,9 +24,16 @@ def _to_response(m: FriendlyMatchData) -> MatchResponse:
         league_id=None,
         name=m.name,
         status=m.status,
-        club1=MatchClub(id=m.club1.id, username=m.club1.username, name=m.club1.club_name),
+        club1=MatchClub(
+            id=m.club1.id, username=m.club1.username, name=m.club1.club_name, avatar=m.club1.avatar
+        ),
         club2=(
-            MatchClub(id=m.club2.id, username=m.club2.username, name=m.club2.club_name)
+            MatchClub(
+                id=m.club2.id,
+                username=m.club2.username,
+                name=m.club2.club_name,
+                avatar=m.club2.avatar,
+            )
             if m.club2
             else None
         ),

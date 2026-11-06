@@ -197,7 +197,7 @@ def test_join_keeps_the_same_match_and_registers_the_rival(
     assert body["status"] == "scheduled"
     assert body["leagueId"] is None and body["scheduledAt"] is None and body["result"] is None
     assert body["club1"] == created["club1"]
-    assert body["club2"] == {"id": joiner.id, "username": "joiner", "name": "club-joiner"}
+    assert body["club2"] == {"id": joiner.id, "username": "joiner", "name": "club-joiner", "avatar": joiner.avatar}
 
     match = match_row(db_session, created["id"])
     assert (match.user_1_id, match.user_2_id) == (creator.id, joiner.id)
