@@ -4,6 +4,9 @@ import json
 import logging
 from contextlib import contextmanager
 
+from app.domain.team_member import MemberRole
+from app.repositories.substitution_abstract import AppliedSubstitution
+from app.repositories.team_abstract import StarterData
 from app.services.match_broadcast import TickContext, build_tick_payload, _closing
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup
@@ -78,6 +81,8 @@ def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, durati
         club_2_name="Club Dos",
         periods=periods,
         pause_seconds=pause_seconds,
+        user_1_id=1,
+        user_2_id=2,
     )
 
     @contextmanager
@@ -288,6 +293,92 @@ def test_failure_deleting_substitutions_does_not_stop_the_match(caplog):
     assert len(ws.received) == PAUSED_TOTAL
     assert ws.received[-1]["phase"] == "finished"
     assert "No se pudieron borrar los cambios" in caplog.text
+
+
+def applied(user_id=1, player_id=99, role=MemberRole.forward):
+    """Cambio ya aplicado en la base: entra `player_id` con el rol del titular que sale."""
+    return AppliedSubstitution(
+        user_id=user_id,
+        incoming=StarterData(
+            player_id=player_id,
+            role=role,
+            power=10,
+            agility=20,
+            control=30,
+            strength=40,
+            speed=50,
+            behavior_code="go_to(11, 22)",
+        ),
+    )
+
+
+def player_ids(tick):
+    return [p["playerId"] for p in tick["players"]]
+
+
+def test_substitutions_are_applied_when_each_pause_starts_and_deleted_when_it_ends():
+    substitutions = FakeSubstitutionRepo()
+    snapshots = []
+    ws = FakeWs(probe=lambda t: snapshots.append((t["phase"], list(substitutions.log))))
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    assert substitutions.log == ["apply", "delete"] * 3
+    assert substitutions.pause_starts == [1, 1, 1]
+    for phase, log in snapshots:
+        pending = log.count("apply") - log.count("delete")
+        # La sustitución existe durante toda la pausa (un GET la ve) y no fuera de ella.
+        assert pending == (1 if phase == "paused" else 0)
+
+
+def test_the_pause_ticks_already_show_the_substitute_in_place_of_the_starter():
+    substitutions = FakeSubstitutionRepo(to_apply=[[applied()]])
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    ticks = ws.received
+    first_pause = next(i for i, t in enumerate(ticks) if t["phase"] == "paused")
+    assert 3 in player_ids(ticks[first_pause - 1])  # antes de la pausa juega el titular
+    assert 99 not in player_ids(ticks[first_pause - 1])
+    after = ticks[first_pause:]
+    assert all(99 in player_ids(t) and 3 not in player_ids(t) for t in after)
+    # El suplente ocupa el lugar del titular: sigue habiendo tres jugadores por equipo.
+    assert all(len(player_ids(t)) == 6 for t in ticks)
+
+
+def test_a_substitution_in_the_second_pause_does_not_touch_the_first_one():
+    substitutions = FakeSubstitutionRepo(to_apply=[[], [applied(user_id=2, player_id=77)]])
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    pauses = [i for i, t in enumerate(ws.received) if t["event"] and t["event"]["type"] == "pause"]
+    first, second = ws.received[pauses[0]], ws.received[pauses[1]]
+    assert 77 not in player_ids(first)
+    assert 77 in player_ids(second)  # el visitante cambió a su titular de rol forward
+
+
+def test_failure_applying_substitutions_does_not_stop_the_match(caplog):
+    substitutions = FakeSubstitutionRepo()
+
+    def boom(match_id):
+        raise RuntimeError("base caída")
+
+    substitutions.apply_by_match = boom
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    assert len(ws.received) == PAUSED_TOTAL
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudieron aplicar los cambios" in caplog.text
+
+
+def test_a_substitution_of_a_user_who_does_not_play_the_match_is_ignored(caplog):
+    substitutions = FakeSubstitutionRepo(to_apply=[[applied(user_id=500)]])
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    assert all(99 not in player_ids(t) for t in ws.received)
+    assert ws.received[-1]["phase"] == "finished"
+    assert "no juega el partido" in caplog.text
 
 
 def test_late_subscriber_gets_the_current_pause_then_the_restarted_countdown_then_play():
