@@ -15,7 +15,6 @@ from app.schemas.errors import (
     JoinMatchConflict,
     JoinMatchForbidden,
     SubstitutionsConflict,
-    SubstituteConflict,
     ValidationBadRequest,
 )
 from app.schemas.match_connection import JoinMatchResponse
@@ -82,7 +81,7 @@ def get_substitutions(
         401: {"model": Error},
         403: {"model": Error},
         404: {"model": Error},
-        409: {"model": SubstituteConflict},
+        409: {"model": SubstitutionsConflict},
     },
     openapi_extra={
         "requestBody": {
