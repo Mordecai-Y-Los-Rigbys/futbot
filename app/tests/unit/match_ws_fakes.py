@@ -72,9 +72,9 @@ class FakeSubstitutionRepo(AbstractSubstitutionRepository):
     def __init__(self):
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
 
-    def list_first_per_team(self, match_id):
+    def list_by_match(self, match_id):
         return []
 
-    def delete_first_per_team(self, match_id):
+    def delete_by_match(self, match_id):
         self.pause_ends.append(match_id)
         return 0
