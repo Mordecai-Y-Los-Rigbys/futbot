@@ -12,10 +12,8 @@ from app.repositories.league_abstract import (
     LeagueParticipantData,
 )
 from app.domain.league import LeagueStatus
-from app.errors import ApiError
 from app.helpers.ids import parse_path_id
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
-from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
 from app.schemas.league import (
     LeagueCreator,
