@@ -6,7 +6,10 @@ from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
 )
-from app.repositories.substitution_abstract import AbstractSubstitutionRepository
+from app.repositories.substitution_abstract import (
+    AbstractSubstitutionRepository,
+    AppliedSubstitution,
+)
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -69,14 +72,23 @@ class FakeMatchRepo(AbstractMatchRepository):
         return self.players.get(match_id)
 
 class FakeSubstitutionRepo(AbstractSubstitutionRepository):
-    def __init__(self):
+    def __init__(self, to_apply: list[list[AppliedSubstitution]] | None = None):
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
+        self.pause_starts: list[int] = []  # un elemento por cada pausa empezada
+        self.to_apply = list(to_apply or [])  # lo que devuelve cada pausa, en orden
+        self.log: list[str] = []  # "apply" / "delete", en el orden en que ocurren
+
+    def apply_by_match(self, match_id):
+        self.pause_starts.append(match_id)
+        self.log.append("apply")
+        return self.to_apply.pop(0) if self.to_apply else []
 
     def list_by_match(self, match_id):
         return []
 
     def delete_by_match(self, match_id):
         self.pause_ends.append(match_id)
+        self.log.append("delete")
         return 0
 
     def upsert(self, match_id, user_id, member_in_id, member_out_id):
