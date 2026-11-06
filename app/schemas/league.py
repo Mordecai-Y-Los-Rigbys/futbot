@@ -15,6 +15,15 @@ class LeagueCreator(CamelModel):
     username: str
     name: str
     avatar: int
+    
+    
+class LeagueParticipant(CamelModel):
+    """UserClub de un participante, sin su equipo."""
+
+    id: int
+    username: str
+    name: str
+    avatar: int
 
 
 class LeagueSummary(CamelModel):

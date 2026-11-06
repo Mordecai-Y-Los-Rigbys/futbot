@@ -8,6 +8,7 @@ from app.models.league import League
 from app.models.league_participant import LeagueParticipant
 from app.models.session_league_unlock import SessionLeagueUnlock
 from app.models.team_member import TeamMember
+from app.models.user import User
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
@@ -17,6 +18,7 @@ from app.repositories.league_abstract import (
     LeagueLeaveInfo,
     LeagueDetailData,
     JoinLeagueData,
+    LeagueParticipantData,
     JoinLeagueStateConflict,
     LeagueJoinState,
 )
@@ -192,6 +194,20 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             min_participants=league.min_participants,
             joined=bool(is_joined),
         )
+        
+    def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
+        rows = self.db.execute(
+            select(User.id, User.username, User.club_name, User.avatar)
+            .join(LeagueParticipant, LeagueParticipant.user_id == User.id)
+            .where(LeagueParticipant.league_id == league_id)
+            .order_by(User.id.asc())
+        ).all()
+        return [
+            LeagueParticipantData(
+                id=row.id, username=row.username, club_name=row.club_name, avatar=row.avatar
+            )
+            for row in rows
+        ]
 
     # ------------------------------------------------------------------
     # Inscripción (POST /leagues/{id}/participants)
