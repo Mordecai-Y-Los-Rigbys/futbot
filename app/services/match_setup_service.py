@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData
-from app.repositories.team_abstract import AbstractTeamRepository
+from app.repositories.team_abstract import AbstractTeamRepository, StarterData
 from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.constants import (
     STARTER_ROLES,
@@ -33,6 +33,22 @@ class MatchSetup:
     club_2_name: str
     periods: int = PERIODS
     pause_seconds: float = PAUSE_SECONDS
+    # Dueños de cada equipo: el runner los usa para ubicar las sustituciones.
+    user_1_id: int | None = None
+    user_2_id: int | None = None
+
+
+def to_player_setup(row: StarterData) -> PlayerSetup:
+    """Un integrante del equipo, listo para ponerlo en cancha."""
+    stats = Stats(
+        power=row.power,
+        agility=row.agility,
+        control=row.control,
+        strength=row.strength,
+        speed=row.speed,
+    )
+    return PlayerSetup(row.player_id, row.role, stats)
+
 
 class MatchSetupService:
     """Arma los equipos y la duración de un partido a partir de la base."""
@@ -73,6 +89,8 @@ class MatchSetupService:
             club_2_name=match.club_2_name,
             periods=PERIODS,
             pause_seconds=PAUSE_SECONDS,
+            user_1_id=match.user_1_id,
+            user_2_id=match.user_2_id,
         )
 
     def _duration_minutes(self, match: MatchSetupData) -> int:
@@ -104,14 +122,7 @@ class MatchSetupService:
                     f"el usuario {user_id} tiene el rol {role.value} repetido "
                     f"en el partido {match.id}"
                 )
-            stats = Stats(
-                power=row.power,
-                agility=row.agility,
-                control=row.control,
-                strength=row.strength,
-                speed=row.speed,
-            )
-            players.append(PlayerSetup(row.player_id, role, stats))
+            players.append(to_player_setup(row))
             behaviors[role] = compile_behavior(row.behavior_code)
 
         if len(players) != len(STARTER_ROLES):
