@@ -8,8 +8,8 @@ from app.simulation.constants import COUNTDOWN_SECONDS, PAUSE_SECONDS, PERIODS
 FIRST_MATCH_DELAY = timedelta(minutes=1)
 # 3 pausas de 15s y 4 cuentas regresivas de 5s: 65s
 BREAKS = timedelta(seconds=(PERIODS - 1) * PAUSE_SECONDS + PERIODS * COUNTDOWN_SECONDS)
-# Máximo de la tanda: 6 penales de 10s y la cuenta regresiva de 5s
-PENALTY_SHOOTOUT = timedelta(seconds=65)
+# Máximo de la tanda: 10 penales (5 por club) de 3s de cuenta previa y 8s para patear
+PENALTY_SHOOTOUT = timedelta(seconds=110)
 MARGIN = timedelta(minutes=1)
 
 

@@ -40,7 +40,7 @@ def matches_of(db_session, league_id) -> list[Match]:
             select(Match).where(Match.league_id == league_id).order_by(Match.scheduled_at)
         )
     )
-    
+
 
 def status_of(db_session, league_id) -> LeagueStatus:
     db_session.expire_all()
@@ -60,13 +60,13 @@ def utc(dt):
 def assert_untouched(db_session, league_id, status=LeagueStatus.preparation):
     assert status_of(db_session, league_id) == status
     assert matches_of(db_session, league_id) == []
-    
+
 
 def test_creator_starts_the_league_and_the_fixture_is_saved(login_as, db_session, creator, league):
     resp = login_as(creator).post(url(league.id))
     assert resp.status_code == 204, resp.text
     assert resp.content == b""
-    
+
     assert status_of(db_session, league.id) == LeagueStatus.started
     matches = matches_of(db_session, league.id)
     assert len(matches) == 3
@@ -75,26 +75,26 @@ def test_creator_starts_the_league_and_the_fixture_is_saved(login_as, db_session
         assert (m.score_1, m.score_2, m.seed) == (None, None, None)
         assert m.user_1_id != m.user_2_id
         assert m.scheduled_at is not None
-        
+
 
 def test_penalties_mode_leaves_room_for_the_shootout(login_as, db_session, creator, league):
     set_league(db_session, league, allow_draws=False)
     assert login_as(creator).post(url(league.id)).status_code == 204
     times = [utc(m.scheduled_at) for m in matches_of(db_session, league.id)]
-    assert times[1] - times[0] == timedelta(minutes=8, seconds=10) 
-    
+    assert times[1] - times[0] == timedelta(minutes=8, seconds=55)
+
 
 def test_no_session_is_401(db_session, client, league):
     resp = client.post(url(league.id))
     assert resp.status_code == 401 and resp.json()["code"] is None
     assert_untouched(db_session, league.id)
-    
+
 
 @pytest.mark.parametrize("raw_id", ["abc", "999999"])
 def test_invalid_or_nonexistent_id_is_404(login_as, creator, raw_id):
     resp = login_as(creator).post(url(raw_id))
     assert resp.status_code == 404 and resp.json()["code"] is None
-    
+
 
 def test_a_participant_who_is_not_the_creator_cannot_start_it(
     login_as, db_session, league, create_user, add_participant
@@ -104,7 +104,7 @@ def test_a_participant_who_is_not_the_creator_cannot_start_it(
     resp = login_as(participant).post(url(league.id))
     assert resp.status_code == 403 and resp.json()["code"] is None
     assert_untouched(db_session, league.id)
-    
+
 
 @pytest.mark.parametrize("status", ["started", "cancelled", "finished"])
 def test_league_not_in_preparation(login_as, db_session, creator, league, status):
@@ -112,7 +112,7 @@ def test_league_not_in_preparation(login_as, db_session, creator, league, status
     resp = login_as(creator).post(url(league.id))
     assert resp.status_code == 409 and resp.json()["code"] == "notInPreparation"
     assert_untouched(db_session, league.id, LeagueStatus(status))
-    
+
 
 def test_not_enough_participants(
     login_as, db_session, creator, make_league, create_user, add_participant
@@ -122,11 +122,11 @@ def test_not_enough_participants(
     resp = login_as(creator).post(url(lg.id))
     assert resp.status_code == 409 and resp.json()["code"] == "notEnoughParticipants"
     assert_untouched(db_session, lg.id)
-    
-    
+
+
 def test_404_beats_403(login_as, create_user):
     assert login_as(create_user("x")).post(url(999999)).status_code == 404
-    
+
 
 def run_together(*jobs):
     """Corre cada job en su propio thread, arrancando a la vez. Devuelve sus resultados."""
@@ -165,7 +165,7 @@ def test_repo_get_start_state(db_session, create_user, make_league, add_particip
     for name in ("a", "b", "c"):
         add_participant(lg, create_user(name))
     set_league(db_session, lg, match_duration=2, allow_draws=False, min_participants=4)
-    
+
     repo = SqlAlchemyLeagueRepository(db_session)
     st = repo.get_start_state(lg.id)
     assert (st.creator_id, st.status) == (owner.id, LeagueStatus.preparation)
@@ -182,10 +182,10 @@ def test_repo_rereads_a_state_changed_by_another_session(db_session, league):
         other.commit()
     assert repo.start(league.id, plan_all_pairs) == "notInPreparation"
     assert matches_of(db_session, league.id) == []
-    
+
 
 def test_failure_while_saving_the_fixture_rolls_back_everything(db_session, league):
-    def bad_plan(ids): 
+    def bad_plan(ids):
         return [
             FixtureMatchData(user_1_id=ids[0], user_2_id=ids[0], scheduled_at=league.created_at)
         ]
@@ -193,7 +193,7 @@ def test_failure_while_saving_the_fixture_rolls_back_everything(db_session, leag
     with pytest.raises(IntegrityError):
         SqlAlchemyLeagueRepository(db_session).start(league.id, bad_plan)
     assert_untouched(db_session, league.id)
-    
+
 
 @pytest.mark.parametrize("attempt", range(3))
 def test_two_simultaneous_starts_generate_one_fixture(db_session, league, attempt):
