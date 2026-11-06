@@ -154,7 +154,7 @@ class MatchRunner:
                 started = True
 
             if previous_phase is Phase.PAUSED and result.phase is not Phase.PAUSED:
-                # Terminó una pausa: se consume el cambio más antiguo de cada equipo.
+                # Terminó una pausa: se consume la sustitución de cada equipo.
                 await run_in_threadpool(self._end_pause, match_id)
             previous_phase = result.phase
 
@@ -180,7 +180,7 @@ class MatchRunner:
     def _end_pause(self, match_id: int) -> None:
         try:
             with self._substitution_scope() as repo:
-                repo.delete_first_per_team(match_id)
+                repo.delete_by_match(match_id)
         except Exception:
             logger.exception("No se pudieron borrar los cambios del partido %s", match_id)
 

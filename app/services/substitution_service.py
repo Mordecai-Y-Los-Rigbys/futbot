@@ -3,17 +3,15 @@ from app.errors import ApiError
 from app.repositories.match_abstract import AbstractMatchRepository
 from app.repositories.substitution_abstract import (
     AbstractSubstitutionRepository,
-    FirstSubstitutionData,
+    SubstitutionData,
 )
-from app.schemas.substitution import NextSubstitutions, SubstitutionResponse
+from app.schemas.substitution import Substitution, Substitutions
 
 
-def _to_response(item: FirstSubstitutionData | None) -> SubstitutionResponse | None:
+def _to_response(item: SubstitutionData | None) -> Substitution | None:
     if item is None:
         return None
-    return SubstitutionResponse(
-        starter_name=item.starter_name, substitute_name=item.substitute_name
-    )
+    return Substitution(starter_name=item.starter_name, substitute_name=item.substitute_name)
 
 
 class SubstitutionService:
@@ -25,8 +23,8 @@ class SubstitutionService:
         self.matches = matches
         self.substitutions = substitutions
 
-    def get_next(self, user_id: int, match_id: int) -> NextSubstitutions:
-        """Primera sustitución de cada equipo. Orden: 404 > 403 > 409.
+    def get_substitutions(self, user_id: int, match_id: int) -> Substitutions:
+        """Sustitución pedida de cada equipo. Orden: 404 > 403 > 409.
 
         Raises:
             ApiError 404: el partido no existe.
@@ -41,8 +39,8 @@ class SubstitutionService:
         if match.status != MatchStatus.started:
             raise ApiError(409, "matchNotStarted", "El partido no está en juego.")
 
-        by_user = {i.user_id: i for i in self.substitutions.list_first_per_team(match_id)}
-        return NextSubstitutions(
+        by_user = {i.user_id: i for i in self.substitutions.list_by_match(match_id)}
+        return Substitutions(
             club1=_to_response(by_user.get(match.user_1_id)),
             club2=_to_response(by_user.get(match.user_2_id)),
         )

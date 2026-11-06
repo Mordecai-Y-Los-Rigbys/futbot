@@ -14,10 +14,10 @@ from app.schemas.errors import (
     JoinMatchBadRequest,
     JoinMatchConflict,
     JoinMatchForbidden,
-    NextSubstitutionsConflict
+    SubstitutionsConflict,
 )
 from app.schemas.match_connection import JoinMatchResponse
-from app.schemas.substitution import NextSubstitutions
+from app.schemas.substitution import Substitutions
 from app.services.match_connection_service import MatchConnectionService
 from app.services.substitution_service import SubstitutionService
 
@@ -49,20 +49,20 @@ def join_match(
 
 
 @router.get(
-    "/{match_id}/substitutions/next",
-    response_model=NextSubstitutions,
-    operation_id="getMatchNextSubstitutions",
-    summary="Obtener la primera sustitución de cada equipo de un partido en juego",
+    "/{match_id}/substitutions",
+    response_model=Substitutions,
+    operation_id="getMatchSubstitutions",
+    summary="Obtener la sustitución pedida de cada equipo de un partido en juego",
     responses={
         401: {"model": Error},
         403: {"model": Error},
         404: {"model": Error},
-        409: {"model": NextSubstitutionsConflict},
+        409: {"model": SubstitutionsConflict},
     },
 )
-def get_next_substitutions(
+def get_substitutions(
     match_id: str,  # str y no int: un "abc" daría 422 antes de llegar acá
     user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
     service: SubstitutionService = Depends(get_substitution_service),
-) -> NextSubstitutions:
-    return service.get_next(user_id, parse_path_id(match_id, "El partido no existe."))
+) -> Substitutions:
+    return service.get_substitutions(user_id, parse_path_id(match_id, "El partido no existe."))
