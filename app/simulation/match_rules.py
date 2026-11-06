@@ -127,6 +127,7 @@ class MatchSession:
         self._score_2 = 0
         self._pending_reset = False
         self._finished = False
+        self._last_phase: Phase | None = None
 
     def _build_segments(self) -> list[_Segment]:
         base = self._play_ticks // self._periods
@@ -150,6 +151,24 @@ class MatchSession:
     @property
     def total_ticks(self) -> int:
         return sum(s.ticks for s in self._segments)
+
+    @property
+    def pauses_remaining(self) -> int:
+        """Pausas disponibles, contando también el último tick de la pausa actual."""
+        remaining = sum(
+            1 for segment in self._segments[self._seg_index:] if segment.phase is Phase.PAUSED
+        )
+        # advance() adelanta el índice al producir el último tick del segmento.
+        # Ese tick sigue perteneciendo a la pausa y todavía admite solicitudes.
+        if (
+            self._last_phase is Phase.PAUSED
+            and (
+                self._seg_index >= len(self._segments)
+                or self._segments[self._seg_index].phase is not Phase.PAUSED
+            )
+        ):
+            remaining += 1
+        return remaining
 
     @property
     def pause_starts(self) -> list[float]:
@@ -178,11 +197,14 @@ class MatchSession:
             self._restart()
 
         if segment.phase is Phase.PAUSED:
-            return self._pause_tick(seq, segment, offset)
-        if segment.phase is Phase.COUNTDOWN:
+            result = self._pause_tick(seq, segment, offset)
+        elif segment.phase is Phase.COUNTDOWN:
             event = Event.PERIOD_START if offset == 0 else None
-            return self._result(seq, segment, event)
-        return self._play(seq, segment)
+            result = self._result(seq, segment, event)
+        else:
+            result = self._play(seq, segment)
+        self._last_phase = result.phase
+        return result
 
     def _restart(self) -> None:
         """Saque normal: posiciones iniciales, pelota libre y quieta, sin
