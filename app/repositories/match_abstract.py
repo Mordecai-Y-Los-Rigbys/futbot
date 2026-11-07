@@ -15,6 +15,14 @@ class MatchSetupData(BaseModel):
     user_2_id: int | None
     club_1_name: str
     club_2_name: str | None
+    allow_draws: bool
+
+
+class PenaltyShootoutData(BaseModel):
+    score_1: int
+    score_2: int
+    winner: int  # 1 si es club1, 2 si club2
+    kicks: list[dict] 
 
 class MatchPlayersData(BaseModel):
     id: int
@@ -37,8 +45,14 @@ class AbstractMatchRepository(ABC):
         """Pasa el partido de scheduled a started."""
 
     @abstractmethod
-    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
-        """Guarda el resultado y pasa el partido a finished."""
+    def finish(
+        self,
+        match_id: int,
+        score_1: int,
+        score_2: int,
+        penalties: PenaltyShootoutData | None = None,
+    ) -> None:
+        """Guarda el resultado, y la tanda si la hubo, y pasa el partido a finished."""
 
     @abstractmethod
     def save_seed(self, match_id: int, seed: int) -> None:

@@ -1,14 +1,16 @@
-from sqlalchemy import select, update
+from sqlalchemy import func, select, true, update
 from sqlalchemy.orm import Session, aliased
 
 from app.domain.match import MatchStatus
+from app.models.league import League
 from app.models.match import Match
 from app.models.user import User
 from app.repositories.match_abstract import (
     AbstractMatchRepository,
     MatchSetupData,
     MatchStateData,
-    MatchPlayersData
+    MatchPlayersData,
+    PenaltyShootoutData,
 )
 
 
@@ -34,8 +36,10 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 Match.user_2_id,
                 user_1.club_name.label("club_1_name"),
                 user_2.club_name.label("club_2_name"),
+                func.coalesce(League.allow_draws, true()).label("allow_draws"),
             )
             .join(user_1, user_1.id == Match.user_1_id)
+            .outerjoin(League, League.id == Match.league_id)
             .outerjoin(user_2, user_2.id == Match.user_2_id)  # outer: puede no haber rival
             .where(Match.id == match_id)
         ).one_or_none()
@@ -60,11 +64,25 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
         )
         self.db.commit()
 
-    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
+    def finish(
+        self,
+        match_id: int,
+        score_1: int,
+        score_2: int,
+        penalties: PenaltyShootoutData | None = None,
+    ) -> None:
+        shootout = {}
+        if penalties is not None:
+            shootout = {
+                "penalty_score_1": penalties.score_1,
+                "penalty_score_2": penalties.score_2,
+                "penalty_winner": penalties.winner,
+                "penalty_kicks": penalties.kicks,
+            }
         self.db.execute(
             update(Match)
             .where(Match.id == match_id)
-            .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
+            .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2, **shootout)
         )
         self.db.commit()
 

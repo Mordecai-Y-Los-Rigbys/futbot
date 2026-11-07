@@ -92,6 +92,13 @@ PAUSE_SECONDS = 15
 COUNTDOWN_SECONDS = 5
 FRIENDLY_MATCH_DURATION = 3  # minutos
 
+# Tanda de penales (penal australiano), solo en ligas con allowDraws: false.
+PENALTY_KICKS_PER_CLUB = 5
+PENALTY_COUNTDOWN_SECONDS = 3
+PENALTY_SECONDS = 8  # tiempo de juego del pateador para convertir
+# Orden en que patean los titulares, en ciclo: delantero, medio, defensor.
+PENALTY_KICKER_ORDER = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
+
 # Estructura de estado de jugador.
 NO_KICK_COOLDOWN = 0  # puede patear desde el primer tick
 NOT_REGAIN_BLOCKED = -1  # nunca bloqueado: todos los ticks son > -1
