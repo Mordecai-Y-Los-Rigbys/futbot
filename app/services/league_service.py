@@ -73,8 +73,8 @@ def _to_participant(data: LeagueParticipantData) -> LeagueParticipant:
         name=data.club_name,
         avatar=data.avatar,
     )
-    
-    
+
+
 class LeagueService:
     """Casos de uso de las ligas: listar, crear y obtener una."""
 
@@ -198,7 +198,7 @@ class LeagueService:
             min_participants=data.min_participants,
             joined=data.joined,
         )
-        
+
     def list_participants(self, league_id: int) -> list[LeagueParticipant]:
         """Participantes actuales de la liga, creador incluido, por id de usuario.
 

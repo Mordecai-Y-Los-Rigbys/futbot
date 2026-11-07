@@ -194,7 +194,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             min_participants=league.min_participants,
             joined=bool(is_joined),
         )
-        
+
     def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
         rows = self.db.execute(
             select(User.id, User.username, User.club_name, User.avatar)

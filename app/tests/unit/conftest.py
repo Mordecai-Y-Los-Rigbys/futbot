@@ -59,7 +59,7 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def get_detail(self, league_id, user_id):
         self.detail_calls.append((league_id, user_id))
         return self.details.get(league_id)
-    
+
     def list_participants(self, league_id):
         self.participants_calls.append(league_id)
         return self.participant_lists.get(league_id, [])
