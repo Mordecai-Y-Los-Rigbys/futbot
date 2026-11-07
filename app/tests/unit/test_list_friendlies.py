@@ -30,7 +30,7 @@ def match_data(id=100, name="Partido amistoso 1", username="usuario1", club="Clu
         id=id,
         name=name,
         status="scheduled",
-        club1=FriendlyClubData(id=1, username=username, club_name=club),
+        club1=FriendlyClubData(id=1, username=username, club_name=club, avatar=1),
         created_at=NOW,
     )
 
@@ -72,7 +72,7 @@ def test_service_items_follow_the_match_schema(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(items=[match_data()], total=1)
     out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     dumped = out.model_dump(by_alias=True)["items"][0]
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico"}
+    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 1}
     for k in ("leagueId", "club2", "scheduledAt", "result"):
         assert dumped[k] is None
     assert "2026-10-03T18:00:00Z" in out.model_dump_json(by_alias=True)
@@ -123,7 +123,7 @@ def test_endpoint_success_full_structure(auth_friendlies_api, repo):
                 "leagueId": None,
                 "name": "Partido amistoso 1",
                 "status": "scheduled",
-                "club1": {"id": 1, "username": "usuario1", "name": "Club Atletico"},
+                "club1": {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 1},
                 "club2": None,
                 "scheduledAt": None,
                 "createdAt": "2026-10-03T18:00:00Z",

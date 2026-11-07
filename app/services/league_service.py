@@ -8,14 +8,18 @@ from app.repositories.league_abstract import (
     CreateLeagueMemberData,
     JoinLeagueData,
     JoinLeagueStateConflict,
+    LeagueFixtureClubData,
+    LeagueFixtureMatchData,
     LeagueListItemData,
 )
 from app.domain.league import LeagueStatus
+from app.domain.match import MatchStatus
 from app.errors import ApiError
 from app.helpers.ids import parse_path_id
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
+from app.schemas.friendly import MatchClub, MatchResponse
 from app.schemas.league import LeagueCreator, LeagueDetail, LeaguePage, LeagueSummary
 from app.services.join_league_validation import parse_join_league
 from app.services.league_access_service import verify_league_password
@@ -30,6 +34,11 @@ _JOIN_CONFLICT_MESSAGES: dict[str, str] = {
     "notInPreparation": "La liga ya no admite inscripciones.",
     "leagueFull": "La liga ya alcanzó su cupo máximo de participantes.",
     "alreadyParticipating": "Ya participás en esta liga.",
+}
+
+_FIXTURE_CONFLICTS: dict[LeagueStatus, tuple[str, str]] = {
+    LeagueStatus.preparation: ("leagueNotStarted", "La liga todavía no fue iniciada."),
+    LeagueStatus.cancelled: ("leagueCancelled", "La liga fue cancelada y no tiene fixture."),
 }
 
 
@@ -58,6 +67,28 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
         private=item.private,
         allow_draws=item.allow_draws,
         created_at=item.created_at,
+    )
+
+
+def _to_match_club(data: LeagueFixtureClubData) -> MatchClub:
+    return MatchClub(id=data.id, username=data.username, name=data.club_name, avatar=data.avatar)
+
+
+def _to_fixture_match(league_id: int, match: LeagueFixtureMatchData) -> MatchResponse:
+    result = None
+    if match.status == MatchStatus.finished:
+        # Todavía no se persisten penales
+        result = {"score1": match.score_1, "score2": match.score_2, "penalties": None}
+    return MatchResponse(
+        id=match.id,
+        league_id=league_id,
+        name=None,
+        status=match.status.value,
+        club1=_to_match_club(match.club_1),
+        club2=_to_match_club(match.club_2),
+        scheduled_at=match.scheduled_at,
+        created_at=match.created_at,
+        result=result,
     )
 
 
@@ -248,3 +279,22 @@ class LeagueService:
         # Solo ante una inscripción exitosa; un intento fallido no emite nada
         if self.notifier is not None:
             self.notifier.participants_changed(league_id)
+
+    def get_fixture(self, league_id: int) -> list[MatchResponse]:
+        """Partidos de la liga en cualquier estado, ordenados por fecha.
+
+        El 404 y el acceso a ligas privadas se resuelven antes de llamarlo.
+
+        Raises:
+            ApiError 404: la liga no existe.
+            ApiError 409: leagueNotStarted o leagueCancelled.
+        """
+        data = self.repo.get_fixture(league_id)
+        if data is None:
+            raise ApiError(404, None, LEAGUE_NOT_FOUND_MESSAGE)
+
+        conflict = _FIXTURE_CONFLICTS.get(data.status)
+        if conflict is not None:
+            raise ApiError(409, *conflict)
+
+        return [_to_fixture_match(league_id, m) for m in data.matches]
