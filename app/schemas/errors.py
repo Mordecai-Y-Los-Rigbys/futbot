@@ -27,13 +27,25 @@ class CreateLeagueBadRequest(BaseModel):
     message: str
 
 
+class LeagueAccessForbidden(BaseModel):
+    code: Literal["leagueAccessRequired"]
+    message: str
+
+
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
+    message: str
+    
+    
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
 
+
 class LeaveLeagueConflict(BaseModel):
     code: Literal["notInPreparation", "notParticipating", "isCreator"]
     message: str
+
 
 class CreatePlayerBadRequest(BaseModel):
     code: Literal[

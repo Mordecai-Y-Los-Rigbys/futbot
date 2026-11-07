@@ -7,7 +7,9 @@ from app.api.deps import (
     get_current_session,
     get_current_user_id,
     get_json_body,
+    get_league_access_service,
     get_league_service,
+    get_ranking_service,
 )
 from app.api.pagination import parse_page
 from app.api.league_access import router as league_access_router
@@ -17,12 +19,17 @@ from app.schemas.errors import (
     Error,
     JoinLeagueConflict,
     JoinLeagueForbidden,
+    LeagueAccessForbidden,
+    LeagueDataConflict,
     LeaveLeagueConflict,
     ListPageBadRequest,
     ValidationBadRequest,
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
+from app.schemas.ranking import LeagueRankingEntry
+from app.services.league_access_service import LeagueAccessService
+from app.services.ranking_service import RankingService
 from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
@@ -66,8 +73,8 @@ def get_league(
         league_id=parse_path_id(league_id, LEAGUE_NOT_FOUND_MESSAGE),
         user_id=user_id,
     )
-    
-    
+
+
 @router.post(
     "",
     response_model=LeagueSummary,
@@ -86,7 +93,6 @@ def create_league(
     service: LeagueService = Depends(get_league_service),
 ) -> LeagueSummary:
     return service.create_league(creator_id=user_id, body=body)
-
 
 
 @router.delete(
@@ -109,6 +115,7 @@ def leave_league(
     service.leave_league(user_id=user_id, raw_league_id=id)
     return Response(status_code=204)
 
+
 @router.post(
     "/{id}/participants",
     status_code=201,
@@ -125,13 +132,36 @@ def leave_league(
     },
 )
 def join_league(
-    id: str, 
+    id: str,
     session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
     body: Any = Depends(get_json_body),
     service: LeagueService = Depends(get_league_service),
 ) -> Response:
     service.join_league(user_id=session.user_id, session_id=session.id, raw_league_id=id, body=body)
     return Response(status_code=201)
+
+
+@router.get(
+    "/{id}/ranking",
+    response_model=list[LeagueRankingEntry],
+    operation_id="getLeagueRanking",
+    summary="Obtener el ranking de una liga",
+    responses={
+        401: {"model": Error},
+        403: {"model": LeagueAccessForbidden},
+        404: {"model": Error},
+        409: {"model": LeagueDataConflict},
+    },
+)
+def get_league_ranking(
+    id: str,
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    access: LeagueAccessService = Depends(get_league_access_service),
+    service: RankingService = Depends(get_ranking_service),
+) -> list[LeagueRankingEntry]:
+    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))
+    access.require_access(session.id, session.user_id, league)
+    return service.get_league_ranking(league.id)
 
 
 router.include_router(league_access_router)
