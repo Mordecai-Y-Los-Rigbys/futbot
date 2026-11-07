@@ -27,6 +27,7 @@ from app.schemas.league import LeagueCreator, LeagueDetail, LeaguePage, LeagueSu
 from app.services.join_league_validation import parse_join_league
 from app.services.league_access_service import verify_league_password
 from app.services.league_fixture import build_fixture, match_slot
+from app.services.league_fixture_notifier import LeagueFixtureNotifier
 from app.services.league_validation import parse_create_league
 from app.services.team_ownership import ensure_owned_team, ensure_owned_typed_team
 
@@ -92,7 +93,7 @@ def _to_match_club(data: LeagueFixtureClubData) -> MatchClub:
     return MatchClub(id=data.id, username=data.username, name=data.club_name, avatar=data.avatar)
 
 
-def _to_fixture_match(league_id: int, match: LeagueFixtureMatchData) -> MatchResponse:
+def to_fixture_match(league_id: int, match: LeagueFixtureMatchData) -> MatchResponse:
     result = None
     if match.status == MatchStatus.finished:
         # Todavía no se persisten penales
@@ -120,12 +121,15 @@ class LeagueService:
         behaviors: AbstractBehaviorRepository,
         notifier: LeagueParticipantsNotifier | None = None,
         rng: random.Random | None = None,
+        fixture_notifier: LeagueFixtureNotifier | None = None,
     ) -> None:
         self.repo = repo
         self.players = players
         self.behaviors = behaviors
         self.notifier = notifier
         self.rng = rng or random.Random()
+        self.rng = rng or random.Random()
+        self.fixture_notifier = fixture_notifier
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
         """Lista paginada de las ligas.
@@ -325,9 +329,10 @@ class LeagueService:
         _raise_start_conflict(
             self.repo.start(league_id, lambda ids: build_fixture(ids, started_at, slot, self.rng))
         )
-
         if self.notifier is not None:
             self.notifier.participants_changed(league_id)
+        if self.fixture_notifier is not None:
+            self.fixture_notifier.fixture_changed(league_id)
             
     def get_fixture(self, league_id: int) -> list[MatchResponse]:
         """Partidos de la liga en cualquier estado, ordenados por fecha.
@@ -346,4 +351,4 @@ class LeagueService:
         if conflict is not None:
             raise ApiError(409, *conflict)
 
-        return [_to_fixture_match(league_id, m) for m in data.matches]
+        return [to_fixture_match(league_id, m) for m in data.matches]
