@@ -287,7 +287,7 @@ def test_failure_deleting_substitutions_does_not_stop_the_match(caplog):
     def boom(match_id):
         raise RuntimeError("base caída")
 
-    substitutions.delete_by_match = boom
+    substitutions.delete_applied_by_match = boom
     ws = FakeWs()
     run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
     assert len(ws.received) == PAUSED_TOTAL
@@ -434,3 +434,23 @@ def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream(
     assert any(t["phase"] == "countdown" for t in second.received)
     for tick in second.received:
         TickPayload.model_validate(tick)
+
+def test_runtime_state_counts_only_pauses_that_have_not_started_and_flags_the_pause():
+    manager = FakeManager([])
+    runner = build(manager, FakeMatchRepo(), **PAUSED)
+    seen = []
+    ws = FakeWs(probe=lambda t: seen.append((t["phase"], runner.get_runtime_state(1))))
+    manager.sockets.append(ws)
+
+    run(runner)
+
+    def dedupe(values):
+        return [k for k, _ in itertools.groupby(values)]
+
+    paused = [s for phase, s in seen if phase == "paused"]
+    other = [s for phase, s in seen if phase != "paused"]
+    assert all(s.in_pause for s in paused)
+    assert not any(s.in_pause for s in other)
+    # durante cada pausa no cuenta la actual; fuera de pausa cuenta las que faltan
+    assert dedupe(s.pauses_left for s in paused) == [2, 1, 0]
+    assert dedupe(s.pauses_left for s in other) == [3, 2, 1, 0]

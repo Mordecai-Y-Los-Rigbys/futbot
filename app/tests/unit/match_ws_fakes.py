@@ -83,13 +83,13 @@ class FakeSubstitutionRepo(AbstractSubstitutionRepository):
         self.log.append("apply")
         return self.to_apply.pop(0) if self.to_apply else []
 
-    def list_by_match(self, match_id):
+    def list_by_match(self, match_id, applied):
         return []
 
-    def delete_by_match(self, match_id):
+    def delete_applied_by_match(self, match_id):
         self.pause_ends.append(match_id)
         self.log.append("delete")
         return 0
-
+        
     def upsert(self, match_id, user_id, member_in_id, member_out_id):
         return None

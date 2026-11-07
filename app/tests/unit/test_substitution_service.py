@@ -11,7 +11,16 @@ from app.repositories.substitution_abstract import (
     SubstitutionData,
 )
 from app.services.substitution_service import SubstitutionService
+from types import SimpleNamespace
 
+def state(**overrides):
+    base = dict(in_penalties=False, pauses_left=2, in_pause=False)
+    return SimpleNamespace(**{**base, **overrides})
+
+
+@pytest.fixture()
+def runtime():
+    return SimpleNamespace(get_runtime_state=lambda _id: state())
 
 @pytest.fixture()
 def matches():
@@ -40,44 +49,44 @@ def error_of(service, user_id=1):
     return e.value.status_code, e.value.code
 
 
-def test_nonexistent_match_is_404(matches, teams, subs):
+def test_nonexistent_match_is_404(matches, teams, subs, runtime):
     matches.get_players.return_value = None
-    assert error_of(SubstitutionService(matches, teams, subs)) == (404, None)
+    assert error_of(SubstitutionService(matches, teams, subs, runtime)) == (404, None)
     subs.list_by_match.assert_not_called()
 
 
-def test_user_outside_the_match_is_403_even_if_not_started(matches, teams, subs):
+def test_user_outside_the_match_is_403_even_if_not_started(matches, teams, subs, runtime):
     matches.get_players.return_value = MatchPlayersData(
         id=5, status=MatchStatus.scheduled, user_1_id=1, user_2_id=2
     )
-    assert error_of(SubstitutionService(matches, teams, subs), user_id=9) == (403, None)
+    assert error_of(SubstitutionService(matches, teams, subs, runtime), user_id=9) == (403, None)
 
 
 @pytest.mark.parametrize(
     "status", [MatchStatus.scheduled, MatchStatus.finished, MatchStatus.cancelled]
 )
-def test_not_started_is_409(matches, teams, subs, status):
+def test_not_started_is_409(matches, teams, subs, status, runtime):
     matches.get_players.return_value = MatchPlayersData(
         id=5, status=status, user_1_id=1, user_2_id=2
     )
-    assert error_of(SubstitutionService(matches, teams, subs)) == (409, "matchNotStarted")
+    assert error_of(SubstitutionService(matches, teams, subs, runtime)) == (409, "matchNotStarted")
 
 
-def test_maps_each_team_and_null_for_the_one_without_substitutions(matches, teams, subs):
+def test_maps_each_team_and_null_for_the_one_without_substitutions(matches, teams, subs, runtime):
     subs.list_by_match.return_value = [
         SubstitutionData(user_id=2, starter_name="A", substitute_name="B")
     ]
-    out = SubstitutionService(matches, teams, subs).get_substitutions(1, 5)
+    out = SubstitutionService(matches, teams, subs, runtime).get_substitutions(1, 5)
     assert out.club1 is None
     assert (out.club2.starter_name, out.club2.substitute_name) == ("A", "B")
 
 
-def test_same_result_for_both_users(matches, teams, subs):
+def test_same_result_for_both_users(matches, teams, subs, runtime):
     subs.list_by_match.return_value = [
         SubstitutionData(user_id=2, starter_name="C2", substitute_name="D2"),
         SubstitutionData(user_id=1, starter_name="C1", substitute_name="D1"),
     ]
-    s = SubstitutionService(matches, teams, subs)
+    s = SubstitutionService(matches, teams, subs, runtime)
 
     for user_id in (1, 2):
         out = s.get_substitutions(user_id, 5)
@@ -85,3 +94,42 @@ def test_same_result_for_both_users(matches, teams, subs):
         assert (out.club1.starter_name, out.club1.substitute_name) == ("C1", "D1")
         assert (out.club2.starter_name, out.club2.substitute_name) == ("C2", "D2")
     assert s.get_substitutions(1, 5) == s.get_substitutions(2, 5)
+
+def test_outside_a_pause_it_lists_the_pending_substitutions(matches, teams, subs, runtime):
+    SubstitutionService(matches, teams, subs, runtime).get_substitutions(1, 5)
+    subs.list_by_match.assert_called_once_with(5, applied=False)
+
+
+def test_during_a_pause_it_lists_the_applied_substitutions(matches, teams, subs, runtime):
+    runtime.get_runtime_state = lambda _id: state(in_pause=True, pauses_left=1)
+    SubstitutionService(matches, teams, subs, runtime).get_substitutions(1, 5)
+    subs.list_by_match.assert_called_once_with(5, applied=True)
+
+
+def test_during_the_last_pause_it_still_answers(matches, teams, subs, runtime):
+    runtime.get_runtime_state = lambda _id: state(in_pause=True, pauses_left=0)
+    SubstitutionService(matches, teams, subs, runtime).get_substitutions(1, 5)
+    subs.list_by_match.assert_called_once_with(5, applied=True)
+
+
+@pytest.mark.parametrize(("runtime_state", "code"), [
+    (state(in_penalties=True, pauses_left=0), "matchInPenalties"),
+    (state(pauses_left=0), "noPausesLeft"),
+])
+def test_runtime_conflicts(matches, teams, subs, runtime, runtime_state, code):
+    runtime.get_runtime_state = lambda _id: runtime_state
+    assert error_of(SubstitutionService(matches, teams, subs, runtime)) == (409, code)
+    subs.list_by_match.assert_not_called()
+
+
+def test_without_runtime_state_it_is_noPausesLeft(matches, teams, subs):
+    runtime = SimpleNamespace(get_runtime_state=lambda _id: None)
+    assert error_of(SubstitutionService(matches, teams, subs, runtime)) == (409, "noPausesLeft")
+
+
+def test_not_started_has_precedence_over_runtime_conflicts(matches, teams, subs, runtime):
+    matches.get_players.return_value = MatchPlayersData(
+        id=5, status=MatchStatus.finished, user_1_id=1, user_2_id=2
+    )
+    runtime.get_runtime_state = lambda _id: state(in_penalties=True, pauses_left=0)
+    assert error_of(SubstitutionService(matches, teams, subs, runtime)) == (409, "matchNotStarted")

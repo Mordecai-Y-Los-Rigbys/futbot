@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from unittest.mock import create_autospec
+from sqlalchemy.exc import IntegrityError
 
 import pytest
 
@@ -25,7 +26,7 @@ def setup():
     teams.get_member_id.side_effect = lambda mid, league, uid, pid: pid + 100
     substitutions = create_autospec(AbstractSubstitutionRepository, instance=True)
     runtime = SimpleNamespace(get_runtime_state=lambda _id: SimpleNamespace(
-        in_penalties=False, pauses_left=2
+        in_penalties=False, pauses_left=2, in_pause=False
     ))
     return matches, teams, substitutions, runtime
 
@@ -78,8 +79,10 @@ def test_non_player_with_valid_body_is_forbidden(setup):
 
 
 @pytest.mark.parametrize(("runtime_state", "code"), [
-    (SimpleNamespace(in_penalties=True, pauses_left=0), "matchInPenalties"),
-    (SimpleNamespace(in_penalties=False, pauses_left=0), "noPausesLeft"),
+    (SimpleNamespace(in_penalties=True, pauses_left=0, in_pause=False), "matchInPenalties"),
+    (SimpleNamespace(in_penalties=False, pauses_left=0, in_pause=False), "noPausesLeft"),
+    # durante la última pausa: no hay una siguiente donde aplicar el cambio
+    (SimpleNamespace(in_penalties=False, pauses_left=0, in_pause=True), "noPausesLeft"),
 ])
 def test_runtime_conflicts(setup, runtime_state, code):
     matches, teams, repo, runtime = setup
@@ -90,6 +93,16 @@ def test_runtime_conflicts(setup, runtime_state, code):
         )
     assert (exc.value.status_code, exc.value.code) == (409, code)
     repo.upsert.assert_not_called()
+
+def test_put_during_a_pause_that_is_not_the_last_is_accepted(setup):
+    matches, teams, repo, runtime = setup
+    runtime.get_runtime_state = lambda _id: SimpleNamespace(
+        in_penalties=False, pauses_left=1, in_pause=True
+    )
+    SubstitutionService(matches, teams, repo, runtime).request_substitution(
+        7, 5, {"starterId": 10, "substituteId": 13}
+    )
+    repo.upsert.assert_called_once_with(5, 7, 113, 110)
 
 
 def test_match_not_started_has_precedence_over_runtime_conflicts(setup):
@@ -125,3 +138,41 @@ def test_non_player_with_invalid_body_gets_only_field_errors(setup):
         ("starterId", "invalidType")
     ]
     teams.get_team_player_ids.assert_not_called()
+
+def check_violation():
+    return IntegrityError("stmt", {}, SimpleNamespace(pgcode="23514"))
+
+
+def test_trigger_rejection_is_reported_as_field_errors(setup):
+    matches, teams, repo, runtime = setup
+    repo.upsert.side_effect = check_violation()
+    with pytest.raises(ValidationApiError) as exc:
+        SubstitutionService(matches, teams, repo, runtime).request_substitution(
+            7, 5, {"starterId": 10, "substituteId": 13}
+        )
+    assert [(e["field"], e["reason"]) for e in exc.value.errors] == [
+        ("starterId", "notStarter"), ("substituteId", "notSubstitute")
+    ]
+
+
+def test_trigger_rejection_when_the_match_ended_is_409(setup):
+    matches, teams, repo, runtime = setup
+    repo.upsert.side_effect = check_violation()
+    matches.get_players.side_effect = [
+        matches.get_players.return_value,
+        MatchPlayersData(id=5, league_id=None, status=MatchStatus.finished, user_1_id=7, user_2_id=8),
+    ]
+    with pytest.raises(ApiError) as exc:
+        SubstitutionService(matches, teams, repo, runtime).request_substitution(
+            7, 5, {"starterId": 10, "substituteId": 13}
+        )
+    assert (exc.value.status_code, exc.value.code) == (409, "matchNotStarted")
+
+
+def test_other_integrity_errors_are_not_swallowed(setup):
+    matches, teams, repo, runtime = setup
+    repo.upsert.side_effect = IntegrityError("stmt", {}, SimpleNamespace(pgcode="23503"))
+    with pytest.raises(IntegrityError):
+        SubstitutionService(matches, teams, repo, runtime).request_substitution(
+            7, 5, {"starterId": 10, "substituteId": 13}
+        )
