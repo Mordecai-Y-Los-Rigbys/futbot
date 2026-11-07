@@ -54,6 +54,7 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
         ),
         status=item.status,
         participants_count=item.participants_count,
+        min_participants=item.min_participants,
         max_participants=item.max_participants,
         private=item.private,
         allow_draws=item.allow_draws,
@@ -137,7 +138,7 @@ class LeagueService:
             )
         )
         return _to_summary(created)
-    
+
     def leave_league(self, user_id: int, raw_league_id: str) -> None:
         """Quita al usuario de una liga en preparación y libera su cupo.
 
@@ -181,7 +182,6 @@ class LeagueService:
 
         return LeagueDetail(
             **dict(_to_summary(data)),
-            min_participants=data.min_participants,
             joined=data.joined,
         )
 

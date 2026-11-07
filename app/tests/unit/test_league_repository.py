@@ -22,6 +22,7 @@ def fake_league(id=1, status=LeagueStatus.preparation, created_at=None):
         id=id,
         name=f"Liga {id}",
         status=status,
+        min_participants=3,
         max_participants=8,
         private=False,
         allow_draws=True,  # nuevo
@@ -185,7 +186,7 @@ def test_always_two_statements_regardless_of_rows(repo, db, rows):
     repo.list_page(name=None, offset=0, limit=50)
     assert db.scalar.call_count == 1
     assert db.execute.call_count == 1
-    
+
 
 # --- abandonar liga -----------------------------------------------------------
 

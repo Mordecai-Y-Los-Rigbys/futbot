@@ -46,20 +46,20 @@ class FakeLeagueRepository(AbstractLeagueRepository):
             ),
             status="preparation",
             participants_count=1,
+            min_participants=data.min_participants,
             max_participants=data.max_participants,
             private=data.private,
             allow_draws=True,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
-        
-    
+
     def get_detail(self, league_id, user_id):
         self.detail_calls.append((league_id, user_id))
         return self.details.get(league_id)
 
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
-    
+
     def get_leave_info(self, league_id):
         return self.leave_info.get(league_id)
 
@@ -109,6 +109,7 @@ def make_item():
         name="Liga Argentina",
         status="preparation",
         participants_count=1,
+        min_participants=3,
         max_participants=8,
         private=False,
         allow_draws=True,
@@ -120,11 +121,10 @@ def make_item():
         return LeagueListItemData(
             id=id,
             name=name,
-            creator=LeagueCreatorData(
-                id=7, username=username, club_name=club_name, avatar=avatar
-            ),
+            creator=LeagueCreatorData(id=7, username=username, club_name=club_name, avatar=avatar),
             status=status,
             participants_count=participants_count,
+            min_participants=min_participants,
             max_participants=max_participants,
             private=private,
             allow_draws=allow_draws,
@@ -136,11 +136,9 @@ def make_item():
 
 @pytest.fixture()
 def make_detail(make_item):
-    def _make(min_participants=3, joined=False, **kwargs) -> LeagueDetailData:
+    def _make(joined=False, **kwargs) -> LeagueDetailData:
         item = make_item(**kwargs)
-        return LeagueDetailData(
-            **item.model_dump(), min_participants=min_participants, joined=joined
-        )
+        return LeagueDetailData(**item.model_dump(), joined=joined)
 
     return _make
 

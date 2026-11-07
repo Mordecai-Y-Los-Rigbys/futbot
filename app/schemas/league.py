@@ -23,6 +23,7 @@ class LeagueSummary(CamelModel):
     creator: LeagueCreator
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
     allow_draws: bool
@@ -36,7 +37,6 @@ class LeagueSummary(CamelModel):
 
 
 class LeagueDetail(LeagueSummary):
-    min_participants: int
     joined: bool
 
 
