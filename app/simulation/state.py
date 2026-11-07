@@ -41,6 +41,7 @@ class PlayerState:
     regain_blocked_until: int = (
         NOT_REGAIN_BLOCKED  # hasta este tick no puede recuperar la pelota despues de patear
     )
+    name: str = ""  # solo para mostrarlo en la tanda de penales 
 
     @property
     def number(self) -> int:

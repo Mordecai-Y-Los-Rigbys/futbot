@@ -66,6 +66,7 @@ class PlayerSetup:
     player_id: int
     role: MemberRole
     stats: Stats
+    name: str = ""
 
 
 def _absolute(team: Team, x: float, y: float) -> Vec:
@@ -97,6 +98,7 @@ def create_initial_state(
                     stats=setup.stats,
                     position=ZERO,
                     facing=_attack_direction(team),
+                    name=setup.name
                 )
             )
     state = MatchState(players=players, ball=BallState(position=ZERO), seed=seed)
