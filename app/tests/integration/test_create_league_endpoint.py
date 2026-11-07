@@ -79,6 +79,18 @@ def test_create_league_enrolls_creator_with_team(login_as, create_user, team_of,
     assert api.get("/leagues").json()["total"] == 1  # visible en el listado
 
 
+def test_penalties_mode_is_persisted(login_as, create_user, team_of, db_session):
+    creator = create_user("creator")
+    api = login_as(creator)
+
+    resp = api.post("/leagues", json=body_for(team_of(creator), allowDraws=False))
+
+    assert resp.status_code == 201
+    league_id = resp.json()["id"]
+    assert db_session.get(League, league_id).allow_draws is False
+    assert api.get(f"/leagues/{league_id}").json()["allowDraws"] is False
+
+
 def test_public_league_does_not_persist_password(login_as, create_user, team_of, db_session):
     creator = create_user("creator")
     api = login_as(creator)

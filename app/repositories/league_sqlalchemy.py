@@ -126,7 +126,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
     def get_match_duration_minutes(self, league_id: int) -> int | None:
         # scalar() devuelve None si la liga no existe
         return self.db.scalar(select(League.match_duration).where(League.id == league_id))
-    
+
     def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
         row = self.db.execute(
             select(League.status, League.creator_id).where(League.id == league_id)
@@ -162,7 +162,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         except Exception:
             self.db.rollback()
             raise
-    
+
     def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
         participants_count = (
             select(func.count(func.distinct(LeagueParticipant.user_id)))

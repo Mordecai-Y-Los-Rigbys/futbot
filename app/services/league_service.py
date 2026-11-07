@@ -136,7 +136,7 @@ class LeagueService:
             )
         )
         return _to_summary(created)
-    
+
     def leave_league(self, user_id: int, raw_league_id: str) -> None:
         """Quita al usuario de una liga en preparación y libera su cupo.
 
