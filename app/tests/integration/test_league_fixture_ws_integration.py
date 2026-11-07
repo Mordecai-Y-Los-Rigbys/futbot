@@ -9,12 +9,13 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import sessionmaker
 
-from app.api import ws_league_deps
+from app.api import ws_deps, ws_league_deps
 from app.api.ws_league_deps import get_league_fixture_manager, get_league_fixture_notifier
 from app.domain.match import MatchStatus
 from app.main import app
 from app.models.league import League, LeagueStatus
 from app.models.match import Match
+from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.services.league_fixture_channel import LeagueFixtureManager
 from app.tests.league_ws_helpers import ORIGIN, closing, connect, rejection, stays_silent, wait_until
 
@@ -80,6 +81,18 @@ def started_league(db_session, creator, create_user, make_league, add_participan
         return league.id, [m.id for m in matches]
 
     return _make
+
+
+@pytest.fixture()
+def runner_callback(db_session, monkeypatch, manager):
+    """El callback real del runner, con la base de tests y el manager del test."""
+    monkeypatch.setattr(
+        ws_deps,
+        "SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    monkeypatch.setattr(ws_deps, "get_league_fixture_manager", lambda: manager)
+    return ws_deps._notify_league_channels
 
 
 def path(league_id: int) -> str:
@@ -284,3 +297,68 @@ def test_starting_the_league_notifies_the_fixture_channel(
 
     assert login_as(creator).post(f"/leagues/{league.id}/start").status_code == 204
     assert calls == [league.id]
+    
+# --- avisos del runner --------------------------------------------------------
+
+
+def test_only_league_matches_notify_their_league(
+    db_session, started_league, creator, create_user, monkeypatch
+):
+    league_id, (first, _, _) = started_league()
+    friendly = Match(user_1_id=creator.id, user_2_id=create_user("rival").id)
+    db_session.add(friendly)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        ws_deps, "SessionLocal", sessionmaker(bind=db_session.get_bind())
+    )
+    calls = []
+    monkeypatch.setattr(
+        ws_deps, "get_league_fixture_manager", lambda: SimpleNamespace(fixture_changed=calls.append)
+    )
+
+    ws_deps._notify_league_channels(first)
+    ws_deps._notify_league_channels(friendly.id)
+    assert calls == [league_id]
+
+
+def test_match_start_and_result_reach_the_open_connection(
+    login_as, db_session, started_league, viewer, runner_callback
+):
+    league_id, (first, _, _) = started_league()
+    repo = SqlAlchemyMatchRepository(db_session)
+    with connect(login_as(viewer), path(league_id)) as ws:
+        ws.receive_json()
+
+        repo.mark_started(first)
+        runner_callback(first)
+        assert by_id(ws.receive_json())[first]["status"] == "started"
+
+        assert repo.finish(first, 2, 0) is False
+        runner_callback(first)
+        message = ws.receive_json()
+        assert message["leagueStatus"] == "started"
+        assert by_id(message)[first]["result"] == {"score1": 2, "score2": 0, "penalties": None}
+
+
+def test_the_last_match_sends_a_single_message_and_closes(
+    login_as, db_session, started_league, viewer, runner_callback, manager
+):
+    league_id, (first, second, last) = started_league()
+    repo = SqlAlchemyMatchRepository(db_session)
+    repo.finish(first, 1, 0)
+    repo.finish(second, 1, 0)
+
+    with connect(login_as(viewer), path(league_id)) as ws:
+        ws.receive_json()
+
+        # El resultado y el fin de la liga se guardan juntos (SCRUM-162): un solo aviso.
+        assert repo.finish(last, 0, 1) is True
+        runner_callback(last)
+
+        message = ws.receive_json()
+        assert message["leagueStatus"] == "finished"
+        assert by_id(message)[last]["result"] == {"score1": 0, "score2": 1, "penalties": None}
+        assert closing(ws) == (1000, "leagueFinished")
+
+    assert wait_until(lambda: manager.count(league_id, viewer.id) == 0)
