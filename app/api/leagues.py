@@ -19,7 +19,6 @@ from app.schemas.errors import (
     Error,
     JoinLeagueConflict,
     JoinLeagueForbidden,
-    LeagueAccessForbidden,
     LeagueDataConflict,
     LeaveLeagueConflict,
     ListPageBadRequest,
@@ -27,6 +26,7 @@ from app.schemas.errors import (
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
+from app.schemas.league_access import LeagueAccessForbidden
 from app.schemas.ranking import LeagueRankingEntry
 from app.services.league_access_service import LeagueAccessService
 from app.services.ranking_service import RankingService

@@ -27,11 +27,6 @@ class CreateLeagueBadRequest(BaseModel):
     message: str
 
 
-class LeagueAccessForbidden(BaseModel):
-    code: Literal["leagueAccessRequired"]
-    message: str
-
-
 class LeagueDataConflict(BaseModel):
     code: Literal["leagueNotStarted", "leagueCancelled"]
     message: str
