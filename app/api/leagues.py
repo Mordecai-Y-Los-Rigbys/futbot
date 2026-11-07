@@ -19,6 +19,7 @@ from app.schemas.errors import (
     JoinLeagueForbidden,
     LeaveLeagueConflict,
     ListPageBadRequest,
+    StartLeagueConflict,
     ValidationBadRequest,
 )
 from app.helpers.ids import parse_path_id
@@ -66,8 +67,8 @@ def get_league(
         league_id=parse_path_id(league_id, LEAGUE_NOT_FOUND_MESSAGE),
         user_id=user_id,
     )
-    
-    
+
+
 @router.post(
     "",
     response_model=LeagueSummary,
@@ -86,7 +87,6 @@ def create_league(
     service: LeagueService = Depends(get_league_service),
 ) -> LeagueSummary:
     return service.create_league(creator_id=user_id, body=body)
-
 
 
 @router.delete(
@@ -109,6 +109,7 @@ def leave_league(
     service.leave_league(user_id=user_id, raw_league_id=id)
     return Response(status_code=204)
 
+
 @router.post(
     "/{id}/participants",
     status_code=201,
@@ -125,13 +126,35 @@ def leave_league(
     },
 )
 def join_league(
-    id: str, 
+    id: str,
     session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
     body: Any = Depends(get_json_body),
     service: LeagueService = Depends(get_league_service),
 ) -> Response:
     service.join_league(user_id=session.user_id, session_id=session.id, raw_league_id=id, body=body)
     return Response(status_code=201)
+
+
+@router.post(
+    "/{league_id}/start",
+    status_code=204,
+    response_class=Response,
+    operation_id="startLeague",
+    summary="Iniciar una liga",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": StartLeagueConflict},
+    },
+)
+def start_league(
+    league_id: str,
+    user_id: int = Depends(get_current_user_id),
+    service: LeagueService = Depends(get_league_service),
+) -> Response:
+    service.start_league(parse_path_id(league_id, LEAGUE_NOT_FOUND_MESSAGE), user_id)
+    return Response(status_code=204)
 
 
 router.include_router(league_access_router)
