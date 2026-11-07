@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import Cookie, Depends, Request
 from sqlalchemy.orm import Session
 
-from app.api.ws_league_deps import get_league_participants_notifier
+from app.api.ws_league_deps import get_league_fixture_notifier, get_league_participants_notifier
 from app.database import get_db
 from app.errors import ApiError
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
@@ -23,6 +23,7 @@ from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepos
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
+from app.services.league_fixture_notifier import LeagueFixtureNotifier
 from app.services.friendly_service import FriendlyService
 from app.services.league_access_service import LeagueAccessService
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
@@ -159,3 +160,15 @@ async def get_json_body(
         return json.loads(raw)
     except ValueError:
         return INVALID_JSON
+    
+
+def get_league_service(
+    leagues: AbstractLeagueRepository = Depends(get_league_repository),
+    players: AbstractPlayerRepository = Depends(get_player_repository),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+    notifier: LeagueParticipantsNotifier = Depends(get_league_participants_notifier),
+    fixture_notifier: LeagueFixtureNotifier = Depends(get_league_fixture_notifier),
+) -> LeagueService:
+    return LeagueService(
+        leagues, players, behaviors, notifier=notifier, fixture_notifier=fixture_notifier
+    )
