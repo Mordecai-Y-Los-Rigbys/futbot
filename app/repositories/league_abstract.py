@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
 from app.domain.team_member import MemberRole
+from app.domain.match import MatchStatus
 
 
 class LeagueCreatorData(BaseModel):
@@ -96,6 +97,29 @@ class JoinLeagueData(BaseModel):
     members: list[CreateLeagueMemberData]
     coach_behavior_id: int | None  # None: el equipo no tiene DT
     unlock_session: bool  # True si la liga es privada: queda desbloqueada en la sesión
+    
+
+class LeagueFixtureClubData(BaseModel):
+    id: int
+    username: str
+    club_name: str
+    avatar: int
+
+
+class LeagueFixtureMatchData(BaseModel):
+    id: int
+    status: MatchStatus
+    club_1: LeagueFixtureClubData
+    club_2: LeagueFixtureClubData
+    scheduled_at: datetime
+    created_at: datetime
+    score_1: int | None
+    score_2: int | None
+
+
+class LeagueFixtureData(BaseModel):
+    status: LeagueStatus
+    matches: list[LeagueFixtureMatchData]
 
 
 StartLeagueConflict = Literal["notInPreparation", "notEnoughParticipants"]
@@ -213,4 +237,10 @@ class AbstractLeagueRepository(ABC):
         Returns:
             None si la inició; el código del conflicto si, al bloquear la liga,
             ya no se podía iniciar (en ese caso no persiste nada).
+        """
+    @abstractmethod
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        """Estado de la liga y sus partidos, por scheduled_at y después id.
+
+        Devuelve None si la liga no existe.
         """

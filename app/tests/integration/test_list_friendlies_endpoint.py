@@ -128,7 +128,7 @@ def test_club1_uses_username_and_club_name(api, create_user, make_friendly):
     boss = create_user("mgonzalez", "Boca Juniors FC")
     make_friendly(boss)
     club1 = api.get("/friendlies").json()["items"][0]["club1"]
-    assert club1 == {"id": boss.id, "username": "mgonzalez", "name": "Boca Juniors FC"}
+    assert club1 == {"id": boss.id, "username": "mgonzalez", "name": "Boca Juniors FC", "avatar": boss.avatar}
 
 
 def test_unknown_params_are_ignored(api, creator, make_friendly):
