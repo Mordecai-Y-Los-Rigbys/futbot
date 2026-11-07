@@ -166,7 +166,7 @@ def test_endpoint_success_is_204_without_body(auth_league_api, repo):
     repo.get_start_state.assert_called_once_with(5)
 
 
-@pytest.mark.parametrize("path", [URL, "/leagues/abc/start", "leagues/0/start"])
+@pytest.mark.parametrize("path", [URL, "/leagues/abc/start", "/leagues/0/start"])
 def test_no_cookie_is_401_even_with_a_bad_id(league_api, repo, path):
     resp = league_api.post(path)
     assert resp.status_code == 401 and resp.json()["code"] is None

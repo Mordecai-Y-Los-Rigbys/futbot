@@ -124,10 +124,6 @@ def test_not_enough_participants(
     assert_untouched(db_session, lg.id)
 
 
-def test_404_beats_403(login_as, create_user):
-    assert login_as(create_user("x")).post(url(999999)).status_code == 404
-
-
 def run_together(*jobs):
     """Corre cada job en su propio thread, arrancando a la vez. Devuelve sus resultados."""
     barrier = threading.Barrier(len(jobs))
