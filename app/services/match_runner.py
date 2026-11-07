@@ -38,8 +38,9 @@ MAX_TICK_COMPUTE = 0.1  # segundos: criterio de rendimiento
 
 @dataclass(frozen=True)
 class MatchRuntimeState:
-    pauses_left: int
+    pauses_left: int  # pausas que todavía NO empezaron (sin contar la actual)
     in_penalties: bool = False
+    in_pause: bool = False
 
 
 class MatchRunner:
@@ -166,10 +167,13 @@ class MatchRunner:
                 await self._start_pause(match_id, session, setup)
             began = self._monotonic()
             result = await loop.run_in_executor(self._executor, session.advance)
+            in_pause = result.phase is Phase.PAUSED
             with self._runtime_lock:
                 self._runtime_states[match_id] = MatchRuntimeState(
-                    pauses_left=session.pauses_remaining,
+                    # pauses_remaining cuenta la pausa actual: se resta.
+                    pauses_left=session.pauses_remaining - (1 if in_pause else 0),
                     in_penalties=(result.phase.value == "penalties"),
+                    in_pause=in_pause,
                 )
             compute = self._monotonic() - began
             if compute > MAX_TICK_COMPUTE:
@@ -234,9 +238,11 @@ class MatchRunner:
         ]
 
     def _end_pause(self, match_id: int) -> None:
+        # Se borran solo las aplicadas; las pendientes (pedidas durante la
+        # pausa) quedan para la pausa siguiente.
         try:
             with self._substitution_scope() as repo:
-                repo.delete_by_match(match_id)
+                repo.delete_applied_by_match(match_id)
         except Exception:
             logger.exception("No se pudieron borrar los cambios del partido %s", match_id)
 
