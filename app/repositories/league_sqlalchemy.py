@@ -46,6 +46,7 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
         ),
         status=getattr(record.status, "value", record.status),
         participants_count=participants_count,
+        min_participants=record.min_participants,
         max_participants=record.max_participants,
         private=record.private,
         created_at=created_at,
@@ -125,7 +126,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
     def get_match_duration_minutes(self, league_id: int) -> int | None:
         # scalar() devuelve None si la liga no existe
         return self.db.scalar(select(League.match_duration).where(League.id == league_id))
-    
+
     def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
         row = self.db.execute(
             select(League.status, League.creator_id).where(League.id == league_id)
@@ -161,7 +162,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         except Exception:
             self.db.rollback()
             raise
-    
+
     def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
         participants_count = (
             select(func.count(func.distinct(LeagueParticipant.user_id)))
@@ -189,7 +190,6 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         league, count, is_joined = row
         return LeagueDetailData(
             **_to_data(league, count).model_dump(),
-            min_participants=league.min_participants,
             joined=bool(is_joined),
         )
 

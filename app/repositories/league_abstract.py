@@ -22,6 +22,7 @@ class LeagueListItemData(BaseModel):
     creator: LeagueCreatorData
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
     allow_draws: bool
@@ -31,7 +32,6 @@ class LeagueListItemData(BaseModel):
 
 
 class LeagueDetailData(LeagueListItemData):
-    min_participants: int
     joined: bool
 
 
@@ -55,7 +55,7 @@ class CreateLeagueData(BaseModel):
     private: bool
     password: str | None  # None si la liga es pública
     members: list[CreateLeagueMemberData]
-    
+
 
 class LeagueLeaveInfo(BaseModel):
     status: LeagueStatus
@@ -122,15 +122,15 @@ class AbstractLeagueRepository(ABC):
         Es el valor `match_duration` que definió el creador al crear la liga
         (entre 1 y 10). Devuelve None si la liga no existe.
         """
-    
+
     @abstractmethod
     def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
         """Estado y creador de la liga. Devuelve None si la liga no existe."""
-    
+
     @abstractmethod
     def is_participant(self, league_id: int, user_id: int) -> bool:
         """True si el usuario está inscripto en la liga (el creador incluido)."""
-    
+
     @abstractmethod
     def remove_participant(self, league_id: int, user_id: int) -> None:
         """
