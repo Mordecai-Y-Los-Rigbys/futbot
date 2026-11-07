@@ -18,3 +18,17 @@ class GlobalRankingPage(CamelModel):
     page: int
     page_size: int
     total: int
+    
+
+class LeagueRankingEntry(CamelModel):
+    position: int
+    name: str
+    avatar: int
+    played: int
+    won_regular: int
+    won_penalties: int
+    drawn: int
+    lost: int
+    goals: int
+    goal_difference: int
+    score: int
