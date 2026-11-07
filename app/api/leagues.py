@@ -141,7 +141,7 @@ def join_league(
 
 
 @router.post(
-    "/{league_id}/start",
+    "/{id}/start",
     status_code=204,
     response_class=Response,
     operation_id="startLeague",
@@ -154,11 +154,11 @@ def join_league(
     },
 )
 def start_league(
-    league_id: str,
+    id: str,
     user_id: int = Depends(get_current_user_id),
     service: LeagueService = Depends(get_league_service),
 ) -> Response:
-    service.start_league(parse_path_id(league_id, LEAGUE_NOT_FOUND_MESSAGE), user_id)
+    service.start_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE), user_id)
     return Response(status_code=204)
 
 
