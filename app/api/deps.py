@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Cookie, Depends, Request
@@ -10,6 +11,7 @@ from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.league_abstract import AbstractLeagueRepository
+from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
@@ -22,6 +24,7 @@ from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
 from app.services.friendly_service import FriendlyService
+from app.services.league_access_service import LeagueAccessService
 from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
 from app.services.match_connection_service import MatchConnectionService
@@ -62,6 +65,10 @@ def get_league_service(
     behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
 ) -> LeagueService:
     return LeagueService(leagues, players, behaviors)
+
+
+def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessService:
+    return LeagueAccessService(SqlAlchemyLeagueAccessRepository(db))
 
 
 def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
@@ -119,6 +126,23 @@ def get_current_user_id(
         raise ApiError(401, None, "Sin sesión válida.")
 
     return user_id
+
+
+@dataclass(frozen=True)
+class CurrentSession:
+    """La sesión de la cookie, ya validada. `id` es el valor de `session_id`."""
+
+    id: str
+    user_id: int
+
+
+def get_current_session(
+    session_id: str | None = Cookie(default=None),
+    user_id: int = Depends(get_current_user_id),  # 401 si la cookie falta o no sirve
+) -> CurrentSession:
+    """Como get_current_user_id, pero también devuelve el id de la sesión
+    (lo necesitan los desbloqueos de ligas privadas, convención 11)."""
+    return CurrentSession(id=session_id or "", user_id=user_id)
 
 
 async def get_json_body(

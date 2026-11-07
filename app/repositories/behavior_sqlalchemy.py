@@ -1,7 +1,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.behavior import Behavior
+from app.models.behavior import Behavior, BehaviorType
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
@@ -53,3 +53,13 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
                 select(Behavior.id).where(Behavior.user_id == user_id, Behavior.id.in_(ids))
             )
         )
+
+    def behavior_types(self, user_id: int, ids: list[int]) -> dict[int, BehaviorType]:
+        if not ids:
+            return {}
+        rows = self.db.execute(
+            select(Behavior.id, Behavior.type).where(
+                Behavior.user_id == user_id, Behavior.id.in_(ids)
+            )
+        ).all()
+        return {behavior_id: BehaviorType(kind) for behavior_id, kind in rows}

@@ -1,8 +1,10 @@
 from datetime import timezone
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.models.session import UserSession
+from app.models.session_league_unlock import SessionLeagueUnlock
 from app.repositories.session_abstract import (
     AbstractSessionRepository,
     CreateSessionData,
@@ -47,5 +49,9 @@ class SqlAlchemySessionRepository(AbstractSessionRepository):
     def delete(self, session_id: str) -> None:
         record = self.db.get(UserSession, session_id)
         if record is not None:
+            # Borrado explícito: en SQLite el ON DELETE CASCADE no se aplica.
+            self.db.execute(
+                delete(SessionLeagueUnlock).where(SessionLeagueUnlock.session_id == session_id)
+            )
             self.db.delete(record)
             self.db.commit()

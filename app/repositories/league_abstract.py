@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
@@ -61,6 +62,41 @@ class LeagueLeaveInfo(BaseModel):
     creator_id: int
 
 
+# Conflictos de inscripción que dependen del estado de la liga, en el orden
+# en que se evalúan (enum de JoinLeagueConflict del contrato).
+JoinLeagueStateConflict = Literal["notInPreparation", "leagueFull", "alreadyParticipating"]
+
+
+class LeagueJoinState(BaseModel):
+    """Lo que necesita POST /leagues/{id}/participants para decidir 403 y 409."""
+
+    private: bool
+    password: str | None
+    status: LeagueStatus
+    max_participants: int
+    participants_count: int
+    is_participant: bool  # el usuario que se inscribe ya participa
+
+    def conflict(self) -> JoinLeagueStateConflict | None:
+        """Primer 409 de estado que aplica, o None si la liga admite al usuario."""
+        if self.status != LeagueStatus.preparation:
+            return "notInPreparation"
+        if self.participants_count >= self.max_participants:
+            return "leagueFull"
+        if self.is_participant:
+            return "alreadyParticipating"
+        return None
+
+
+class JoinLeagueData(BaseModel):
+    league_id: int
+    user_id: int
+    session_id: str
+    members: list[CreateLeagueMemberData]
+    coach_behavior_id: int | None  # None: el equipo no tiene DT
+    unlock_session: bool  # True si la liga es privada: queda desbloqueada en la sesión
+
+
 class AbstractLeagueRepository(ABC):
     @abstractmethod
     def list_page(self, name: str | None, offset: int, limit: int) -> LeaguePageData:
@@ -108,4 +144,25 @@ class AbstractLeagueRepository(ABC):
 
         Incluye creador, participantes (creador incluido) y si `user_id`
         participa. Devuelve None si la liga no existe. Nunca expone la contraseña.
+        """
+
+    @abstractmethod
+    def get_join_state(self, league_id: int, user_id: int) -> LeagueJoinState | None:
+        """Estado de la liga visto por `user_id` que quiere inscribirse.
+
+        Devuelve None si la liga no existe.
+        """
+
+    @abstractmethod
+    def join(self, data: JoinLeagueData) -> JoinLeagueStateConflict | None:
+        """Inscribe al usuario con su equipo y su DT, en una única transacción.
+
+        Vuelve a evaluar estado, cupo y participación previa con la liga
+        bloqueada, para que dos inscripciones simultáneas no superen el cupo.
+        Si `unlock_session`, también registra el desbloqueo de la liga en la
+        sesión dentro de la misma transacción.
+
+        Returns:
+            None si inscribió; el código del conflicto si, al bloquear la
+            liga, ya no admitía al usuario (en ese caso no persiste nada).
         """
