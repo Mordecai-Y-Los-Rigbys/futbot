@@ -33,19 +33,20 @@ def put(api, match, player_id, behavior_id):
 
 
 @pytest.mark.parametrize("kind", ["league_match", "friendly_match"])
-def test_starter_change_is_204_queued_and_does_not_touch_the_lineup(
+def test_starter_change_is_204_queued_and_saved_in_the_team(
     request, kind, login_as, make_user, make_behaviors, runner, db_session
 ):
     match, teams = request.getfixturevalue(kind)
     new = make_behaviors(1, ["nuevo"], code="pass")[0]
-    starter = teams[1][0]
+    starter, teammate = teams[1][0], teams[1][1]
 
-    r = put(login_as(make_user(1)), match, starter.player_id, new.id)
+    resp = put(login_as(make_user(1)), match, starter.player_id, new.id)
 
-    assert r.status_code == 204
+    assert resp.status_code == 204
     assert runner.queued == [(match.id, starter.player_id)]
-    db_session.refresh(starter)
-    assert starter.behavior_id != new.id
+    db_session.expire_all()
+    assert starter.behavior_id == new.id
+    assert teammate.behavior_id != new.id
 
 
 @pytest.mark.parametrize("team, index", [(1, 3), (2, 0)])

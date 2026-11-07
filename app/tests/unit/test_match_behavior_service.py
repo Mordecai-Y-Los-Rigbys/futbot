@@ -78,6 +78,7 @@ def test_valid_change_is_compiled_and_queued(service, teams, runner):
     teams.get_starters.assert_called_once_with(5, 8, 1)  # usa la liga del partido
     runner.queue_behavior.assert_called_once_with(5, 3, ANY)
     assert isinstance(runner.queue_behavior.call_args.args[2], CompiledBehavior)
+    teams.set_behavior.assert_called_once_with(5, 8, 3, 7)
 
 
 def test_missing_match_is_404_even_with_a_broken_body(service, matches, runner):
@@ -129,6 +130,7 @@ def test_coach_behavior_is_409(service, behaviors):
     assert error_of(service) == (409, "behaviorTypeMismatch")
 
 
-def test_match_ending_during_the_request_is_409(service, runner):
+def test_match_ending_during_the_request_is_409_and_does_not_touch_the_team(service, teams, runner):
     runner.queue_behavior.return_value = False
     assert error_of(service) == (409, "matchNotInProgress")
+    teams.set_behavior.assert_not_called()

@@ -36,7 +36,7 @@ class MatchBehaviorService:
         self.runner = runner
 
     def reassign(self, user_id: int, match_id: int, body: Any) -> None:
-        """Encola el cambio para el próximo tick.
+        """Encola el cambio para el próximo tick y lo guarda en el equipo.
 
         Orden: 404 > 400 > 403 > 409, y dentro del 409:
         matchNotInProgress > playerOrBehaviorNotOwned > behaviorTypeMismatch.
@@ -67,3 +67,5 @@ class MatchBehaviorService:
         code = self.behaviors.get_by_id(data.behavior_id).code
         if not self.runner.queue_behavior(match.id, data.player_id, compile_behavior(code)):
             raise _not_in_progress()
+
+        self.teams.set_behavior(match_id, match.league_id, data.player_id, data.behavior_id)

@@ -42,7 +42,7 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def create(self, data):
         raise NotImplementedError
-    
+
     def get_detail(self, league_id: int, user_id: int):
         raise NotImplementedError
 
@@ -70,6 +70,9 @@ class FakeTeams(AbstractTeamRepository):
     def get_starters(self, match_id, league_id, user_id):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
+
+    def set_behavior(self, match_id, league_id, player_id, behavior_id):
+        raise NotImplementedError
 
 
 def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
