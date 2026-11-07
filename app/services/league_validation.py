@@ -34,6 +34,7 @@ class CreateLeagueInput:
     match_duration: int
     private: bool
     password: str | None
+    allow_draws: bool
     members: list[MemberInput]
 
 
@@ -48,6 +49,13 @@ def _password_reason(body: dict) -> str | None:
         return "invalidType"
     if len(password) > MAX_PASSWORD_LEN:
         return "tooLong"
+    return None
+
+
+def _allow_draws_reason(body: dict) -> str | None:
+    """Opcional: si falta, la liga es en modo normal."""
+    if "allowDraws" in body and not isinstance(body["allowDraws"], bool):
+        return "invalidType"
     return None
 
 
@@ -83,6 +91,7 @@ def parse_create_league(body: Any) -> CreateLeagueInput:
         ("matchDuration", int_reason(body, "matchDuration", MIN_DURATION, MAX_DURATION)),
         ("private", bool_reason(body, "private")),
         ("password", _password_reason(body)),
+        ("allowDraws", _allow_draws_reason(body)),
     ):
         if reason:
             errors.append(field_error(field, reason))
@@ -99,5 +108,6 @@ def parse_create_league(body: Any) -> CreateLeagueInput:
         match_duration=body["matchDuration"],
         private=private,
         password=body["password"] if private else None,
+        allow_draws=body.get("allowDraws", True),
         members=to_members(body["members"]),
     )

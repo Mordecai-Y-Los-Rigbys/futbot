@@ -97,6 +97,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             match_duration=data.match_duration,
             private=data.private,
             password=data.password,
+            allow_draws=data.allow_draws,
         )
         try:
             self.db.add(league)

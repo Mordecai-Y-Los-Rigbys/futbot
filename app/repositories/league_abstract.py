@@ -54,6 +54,7 @@ class CreateLeagueData(BaseModel):
     match_duration: int
     private: bool
     password: str | None  # None si la liga es pública
+    allow_draws: bool
     members: list[CreateLeagueMemberData]
     
 

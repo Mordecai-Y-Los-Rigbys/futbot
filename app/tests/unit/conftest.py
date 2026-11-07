@@ -48,7 +48,7 @@ class FakeLeagueRepository(AbstractLeagueRepository):
             participants_count=1,
             max_participants=data.max_participants,
             private=data.private,
-            allow_draws=True,
+            allow_draws=data.allow_draws,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
         
