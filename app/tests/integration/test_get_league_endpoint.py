@@ -51,7 +51,7 @@ def test_invalid_or_missing_id_returns_404(login_as, owner, make_league, league_
 
 
 def test_returns_the_full_detail(login_as, owner, make_league):
-    league = make_league(owner, "Liga Argentina", max_participants=10)
+    league = make_league(owner, "Liga Argentina", max_participants=10, min_participants=4)
 
     response = login_as(owner).get(f"/leagues/{league.id}")
 
@@ -62,7 +62,7 @@ def test_returns_the_full_detail(login_as, owner, make_league):
     assert body["name"] == "Liga Argentina"
     assert body["status"] == "preparation"
     assert body["maxParticipants"] == 10
-    assert body["minParticipants"] == 3
+    assert body["minParticipants"] == 4
     assert body["private"] is False
     assert body["allowDraws"] is True
     assert body["createdAt"].endswith("Z")
@@ -177,9 +177,7 @@ def test_joined_depends_only_on_the_logged_user(
 # --- ligas privadas y contraseña ----------------------------------------------
 
 
-def test_private_league_is_readable_by_a_non_participant(
-    login_as, owner, create_user, make_league
-):
+def test_private_league_is_readable_by_a_non_participant(login_as, owner, create_user, make_league):
     league = make_league(owner, private=True)
     stranger = create_user("extraño")
 

@@ -31,12 +31,12 @@ def create_user(db_session):
     return _create
 
 
-def _new_league(creator, name, status, max_participants, private):
+def _new_league(creator, name, status, max_participants, private, min_participants=3):
     return League(
         name=name,
         creator_id=creator.id,
         status=LeagueStatus(status),
-        min_participants=3,
+        min_participants=min_participants,
         max_participants=max_participants,
         match_duration=5,
         private=private,
@@ -49,9 +49,14 @@ def make_league(db_session):
     """Crea una liga e inscribe al creador como participante (como hace la app)."""
 
     def _make(
-        creator, name="Liga", status="preparation", max_participants=8, private=False
+        creator,
+        name="Liga",
+        status="preparation",
+        min_participants=3,
+        max_participants=8,
+        private=False,
     ) -> League:
-        league = _new_league(creator, name, status, max_participants, private)
+        league = _new_league(creator, name, status, max_participants, private, min_participants)
         db_session.add(league)
         db_session.flush()
         db_session.add(LeagueParticipant(league_id=league.id, user_id=creator.id))
