@@ -7,13 +7,31 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
+from app.api.ws_deps import get_league_match_start
 from app.domain.match import MatchStatus
+from app.main import app
 from app.models.league import League, LeagueStatus
 from app.models.match import Match
 from app.repositories.league_abstract import FixtureMatchData, JoinLeagueData
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 
 pytestmark = pytest.mark.integration
+
+
+class FakeLeagueMatchStart:
+    def __init__(self):
+        self.leagues = []
+
+    async def schedule_league(self, league_id):
+        self.leagues.append(league_id)
+
+
+@pytest.fixture(autouse=True)
+def match_start():
+    fake = FakeLeagueMatchStart()
+    app.dependency_overrides[get_league_match_start] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_league_match_start, None)
 
 
 @pytest.fixture()

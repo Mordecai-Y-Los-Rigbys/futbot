@@ -1,10 +1,11 @@
 import random
 from datetime import datetime, timedelta, timezone
-from unittest.mock import create_autospec
+from unittest.mock import AsyncMock, create_autospec
 
 import pytest
 
 from app.api.deps import get_league_service
+from app.api.ws_deps import get_league_match_start
 from app.domain.league import LeagueStatus
 from app.errors import ApiError
 from app.main import app
@@ -64,6 +65,20 @@ def repo():
 @pytest.fixture()
 def notifier():
     return FakeNotifier()
+
+
+@pytest.fixture()
+def match_start():
+    fake = AsyncMock()
+    app.dependency_overrides[get_league_match_start] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_league_match_start, None)
+
+
+@pytest.fixture()
+def league_api(api, repo, notifier, match_start):
+    app.dependency_overrides[get_league_service] = lambda: make_service(repo, notifier)
+    return api
 
 
 def make_service(repo, notifier=None, seed=1, fixture_notifier=None):
@@ -177,22 +192,23 @@ def test_not_in_preparation_beats_not_enough_participants(repo):
 
 
 @pytest.fixture()
-def league_api(api, repo, notifier):
-    app.dependency_overrides[get_league_service] = lambda: make_service(repo, notifier)
-    return api
-
-
-@pytest.fixture()
 def auth_league_api(league_api):
     league_api.cookies.set("session_id", "valid-session")
     return league_api
 
 
-def test_endpoint_success_is_204_without_body(auth_league_api, repo):
+def test_endpoint_success_is_204_without_body(auth_league_api, repo, match_start):
     resp = auth_league_api.post(URL)
     assert resp.status_code == 204, resp.text
     assert resp.content == b""
     repo.get_start_state.assert_called_once_with(5)
+    match_start.schedule_league.assert_awaited_once_with(5)
+
+
+def test_endpoint_error_schedules_nothing(auth_league_api, repo, match_start):
+    repo.get_start_state.return_value = state(creator_id=8)
+    assert auth_league_api.post(URL).status_code == 403
+    match_start.schedule_league.assert_not_awaited()
 
 
 @pytest.mark.parametrize("path", [URL, "/leagues/abc/start", "/leagues/0/start"])

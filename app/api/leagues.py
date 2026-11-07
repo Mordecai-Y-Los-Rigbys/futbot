@@ -1,6 +1,7 @@
 from typing import Any
-
 from fastapi import APIRouter, Depends, Query, Response
+from starlette.concurrency import run_in_threadpool
+
 
 from app.api.deps import (
     CurrentSession,
@@ -10,8 +11,10 @@ from app.api.deps import (
     get_league_access_service,
     get_league_service,
 )
-from app.api.pagination import parse_page
 from app.api.league_access import router as league_access_router
+from app.api.pagination import parse_page
+from app.api.ws_deps import get_league_match_start
+from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
     CreateLeagueBadRequest,
     CreateLeagueConflict,
@@ -29,6 +32,7 @@ from app.schemas.friendly import MatchResponse
 from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
 from app.schemas.league_access import LeagueAccessForbidden
 from app.services.league_access_service import LeagueAccessService
+from app.services.league_match_start import LeagueMatchStartService
 from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
@@ -153,12 +157,15 @@ def join_league(
         409: {"model": StartLeagueConflict},
     },
 )
-def start_league(
+async def start_league(
     id: str,
     user_id: int = Depends(get_current_user_id),
     service: LeagueService = Depends(get_league_service),
+    match_start: LeagueMatchStartService = Depends(get_league_match_start),
 ) -> Response:
-    service.start_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE), user_id)
+    parsed_id = parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE)
+    await run_in_threadpool(service.start_league, parsed_id, user_id)
+    await match_start.schedule_league(parsed_id)
     return Response(status_code=204)
 
 
