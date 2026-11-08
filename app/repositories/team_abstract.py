@@ -63,3 +63,9 @@ class AbstractTeamRepository(ABC):
         Es de solo lectura y no mira el estado del partido ni las sustituciones
         pendientes: solo lo que está guardado en `team_members`.
         """
+
+    @abstractmethod
+    def set_behavior(
+        self, match_id: int, league_id: int | None, player_id: int, behavior_id: int
+    ) -> None:
+        """Le asigna el comportamiento al jugador en su equipo: el de la liga o el del amistoso."""

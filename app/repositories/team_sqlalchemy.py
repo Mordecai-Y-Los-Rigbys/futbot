@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.domain.behavior import BehaviorType
@@ -21,6 +21,13 @@ _ROLE_ORDER = {
     MemberRole.defense: 2,
     MemberRole.substitute: 3,
 }
+
+
+def _team_owner(match_id: int, league_id: int | None):
+    # El equipo de un partido de liga es el de la liga; el de un amistoso, el del partido.
+    if league_id is None:
+        return TeamMember.match_id == match_id
+    return TeamMember.league_id == league_id
 
 
 class SqlAlchemyTeamRepository(AbstractTeamRepository):
@@ -64,19 +71,12 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
         )
 
     def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:
-        # El equipo de un partido de liga es el de la liga; el de un amistoso, el del partido.
-        owner = (
-            TeamMember.match_id == match_id
-            if league_id is None
-            else TeamMember.league_id == league_id
-        )
-
         rows = self.db.execute(
             select(TeamMember.role, Player, Behavior.code)
             .join(Player, Player.id == TeamMember.player_id)
             .join(Behavior, Behavior.id == TeamMember.behavior_id)
             .where(
-                owner,
+                _team_owner(match_id, league_id),
                 TeamMember.user_id == user_id,
                 TeamMember.role != MemberRole.substitute,
             )
@@ -99,12 +99,6 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
     def get_match_team(
         self, match_id: int, league_id: int | None, user_id: int
     ) -> MatchTeamData:
-        # El equipo de un partido de liga es el de la liga; el de un amistoso, el del partido.
-        owner = (
-            TeamMember.match_id == match_id
-            if league_id is None
-            else TeamMember.league_id == league_id
-        )
         rows = self.db.execute(
             select(
                 TeamMember.id.label("member_id"),
@@ -117,7 +111,7 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
             )
             .join(Player, Player.id == TeamMember.player_id)
             .join(Behavior, Behavior.id == TeamMember.behavior_id)
-            .where(owner, TeamMember.user_id == user_id)
+            .where(_team_owner(match_id, league_id), TeamMember.user_id == user_id)
         ).all()
 
         # Orden en Python (no en SQL): titulares por rol, suplentes por id de fila.
@@ -161,3 +155,13 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
         return TeamBehaviorData(
             id=row.behavior_id, name=row.behavior_name, type=BehaviorType(row.behavior_type)
         )
+
+    def set_behavior(
+        self, match_id: int, league_id: int | None, player_id: int, behavior_id: int
+    ) -> None:
+        self.db.execute(
+            update(TeamMember)
+            .where(_team_owner(match_id, league_id), TeamMember.player_id == player_id)
+            .values(behavior_id=behavior_id)
+        )
+        self.db.commit()

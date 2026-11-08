@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from threading import Lock
@@ -22,6 +23,7 @@ from app.services.match_broadcast import (
 )
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_setup_service import MatchSetup, to_player_setup
+from app.simulation.behaviors.sandbox import CompiledBehavior
 from app.simulation import constants as C
 from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.match_rules import MatchSession, Phase, TickResult, build_session
@@ -78,6 +80,8 @@ class MatchRunner:
         self._tasks: dict[int, asyncio.Task] = {}
         self._runtime_states: dict[int, MatchRuntimeState] = {}
         self._runtime_lock = Lock()
+        self._pending: dict[int, dict[int, CompiledBehavior]] = {}
+        self._pending_lock = threading.Lock()
 
     def start(self, match_id: int) -> asyncio.Task:
         """Arranca el partido (idempotente). Hay que llamarlo con el event loop corriendo."""
@@ -92,6 +96,15 @@ class MatchRunner:
     def get_runtime_state(self, match_id: int) -> MatchRuntimeState | None:
         with self._runtime_lock:
             return self._runtime_states.get(match_id)
+            
+    def queue_behavior(self, match_id: int, player_id: int, behavior: CompiledBehavior) -> bool:
+        """Deja pendiente el cambio de comportamiento de un jugador. Se aplica antes del
+        próximo tick. Devuelve False si el partido no se está jugando en este proceso."""
+        with self._pending_lock:
+            if not self.is_running(match_id):
+                return False
+            self._pending.setdefault(match_id, {})[player_id] = behavior
+        return True
 
     def is_running(self, match_id: int) -> bool:
         """True si el partido se está jugando en este proceso."""
@@ -111,6 +124,8 @@ class MatchRunner:
             del self._tasks[match_id]
             with self._runtime_lock:
                 self._runtime_states.pop(match_id, None)
+            with self._pending_lock:
+                self._pending.pop(match_id, None)
 
     async def _run(self, match_id: int) -> None:
         try:
@@ -166,6 +181,7 @@ class MatchRunner:
                 # Antes del primer tick de la pausa, para que ya muestre al suplente.
                 await self._start_pause(match_id, session, setup)
             began = self._monotonic()
+            self._apply_pending(match_id, session)
             result = await loop.run_in_executor(self._executor, session.advance)
             in_pause = result.phase is Phase.PAUSED
             with self._runtime_lock:
@@ -249,3 +265,15 @@ class MatchRunner:
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
             repo.finish(match_id, result.score_1, result.score_2)
+
+    def _apply_pending(self, match_id: int, session: MatchSession) -> None:
+        """Aplica los cambios de behavior pendientes antes del próximo tick."""
+        with self._pending_lock:
+            pending = self._pending.pop(match_id, {})
+        for player_id, behavior in pending.items():
+            try:
+                session.replace_behavior(player_id, behavior)
+            except ValueError:
+                logger.warning(
+                    "Partido %s: el jugador %s ya no está en cancha", match_id, player_id
+                )

@@ -12,7 +12,6 @@ from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
 from app.domain.match import MatchStatus
-from app.models.league import League, LeagueStatus
 from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
@@ -24,88 +23,9 @@ from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepos
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 
 from types import SimpleNamespace
+from app.tests.integration.match_factories import add_league, add_team
 
 pytestmark = pytest.mark.integration
-
-ROLES = [MemberRole.forward, MemberRole.midfield, MemberRole.defense] + [MemberRole.substitute] * 3
-
-
-def add_team(db, user_id, behavior, **owner):
-    """Crea 6 jugadores y su equipo en `owner` (league_id=... o match_id=...)."""
-    players = [
-        Player(
-            user_id=user_id,
-            name=f"p{user_id}{i}",
-            power=60,
-            agility=60,
-            control=60,
-            strength=60,
-            speed=60,
-        )
-        for i in range(6)
-    ]
-    db.add_all(players)
-    db.commit()
-    members = [
-        TeamMember(user_id=user_id, player_id=p.id, behavior_id=behavior.id, role=role, **owner)
-        for p, role in zip(players, ROLES)
-    ]
-    db.add_all(members)
-    db.commit()
-    return members
-
-
-def add_league(db, name="L"):
-    league = League(
-        name=name,
-        creator_id=1,
-        status=LeagueStatus.started,
-        min_participants=3,
-        max_participants=8,
-        match_duration=2,
-        private=False,
-    )
-    db.add(league)
-    db.flush()
-    return league
-
-
-@pytest.fixture()
-def league_match(db_session, make_user, make_behaviors):
-    """Partido de liga `started` entre 1 y 2, con sus equipos de liga."""
-    make_user(1), make_user(2)
-    league = add_league(db_session)
-    teams = {}
-    for uid in (1, 2):
-        db_session.add(LeagueParticipant(league_id=league.id, user_id=uid))
-        db_session.flush()
-        behavior = make_behaviors(uid, ["b"], code="pass")[0]
-        teams[uid] = add_team(db_session, uid, behavior, league_id=league.id)
-    match = Match(
-        league_id=league.id,
-        user_1_id=1,
-        user_2_id=2,
-        status=MatchStatus.started,
-        scheduled_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-    )
-    db_session.add(match)
-    db_session.commit()
-    return match, teams
-
-
-@pytest.fixture()
-def friendly_match(db_session, make_user, make_behaviors):
-    make_user(1), make_user(2)
-    match = Match(user_1_id=1, user_2_id=2, status=MatchStatus.started)
-    db_session.add(match)
-    db_session.commit()
-    teams = {
-        uid: add_team(
-            db_session, uid, make_behaviors(uid, ["fb"], code="pass")[0], match_id=match.id
-        )
-        for uid in (1, 2)
-    }
-    return match, teams
 
 
 def substitute(db, match, team, out_idx=0, in_idx=3, applied=False):
@@ -123,6 +43,10 @@ def substitute(db, match, team, out_idx=0, in_idx=3, applied=False):
     db.commit()
     return sub
 
+
+def first_by_user(db, match):
+    rows = SqlAlchemySubstitutionRepository(db).list_first_per_team(match.id)
+    return {r.user_id: r for r in rows}
 
 def by_user(db, match, applied=False):
     rows = SqlAlchemySubstitutionRepository(db).list_by_match(match.id, applied)

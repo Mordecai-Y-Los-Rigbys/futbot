@@ -249,6 +249,14 @@ class MatchSession:
         self._last_phase = result.phase
         return result
 
+    def replace_behavior(self, player_id: int, behavior: CompiledBehavior) -> None:
+        """Reemplaza el comportamiento de un jugador en tiempo real."""
+        for player in self._state.players:
+            if player.player_id == player_id:
+                self._behaviors = {**self._behaviors, player.key: behavior}
+                return
+        raise ValueError(f"no hay jugador con id {player_id}")
+
     def _restart(self) -> None:
         """Saque normal: posiciones iniciales, pelota libre y quieta, sin
         movimientos previos y cooldowns en cero. También descarta un reacomodo

@@ -20,6 +20,9 @@ class FakeTeams(AbstractTeamRepository):
     def get_match_team(self, match_id, league_id, user_id):
         raise NotImplementedError
 
+    def set_behavior(self, match_id, league_id, player_id, behavior_id):
+        raise NotImplementedError
+
 
 class FakePlayers:
     """Por defecto, todo id pertenece al usuario. `owned` lo restringe."""
@@ -69,4 +72,10 @@ class FakeLeagues(AbstractLeagueRepository):
         raise NotImplementedError
 
     def join(self, data):
+        raise NotImplementedError
+    
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
         raise NotImplementedError

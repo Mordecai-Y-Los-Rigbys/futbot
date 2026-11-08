@@ -26,7 +26,7 @@ def runtime():
 def matches():
     m = create_autospec(AbstractMatchRepository, instance=True)
     m.get_players.return_value = MatchPlayersData(
-        id=5, status=MatchStatus.started, user_1_id=1, user_2_id=2
+        id=5, status=MatchStatus.started, league_id=None, user_1_id=1, user_2_id=2
     )
     return m
 
@@ -57,7 +57,7 @@ def test_nonexistent_match_is_404(matches, teams, subs, runtime):
 
 def test_user_outside_the_match_is_403_even_if_not_started(matches, teams, subs, runtime):
     matches.get_players.return_value = MatchPlayersData(
-        id=5, status=MatchStatus.scheduled, user_1_id=1, user_2_id=2
+        id=5, status=MatchStatus.scheduled, league_id=None, user_1_id=1, user_2_id=2
     )
     assert error_of(SubstitutionService(matches, teams, subs, runtime), user_id=9) == (403, None)
 
@@ -67,7 +67,7 @@ def test_user_outside_the_match_is_403_even_if_not_started(matches, teams, subs,
 )
 def test_not_started_is_409(matches, teams, subs, status, runtime):
     matches.get_players.return_value = MatchPlayersData(
-        id=5, status=status, user_1_id=1, user_2_id=2
+        id=5, status=status, league_id=None, user_1_id=1, user_2_id=2
     )
     assert error_of(SubstitutionService(matches, teams, subs, runtime)) == (409, "matchNotStarted")
 

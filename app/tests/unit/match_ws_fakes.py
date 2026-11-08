@@ -1,7 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from app.models.match import MatchStatus
-from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData, MatchStateData, MatchPlayersData
+from app.repositories.match_abstract import (
+    AbstractMatchRepository,
+    MatchSetupData,
+    MatchStateData,
+    MatchPlayersData,
+    MatchDetailData,
+)
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
@@ -40,6 +46,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history: list[str] = []
         self.seeds: dict[int, int] = {}
         self.players: dict[int, MatchPlayersData] = {}
+        self.details: dict[int, MatchDetailData] = {}
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
@@ -70,6 +77,10 @@ class FakeMatchRepo(AbstractMatchRepository):
 
     def get_players(self, match_id):
         return self.players.get(match_id)
+
+    def get_detail(self, match_id: int) -> MatchDetailData | None:
+        return self.details.get(match_id)
+
 
 class FakeSubstitutionRepo(AbstractSubstitutionRepository):
     def __init__(self, to_apply: list[list[AppliedSubstitution]] | None = None):
