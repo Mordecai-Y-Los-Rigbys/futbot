@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_behavior_service, get_session_service
+from app.domain.behavior import BehaviorType
 from app.main import app  # ajustá al módulo donde creás la app
 from app.repositories.behavior_abstract import BehaviorData
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
@@ -102,12 +103,13 @@ def test_response_body_uses_service_result(as_user, behavior_service):
     assert r.json()["total"] == 3
 
 
-def test_items_only_have_id_and_name(as_user, behavior_service):
-    behavior_service.list_behaviors.return_value = ([behavior(1, "a")], 1)
+def test_items_only_have_id_name_and_type(as_user, behavior_service):
+    coach = BehaviorData(id=1, user_id=1, name="a", code="x", type=BehaviorType.coach_behavior)
+    behavior_service.list_behaviors.return_value = ([coach], 1)
 
     r = as_user(1).get(URL)
 
-    assert set(r.json()["items"][0].keys()) == {"id", "name"}
+    assert r.json()["items"] == [{"id": 1, "name": "a", "type": "coachBehavior"}]
 
 
 def test_empty_result(as_user):
