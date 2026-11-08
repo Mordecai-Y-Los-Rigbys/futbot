@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import Cookie, Depends, Request
 from sqlalchemy.orm import Session
 
+from app.api.ws_deps import get_match_runner
+from app.api.ws_league_deps import get_league_participants_notifier
 from app.database import get_db
 from app.errors import ApiError
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
@@ -19,14 +21,19 @@ from app.repositories.player_abstract import AbstractPlayerRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
+from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
 from app.services.friendly_service import FriendlyService
 from app.services.league_access_service import LeagueAccessService
+from app.services.league_participants_notifier import LeagueParticipantsNotifier
 from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
+from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
+from app.services.match_runner import MatchRunner
+from app.services.match_service import MatchService
 from app.services.player_service import PlayerService
 from app.services.session_service import SessionService
 from app.services.substitution_service import SubstitutionService
@@ -61,8 +68,9 @@ def get_league_service(
     leagues: AbstractLeagueRepository = Depends(get_league_repository),
     players: AbstractPlayerRepository = Depends(get_player_repository),
     behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+    notifier: LeagueParticipantsNotifier = Depends(get_league_participants_notifier),
 ) -> LeagueService:
-    return LeagueService(leagues, players, behaviors)
+    return LeagueService(leagues, players, behaviors, notifier=notifier)
 
 
 def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessService:
@@ -73,12 +81,20 @@ def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnecti
     return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
 
 
+def get_match_service(db: Session = Depends(get_db)) -> MatchService:
+    return MatchService(
+        SqlAlchemyMatchRepository(db),
+        LeagueAccessService(SqlAlchemyLeagueAccessRepository(db)),
+    )
+
+
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
     return PlayerService(SqlAlchemyPlayerRepository(db))
 
 
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
     return SessionService(SqlAlchemySessionRepository(db))
+
 
 def get_auth_service(
     db: Session = Depends(get_db),
@@ -93,10 +109,17 @@ def get_auth_service(
     )
 
 
-
 def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
-    return SubstitutionService(
-        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db)
+    return SubstitutionService(SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db))
+
+
+def get_match_behavior_service(
+    db: Session = Depends(get_db),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+    runner: MatchRunner = Depends(get_match_runner),
+) -> MatchBehaviorService:
+    return MatchBehaviorService(
+        SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db), behaviors, runner
     )
 
 
