@@ -64,18 +64,22 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
 
     def finish(self, match_id: int, score_1: int, score_2: int) -> bool:
         league_id = self.db.scalar(select(Match.league_id).where(Match.id == match_id))
-        if league_id is not None:
-            # Bloquea la liga: si dos partidos terminan a la vez, el segundo
-            # espera al primero y, al contar los pendientes, ya lo ve terminado.
-            self.db.execute(select(League.id).where(League.id == league_id).with_for_update())
+        try:
+            if league_id is not None:
+                # Bloquea la liga: si dos partidos terminan a la vez, el segundo
+                # espera al primero y, al contar los pendientes, ya lo ve terminado.
+                self.db.execute(select(League.id).where(League.id == league_id).with_for_update())
 
-        self.db.execute(
-            update(Match)
-            .where(Match.id == match_id)
-            .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
-        )
-        league_finished = league_id is not None and self._finish_league_if_done(league_id)
-        self.db.commit()
+            self.db.execute(
+                update(Match)
+                .where(Match.id == match_id)
+                .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
+            )
+            league_finished = league_id is not None and self._finish_league_if_done(league_id)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
         return league_finished
 
     def _finish_league_if_done(self, league_id: int) -> bool:

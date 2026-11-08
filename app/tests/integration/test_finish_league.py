@@ -126,5 +126,17 @@ def test_two_last_matches_finishing_at_once_finish_the_league_once(db_session, l
         t.join(timeout=10)
 
     assert not errors, errors
-    assert results == {second: False, third: True}  # la termina uno solo, el último
+    assert sorted(results.values()) == [False, True]  # la termina uno solo
     assert status_of(db_session, league.id) == LeagueStatus.finished
+
+
+def test_a_friendly_does_not_touch_any_league(db_session, players, league):
+    friendly = Match(user_1_id=players[0].id, user_2_id=players[1].id)
+    db_session.add(friendly)
+    db_session.commit()
+    first, second, _ = match_ids(db_session, league.id)
+    finish(db_session, first)
+    finish(db_session, second)
+
+    assert finish(db_session, friendly.id) is False
+    assert status_of(db_session, league.id) == LeagueStatus.started
