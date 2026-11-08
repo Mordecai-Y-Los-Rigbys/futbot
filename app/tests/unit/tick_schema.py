@@ -57,7 +57,7 @@ Club = Literal["club1", "club2"]
 class PenaltyKickRecord(_Strict):
     club: Club
     kickerId: int
-    kickerName: str = Field(max_lenght=20)
+    kickerName: str = Field(max_length=20)
     round: int = Field(ge=1, le=5)
     scored: bool
 
@@ -97,7 +97,14 @@ class MatchEndEvent(_Strict):
 
 
 TickEvent = Annotated[
-    Union[GoalEvent, PeriodStartEvent, PauseEvent, MatchEndEvent],
+    Union[
+        GoalEvent,
+        PeriodStartEvent,
+        PauseEvent,
+        PenaltiesStartEvent,
+        PenaltyKickEvent,
+        MatchEndEvent,
+    ],
     Field(discriminator="type"),
 ]
 
@@ -111,11 +118,11 @@ class TickPayload(_Strict):
     penaltyScore1: int = Field(ge=0)
     penaltyScore2: int = Field(ge=0)
     penaltyKicks: list[PenaltyKickRecord]
-    penaltyCurrent: Optional[PenaltyCurrent] 
-    penaltyCountdownSeconds: Optional[int] = Field(ge=1, le=3) 
-    penaltyRemainingSeconds: Optional[int] = Field(ge=0, le=8)  
+    penaltyCurrent: Optional[PenaltyCurrent]
+    penaltyCountdownSeconds: Optional[int] = Field(ge=1, le=3)
+    penaltyRemainingSeconds: Optional[int] = Field(ge=0, le=8)
     elapsedTime: int = Field(ge=0)
-    pauseRemainingSeconds: Optional[int] = Field(ge=0)  
+    pauseRemainingSeconds: Optional[int] = Field(ge=0)
     phase: Literal["countdown", "playing", "paused", "penalties", "finished"]
     event: Optional[TickEvent]  # requerido: la clave siempre viaja, aunque sea null
 
@@ -151,7 +158,7 @@ class TickPayload(_Strict):
         for club, score in (("club1", self.penaltyScore1), ("club2", self.penaltyScore2)):
             if score != sum(k.scored for k in self.penaltyKicks if k.club == club):
                 raise ValueError("el marcador de la tanda no coincide con `penaltyKicks`")
-        
+
         # `pauseRemainingSeconds` es un número en `paused` y null en el resto.
         if (self.phase == "paused") != (self.pauseRemainingSeconds is not None):
             raise ValueError("`pauseRemainingSeconds` viaja solo con `phase: paused`")

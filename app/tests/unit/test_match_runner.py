@@ -79,7 +79,7 @@ def build(
     pause_seconds=15,
     duration=1,
     allow_draws=True,
-    **kwargs
+    **kwargs,
 ):
     substitutions = substitutions if substitutions is not None else FakeSubstitutionRepo()
     setup = MatchSetup(
@@ -258,9 +258,7 @@ def test_pause_ticks_follow_the_contract_and_only_they_carry_the_remaining_time(
     assert first["event"] == {"type": "pause", "reason": "hydration", "durationSeconds": 1}
     assert first["pauseRemainingSeconds"] == 1
     reasons = [
-        t["event"]["reason"]
-        for t in ws.received
-        if t["event"] and t["event"]["type"] == "pause"
+        t["event"]["reason"] for t in ws.received if t["event"] and t["event"]["type"] == "pause"
     ]
     assert reasons == ["hydration", "halftime", "hydration"]
 
@@ -357,3 +355,19 @@ def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream(
     assert any(t["phase"] == "countdown" for t in second.received)
     for tick in second.received:
         TickPayload.model_validate(tick)
+
+
+# --- penales -------------------------------------------------------------------
+
+
+def test_a_shootout_is_saved_with_the_result_and_sent_in_match_end():
+    ws, repo = FakeWs(), FakeMatchRepo()
+    repo.add(1)
+    run(build(FakeManager([ws]), repo, duration=0.05, allow_draws=False))  # 1 tick: 0 a 0
+
+    saved = repo.penalties[1]
+    sent = ws.received[-1]["event"]["result"]["penalties"]
+    assert repo.results[1] == (0, 0)
+    assert (saved.score_1, saved.score_2) == (sent["score1"], sent["score2"])
+    assert saved.kicks == sent["kicks"]
+    assert saved.winner == (1 if sent["winner"] == "club1" else 2)

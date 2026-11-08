@@ -104,6 +104,14 @@ def test_league_match_uses_the_league_duration_and_league_teams():
     assert (setup.club_1_name, setup.club_2_name) == ("Club Uno", "Club Dos")
 
 
+def test_league_mode_and_player_names_reach_the_setup():
+    service, _, _ = build(setup_data(league_id=5, allow_draws=False), durations={5: 2})
+    setup = service.load_match_setup(1)
+
+    assert setup.allow_draws is False
+    assert {p.name for p in setup.team_1.players} == {"Jugador 10", "Jugador 11", "Jugador 12"}
+
+
 def test_friendly_uses_the_fixed_duration_and_never_asks_the_league():
     service, leagues, teams = build(setup_data(league_id=None))
     setup = service.load_match_setup(1)

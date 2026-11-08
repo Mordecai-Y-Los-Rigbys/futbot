@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
 from app.models.match import MatchStatus
-from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData, MatchStateData, MatchPlayersData
+from app.repositories.match_abstract import (
+    AbstractMatchRepository,
+    MatchSetupData,
+    MatchStateData,
+    MatchPlayersData,
+)
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
@@ -69,6 +74,7 @@ class FakeMatchRepo(AbstractMatchRepository):
 
     def get_players(self, match_id):
         return self.players.get(match_id)
+
 
 class FakeSubstitutionRepo(AbstractSubstitutionRepository):
     def __init__(self):
