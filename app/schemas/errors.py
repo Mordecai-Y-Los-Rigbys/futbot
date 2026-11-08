@@ -151,3 +151,8 @@ class MatchBehaviorForbidden(BaseModel):
 class MatchBehaviorConflict(BaseModel):
     code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
+
+
+class TestBehaviorConflict(BaseModel):
+    code: Literal["notPlayerBehavior"]
+    message: str

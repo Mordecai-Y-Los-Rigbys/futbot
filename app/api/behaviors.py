@@ -1,11 +1,21 @@
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_behavior_service, get_current_user_id
-from app.helpers.ids import parse_path_id as _parse_id
+from app.api.deps import (
+    get_behavior_service,
+    get_behavior_test_connection_service,
+    get_current_user_id,
+)
 from app.api.pagination import parse_page
-from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
-from app.schemas.errors import Error, ListPageBadRequest
+from app.helpers.ids import parse_path_id as _parse_id
+from app.schemas.behavior import (
+    BehaviorDetail,
+    BehaviorPage,
+    BehaviorSummary,
+    BehaviorTestConnectionResponse,
+)
+from app.schemas.errors import Error, ListPageBadRequest, TestBehaviorConflict
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
+from app.services.behavior_test_connection_service import BehaviorTestConnectionService
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
 
@@ -54,3 +64,25 @@ def get_behavior(
         user_id, _parse_id(behavior_id, "Comportamiento no encontrado.")
     )
     return BehaviorDetail.model_validate(behavior)
+
+
+@router.post(
+    "/{id}/test-connections",
+    response_model=BehaviorTestConnectionResponse,
+    status_code=201,
+    operation_id="testBehavior",
+    summary="Pedir conexión para probar un comportamiento de jugador",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": TestBehaviorConflict},
+    },
+)
+def test_behavior(
+    id: str,
+    user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    service: BehaviorTestConnectionService = Depends(get_behavior_test_connection_service),
+) -> BehaviorTestConnectionResponse:
+    token = service.connect(user_id, _parse_id(id, "Comportamiento no encontrado."))
+    return BehaviorTestConnectionResponse(token_ws=token)

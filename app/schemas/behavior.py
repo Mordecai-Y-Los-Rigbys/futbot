@@ -19,3 +19,7 @@ class BehaviorDetail(CamelModel):
     id: int
     name: str
     code: str
+
+
+class BehaviorTestConnectionResponse(CamelModel):
+    token_ws: str
