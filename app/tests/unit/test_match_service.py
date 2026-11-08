@@ -4,10 +4,12 @@ from unittest.mock import create_autospec
 import pytest
 
 from app.domain.match import MatchStatus
+from app.domain.team_member import MemberRole
 from app.errors import ApiError
 from app.repositories.friendly_abstract import FriendlyClubData
 from app.repositories.league_access_abstract import LeagueAccessInfo
 from app.repositories.match_abstract import AbstractMatchRepository, MatchDetailData
+from app.repositories.team_abstract import AbstractTeamRepository, LineupPlayerData
 from app.services.league_access_service import LeagueAccessService
 from app.services.match_service import MatchService
 
@@ -64,8 +66,13 @@ def access():
 
 
 @pytest.fixture()
-def service(matches, access):
-    return MatchService(matches, access)
+def teams():
+    return create_autospec(AbstractTeamRepository, instance=True)
+
+
+@pytest.fixture()
+def service(matches, access, teams):
+    return MatchService(matches, access, teams)
 
 
 def error_of(service, user_id=OUTSIDER):

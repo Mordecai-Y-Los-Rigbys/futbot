@@ -82,6 +82,7 @@ def get_match_service(db: Session = Depends(get_db)) -> MatchService:
     return MatchService(
         SqlAlchemyMatchRepository(db),
         LeagueAccessService(SqlAlchemyLeagueAccessRepository(db)),
+        SqlAlchemyTeamRepository(db),
     )
 
 

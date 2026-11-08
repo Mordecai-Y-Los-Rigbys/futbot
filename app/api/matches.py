@@ -25,6 +25,7 @@ from app.schemas.errors import (
     ValidationBadRequest,
 )
 from app.schemas.friendly import MatchResponse
+from app.schemas.lineup import MatchLineups
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import NextSubstitutions
 from app.services.match_behavior_service import MatchBehaviorService
@@ -52,6 +53,27 @@ def get_match(
     service: MatchService = Depends(get_match_service),
 ) -> MatchResponse:
     return service.get_match(
+        parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
+    )
+
+
+@router.get(
+    "/{match_id}/lineups",
+    response_model=MatchLineups,
+    operation_id="getMatchLineups",
+    summary="Obtener los titulares de ambos clubes de un partido",
+    responses={
+        401: {"model": Error},
+        403: {"model": MatchAccessForbidden},
+        404: {"model": Error},
+    },
+)
+def get_match_lineups(
+    match_id: str,
+    session: CurrentSession = Depends(get_current_session),
+    service: MatchService = Depends(get_match_service),
+) -> MatchLineups:
+    return service.get_lineups(
         parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
     )
 
