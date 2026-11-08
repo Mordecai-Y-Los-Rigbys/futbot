@@ -84,7 +84,7 @@ def join_match(
     "/{match_id}/substitutions",
     response_model=Substitutions,
     operation_id="getMatchSubstitutions",
-    summary="Obtener la sustitución pedida de cada equipo de un partido en juego",
+    summary="Obtener la sustitución de cada equipo de un partido en juego (aplicada durante una pausa, pendiente fuera de ella)",
     responses={
         401: {"model": Error},
         403: {"model": Error},
@@ -122,3 +122,4 @@ def reassign_match_behavior(
 ) -> Response:
     service.reassign(user_id, parse_path_id(match_id, "El partido no existe."), body)
     return Response(status_code=204)
+
