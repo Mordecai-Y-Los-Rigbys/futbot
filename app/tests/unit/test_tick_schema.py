@@ -11,7 +11,7 @@ from app.simulation.physics import create_initial_state
 from app.simulation.simulate import simulate_match
 from app.simulation.state import Team
 from app.simulation.run import default_team as make_team
-from app.tests.unit.test_penalties import IDLE, SCORE, play
+from app.tests.unit.penalty_helpers import IDLE, SCORE, play
 from app.tests.unit.tick_schema import TickPayload
 
 CTX = TickContext(club_1="Club Uno", club_2="Club Dos", countdown_seconds=1)

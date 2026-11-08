@@ -1,55 +1,12 @@
 """Tanda de penales: reglas del motor, sin base ni tiempo real.
 
-Los comportamientos son de una línea, para saber qué pasa en cada penal:
-SCORE patea al arco rival por al lado del defensor, OWN lleva la pelota al
-arco propio e IDLE no hace nada (el penal se agota). Durante el partido
-nadie va a buscar la pelota, así que termina 0 a 0.
+Los comportamientos y el partido de prueba están en `penalty_helpers.py`.
 """
 
-from app.simulation.behaviors.sandbox import compile_behavior
-from app.simulation.constants import STARTER_ROLES
 from app.simulation.geometry import Vec
-from app.simulation.match_rules import Event, MatchSession, Phase, TeamSetup, behaviors_by_key
-from app.simulation.physics import PlayerSetup, create_initial_state
-from app.simulation.state import BallState, Stats, Team
-
-SCORE = "if i_have_ball():\n    kick_to(field_length, 23)\n"
-OWN = "go_to(0, field_width / 2)\n"
-IDLE = "pass\n"
-
-STATS = Stats(power=60, agility=60, control=60, strength=60, speed=60)
-DURATION = 1  # segundo de juego: 20 ticks, sin cuenta regresiva ni pausas
-
-
-def team(code: str, first_id: int) -> TeamSetup:
-    return TeamSetup(
-        players=[
-            PlayerSetup(first_id + r.number, r, STATS, f"J{first_id + r.number}")
-            for r in STARTER_ROLES
-        ],
-        behaviors={r: compile_behavior(code) for r in STARTER_ROLES},
-    )
-
-
-def play(code_1=IDLE, code_2=IDLE, allow_draws=False, seed=1, ball=None) -> list:
-    """Juega un partido completo. Los jugadores de club1 son 1-3 y los de club2, 11-13."""
-    team_1, team_2 = team(code_1, 0), team(code_2, 10)
-    state = create_initial_state(team_1.players, team_2.players, seed)
-    if ball is not None:
-        state.ball = ball
-    session = MatchSession(
-        state,
-        behaviors_by_key(team_1, team_2),
-        DURATION,
-        countdown_seconds=0,
-        periods=1,
-        pause_seconds=0,
-        allow_draws=allow_draws,
-    )
-    ticks = []
-    while not session.finished:
-        ticks.append(session.advance())
-    return ticks
+from app.simulation.match_rules import Event, Phase
+from app.simulation.state import BallState, Team
+from app.tests.unit.penalty_helpers import DURATION, IDLE, OWN, SCORE, play
 
 
 def shootout_ticks(ticks: list) -> list:
@@ -139,6 +96,7 @@ def test_a_ball_in_the_kickers_own_goal_ends_the_kick_without_scoring():
     assert end.penalty_kick.scored is False
     assert ticks.index(end) < 60 + 159  # se cortó antes de los 8 s
     assert end.shootout.score_1 == 0
+    assert end.shootout.score_2 == 0  # el gol en contra tampoco suma para el rival
 
 
 def test_the_shootout_ends_when_a_club_can_no_longer_be_caught():
@@ -168,3 +126,27 @@ def test_shootout_goals_do_not_count_in_the_score_and_the_clock_stops():
     for tick in ticks[DURATION * 20 :]:
         assert (tick.score_1, tick.score_2) == (0, 0)
         assert tick.elapsed == elapsed_at_end
+
+
+def test_every_kick_but_the_last_one_comes_with_a_penalty_kick_event():
+    ticks = play(SCORE, IDLE)
+    kicks = ticks[-1].shootout.kicks
+    kick_events = [tick.penalty_kick for tick in ticks if tick.event is Event.PENALTY_KICK]
+
+    # El último penal llega con matchEnd, que tiene prioridad.
+    assert len(kick_events) == len(kicks) - 1
+    assert kick_events == list(kicks[:-1])
+    assert ticks[-1].event is Event.MATCH_END
+
+
+# Convierte solo si el comportamiento ve el reloj del partido parado en el último período.
+STOPPED_CLOCK = (
+    "if i_have_ball() and current_period() == 2 and remaining_time() == 0:\n"
+    "    kick_to(field_length, 23)\n"
+)
+
+
+def test_during_the_shootout_the_clock_is_stopped_in_the_last_period():
+    last = play(STOPPED_CLOCK, IDLE, periods=2)[-1]
+
+    assert [kick.scored for kick in last.shootout.kicks] == [True, False] * 3

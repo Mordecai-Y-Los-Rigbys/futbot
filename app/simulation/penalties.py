@@ -120,7 +120,7 @@ class Shootout:
             return self._tick(first, countdown, C.PENALTY_SECONDS)
 
         played = offset - self._countdown_ticks + 1
-        scored = self._play_tick(played - 1)
+        scored = self._play_tick()
         remaining = math.ceil((self._kick_ticks - played) / C.TICKS_PER_SECOND)  # de 8 a 0
 
         if scored is None and played < self._kick_ticks:
@@ -150,14 +150,12 @@ class Shootout:
             team, kicker.player_id, kicker.name, defender.player_id, defender.name
         )
 
-    def _play_tick(self, play_index: int) -> bool | None:
+    def _play_tick(self) -> bool | None:
         """Corre un tick del penal. True si el pateador convirtió, False si la
         pelota entró en su propio arco, None si no hubo gol."""
 
-        clock = MatchClock(
-            elapsed=self._elapsed,
-            remaining=(self._kick_ticks - play_index) / C.TICKS_PER_SECOND,
-        )
+        # El reloj del partido está parado: no queda tiempo de juego y sigue el último período.
+        clock = MatchClock(elapsed=self._elapsed, remaining=0.0, period=self._period)
         actions = run_behaviors(self._state, self._behaviors, clock)
         result = step(self._state, actions)
         self._state = result.state
