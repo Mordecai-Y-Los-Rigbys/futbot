@@ -124,11 +124,12 @@ def test_item_fields_and_nulls(api, creator, make_friendly):
     assert ISO_UTC.match(item["createdAt"])
 
 
-def test_club1_uses_username_and_club_name(api, create_user, make_friendly):
-    boss = create_user("mgonzalez", "Boca Juniors FC")
+def test_club1_has_username_club_name_and_avatar(api, create_user, make_friendly):
+    boss = create_user("mgonzalez", "Boca Juniors FC", avatar=3)
     make_friendly(boss)
-    club1 = api.get("/friendlies").json()["items"][0]["club1"]
-    assert club1 == {"id": boss.id, "username": "mgonzalez", "name": "Boca Juniors FC"}
+    item = api.get("/friendlies").json()["items"][0]
+    assert item["club1"] == {"id": boss.id, "username": "mgonzalez", "name": "Boca Juniors FC", "avatar": 3}
+    assert item["club2"] is None
 
 
 def test_unknown_params_are_ignored(api, creator, make_friendly):

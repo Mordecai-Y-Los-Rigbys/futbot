@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
 from typing import Literal
 
@@ -98,6 +99,34 @@ class JoinLeagueData(BaseModel):
     unlock_session: bool  # True si la liga es privada: queda desbloqueada en la sesión
 
 
+StartLeagueConflict = Literal["notInPreparation", "notEnoughParticipants"]
+
+
+class LeagueStartState(BaseModel):
+    creator_id: int
+    status: LeagueStatus
+    min_participants: int
+    participants_count: int
+    match_duration: int
+    allow_draws: bool
+
+    def conflict(self) -> StartLeagueConflict | None:
+        if self.status != LeagueStatus.preparation:
+            return "notInPreparation"
+        if self.participants_count < self.min_participants:
+            return "notEnoughParticipants"
+        return None
+
+
+class FixtureMatchData(BaseModel):
+    user_1_id: int
+    user_2_id: int
+    scheduled_at: datetime
+
+
+PlanFixture = Callable[[list[int]], list[FixtureMatchData]]
+
+
 class AbstractLeagueRepository(ABC):
     @abstractmethod
     def list_page(self, name: str | None, offset: int, limit: int) -> LeaguePageData:
@@ -166,4 +195,23 @@ class AbstractLeagueRepository(ABC):
         Returns:
             None si inscribió; el código del conflicto si, al bloquear la
             liga, ya no admitía al usuario (en ese caso no persiste nada).
+        """
+
+    @abstractmethod
+    def get_start_state(self, league_id: int) -> LeagueStartState | None:
+        """Creador, estado, participantes y modo de la liga. None si no existe."""
+
+    @abstractmethod
+    def start(self, league_id: int, plan_fixture: PlanFixture) -> StartLeagueConflict | None:
+        """Inicia la liga y guarda su fixture, en una única transacción.
+
+        Bloquea la liga y vuelve a evaluar estado y mínimo, para que dos inicios
+        simultáneos no generen dos fixtures y una inscripción simultánea no
+        quede fuera. Con la liga bloqueada, llama a `plan_fixture` con los ids
+        de los participantes (el creador incluido) y guarda esos partidos en
+        `scheduled`
+
+        Returns:
+            None si la inició; el código del conflicto si, al bloquear la liga,
+            ya no se podía iniciar (en ese caso no persiste nada).
         """

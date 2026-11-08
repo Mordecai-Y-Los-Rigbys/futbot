@@ -75,6 +75,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def join(self, data):
         raise NotImplementedError
 
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
+        raise NotImplementedError
+
 
 class FakeSessionService:
     """Reemplaza a SessionService: session_id -> user_id, sin base."""
