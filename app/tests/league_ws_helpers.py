@@ -2,7 +2,7 @@ import threading
 import time
 
 import pytest
-from anyio import EndOfStream
+from anyio import ClosedResourceError, EndOfStream
 from starlette.websockets import WebSocketDisconnect
 
 ORIGIN = "http://localhost:5173"
@@ -36,8 +36,8 @@ def stays_silent(ws, seconds=0.5) -> bool:
     def _receive():
         try:
             received.append(ws.receive())
-        except EndOfStream:
-            pass
+        except (EndOfStream, ClosedResourceError):
+            pass  # el test terminó y se cerró la conexión
 
     t = threading.Thread(target=_receive, daemon=True)
     t.start()

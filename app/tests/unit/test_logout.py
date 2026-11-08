@@ -1,8 +1,13 @@
 import pytest 
 
+from types import SimpleNamespace
+
 from http.cookies import SimpleCookie
 from unittest.mock import create_autospec
 
+from app.api import ws_league_deps
+from app.api.ws_league_deps import get_league_channel_managers
+from app.main import app
 from app.api.auth import user_logout
 from app.api.deps import CurrentSession
 from app.services.session_service import SessionService
@@ -12,7 +17,7 @@ def test_logout_deletes_current_session_and_expires_cookie():
     service = create_autospec(SessionService, instance=True)
     session = CurrentSession(id="sesion-actual", user_id=7)
 
-    response = user_logout(session=session, service=service)
+    response = user_logout(session=session, service=service, channels=[])
 
     service.delete.assert_called_once_with("sesion-actual")
     assert response.status_code == 204
@@ -96,3 +101,36 @@ def test_invalid_or_expired_cookie_returns_401(api, fake_sessions, cookie):
     assert res.status_code == 401
     assert res.json()["code"] is None
     assert fake_sessions.deleted == []
+    
+
+def test_logout_closes_the_league_channels_after_deleting_the_session():
+    calls = []
+    service = create_autospec(SessionService, instance=True)
+    service.delete.side_effect = lambda sid: calls.append(("delete", sid))
+    channels = [
+        SimpleNamespace(session_ended=lambda sid, name=name: calls.append((name, sid)))
+        for name in ("participants", "fixture")
+    ]
+
+    user_logout(session=CurrentSession(id="s1", user_id=7), service=service, channels=channels)
+
+    assert calls == [("delete", "s1"), ("participants", "s1"), ("fixture", "s1")]
+
+
+def test_a_rejected_logout_does_not_touch_the_league_channels(api):
+    ended = []
+    app.dependency_overrides[get_league_channel_managers] = lambda: [
+        SimpleNamespace(session_ended=ended.append)
+    ]
+    try:
+        assert api.post("/auth/log-out").status_code == 401
+    finally:
+        app.dependency_overrides.pop(get_league_channel_managers, None)
+    assert ended == []
+
+
+def test_the_league_channels_are_participants_and_fixture():
+    assert ws_league_deps.get_league_channel_managers() == [
+        ws_league_deps.get_league_participants_manager(),
+        ws_league_deps.get_league_fixture_manager(),
+    ]

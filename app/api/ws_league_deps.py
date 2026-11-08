@@ -8,6 +8,7 @@ from app.repositories.league_participants_abstract import LeagueParticipantsStat
 from app.repositories.league_participants_sqlalchemy import SqlAlchemyLeagueParticipantsRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
+from app.services.league_channel_manager import LeagueChannelManager
 from app.services.league_fixture_channel import (
     LeagueFixtureHandshakeService,
     LeagueFixtureManager,
@@ -87,3 +88,8 @@ def get_fixture_handshake_scope() -> (
     Callable[[], ContextManager[LeagueFixtureHandshakeService]]
 ):
     return _fixture_handshake_scope
+
+
+def get_league_channel_managers() -> list[LeagueChannelManager]:
+    """Managers de todos los canales de liga. El log-out cierra en cada uno las conexiones de la sesión."""
+    return [_participants_manager, _fixture_manager]

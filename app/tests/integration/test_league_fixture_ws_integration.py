@@ -10,13 +10,19 @@ from sqlalchemy import update
 from sqlalchemy.orm import sessionmaker
 
 from app.api import ws_deps, ws_league_deps
-from app.api.ws_league_deps import get_league_fixture_manager, get_league_fixture_notifier
+from app.api.ws_league_deps import (
+    get_league_channel_managers,
+    get_league_fixture_manager,
+    get_league_fixture_notifier,
+    get_league_participants_manager,
+)
 from app.domain.match import MatchStatus
 from app.main import app
 from app.models.league import League, LeagueStatus
 from app.models.match import Match
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.services.league_fixture_channel import LeagueFixtureManager
+from app.services.league_participants_manager import LeagueParticipantsManager
 from app.tests.league_ws_helpers import ORIGIN, closing, connect, rejection, stays_silent, wait_until
 
 pytestmark = pytest.mark.integration
@@ -27,6 +33,17 @@ START = datetime(2026, 1, 1, 18, 0, tzinfo=timezone.utc)
 @pytest.fixture()
 def manager():
     return LeagueFixtureManager(ws_league_deps._load_fixture_state)
+
+
+@pytest.fixture()
+def channels(manager):
+    """El log-out cierra las conexiones en los managers de participantes y fixture del test."""
+    participants = LeagueParticipantsManager(ws_league_deps._load_participants_state)
+    app.dependency_overrides[get_league_participants_manager] = lambda: participants
+    app.dependency_overrides[get_league_channel_managers] = lambda: [participants, manager]
+    yield participants
+    app.dependency_overrides.pop(get_league_participants_manager, None)
+    app.dependency_overrides.pop(get_league_channel_managers, None)
 
 
 @pytest.fixture(autouse=True)
@@ -362,3 +379,41 @@ def test_the_last_match_sends_a_single_message_and_closes(
         assert closing(ws) == (1000, "leagueFinished")
 
     assert wait_until(lambda: manager.count(league_id, viewer.id) == 0)
+    
+
+# --- log-out ------------------------------------------------------------------
+
+
+def test_log_out_closes_the_session_connections_in_both_channels(
+    login_as, make_league, started_league, creator, viewer, channels
+):
+    in_preparation = make_league(creator, name="Prep")
+    league_id, _ = started_league()
+    api = login_as(viewer)
+
+    with connect(api, f"/ws/leagues/{in_preparation.id}/participants") as participants, connect(
+        api, path(league_id)
+    ) as fixture:
+        participants.receive_json()
+        fixture.receive_json()
+
+        assert api.post("/auth/log-out").status_code == 204
+
+        assert closing(participants) == (4401, "sessionEnded")
+        assert closing(fixture) == (4401, "sessionEnded")
+
+
+def test_log_out_keeps_the_connections_of_other_sessions(
+    login_as, started_league, viewer, channels
+):
+    league_id, _ = started_league()
+    mine, other = login_as(viewer), login_as(viewer)
+
+    with connect(mine, path(league_id)) as closed, connect(other, path(league_id)) as kept:
+        closed.receive_json()
+        kept.receive_json()
+
+        assert mine.post("/auth/log-out").status_code == 204
+
+        assert closing(closed) == (4401, "sessionEnded")
+        assert stays_silent(kept)
