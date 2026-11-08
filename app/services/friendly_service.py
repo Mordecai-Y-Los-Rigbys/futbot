@@ -19,7 +19,7 @@ from app.services.team_ownership import ensure_owned_team
 PAGE_SIZE = 50
 
 
-def _club(c: FriendlyClubData) -> MatchClub:
+def _match_club(c: FriendlyClubData) -> MatchClub:
     return MatchClub(id=c.id, username=c.username, name=c.club_name, avatar=c.avatar)
 
 
@@ -29,8 +29,8 @@ def _to_response(m: FriendlyMatchData) -> MatchResponse:
         league_id=None,
         name=m.name,
         status=m.status,
-        club1=_club(m.club1),
-        club2=_club(m.club2) if m.club2 else None,
+        club1=_match_club(m.club1),
+        club2=_match_club(m.club2) if m.club2 else None,
         scheduled_at=None,
         created_at=m.created_at,
         result=None,
