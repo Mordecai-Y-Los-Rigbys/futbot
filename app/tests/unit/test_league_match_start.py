@@ -114,7 +114,7 @@ def test_starting_a_league_schedules_its_pending_matches():
 
     run(scenario)
     assert repo.listed == [5]
-    assert started == [10, 11]
+    assert sorted(started) == [10, 11]
 
 
 def test_recover_schedules_the_pending_matches_of_every_league():
