@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.match import Match, MatchStatus
 from app.repositories.league_access_abstract import LeagueAccessInfo
+from app.repositories.match_abstract import PenaltyShootoutData
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 
 CREATED = datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc)
@@ -34,6 +35,10 @@ def _match(**fields):
         score_1=None,
         score_2=None,
         league=None,
+        penalty_score_1=None,
+        penalty_score_2=None,
+        penalty_winner=None,
+        penalty_kicks=None,
     )
     return SimpleNamespace(**(base | fields))
 
@@ -102,3 +107,18 @@ def test_detail_of_a_league_match_maps_both_clubs_and_the_league(repo, db):
     assert (out.club1.avatar, out.club2.avatar) == (2, 4)
     assert out.league == LeagueAccessInfo(9, 1, True, "secret")
     assert (out.score_1, out.score_2) == (2, 1)
+
+
+def test_detail_of_a_match_with_shootout_has_the_penalties(repo, db):
+    kicks = [{"club": "club1", "kickerId": 3, "kickerName": "J3", "round": 1, "scored": True}]
+    db.get.return_value = _match(
+        status=MatchStatus.finished,
+        score_1=1,
+        score_2=1,
+        penalty_score_1=1,
+        penalty_score_2=0,
+        penalty_winner=2,
+        penalty_kicks=kicks,
+    )
+    out = repo.get_detail(5)
+    assert out.penalties == PenaltyShootoutData(score_1=1, score_2=0, winner=2, kicks=kicks)
