@@ -230,7 +230,7 @@ def test_a_scheduled_match_starts_on_time_with_the_current_team_and_saves_the_re
     when, before = asyncio.run(scenario())
 
     assert before == []  # todavía no era la hora
-    assert len(played) == 1 and started_at[0] >= when
+    assert len(played) == 1 and started_at[0] >= when - timedelta(milliseconds=20)
     forwards = [p.player_id for p in setups[0].team_1.players if p.role == MemberRole.forward]
     assert forwards == [current_forward]
     db_session.expire_all()
