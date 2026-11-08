@@ -147,6 +147,36 @@ def test_reassigned_behavior_and_substitution_persist_to_the_next_match(
     assert forward.player_id not in {r.player_id for r in rows}
 
 
+# --- SqlAlchemyTeamRepository.set_behavior ------------------------------------
+
+
+def test_set_behavior_does_not_touch_the_same_player_in_another_friendly(
+    db_session, friendly_match, make_behaviors
+):
+    match, teams = friendly_match
+    forward = teams[1][0]
+    old_behavior_id = forward.behavior_id
+    other = Match(user_1_id=1, user_2_id=2)
+    db_session.add(other)
+    db_session.flush()
+    same_player = TeamMember(
+        user_id=1,
+        player_id=forward.player_id,
+        behavior_id=old_behavior_id,
+        role=MemberRole.forward,
+        match_id=other.id,
+    )
+    db_session.add(same_player)
+    db_session.commit()
+    new = make_behaviors(1, ["nuevo"], code="pass")[0]
+
+    SqlAlchemyTeamRepository(db_session).set_behavior(match.id, None, forward.player_id, new.id)
+
+    db_session.expire_all()
+    assert forward.behavior_id == new.id
+    assert same_player.behavior_id == old_behavior_id
+
+
 # --- SqlAlchemyMatchRepository.get_setup_data ---------------------------------
 
 

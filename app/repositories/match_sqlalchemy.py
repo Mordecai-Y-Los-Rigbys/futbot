@@ -1,6 +1,7 @@
 from sqlalchemy import func, select, true, update
 from sqlalchemy.orm import Session, aliased
 
+from app.domain.league import LeagueStatus
 from app.domain.match import MatchStatus
 from app.models.league import League
 from app.models.match import Match
@@ -71,7 +72,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
         score_1: int,
         score_2: int,
         penalties: PenaltyShootoutData | None = None,
-    ) -> None:
+    ) -> bool:
         shootout = {}
         if penalties is not None:
             shootout = {
@@ -80,12 +81,37 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 "penalty_winner": penalties.winner,
                 "penalty_kicks": penalties.kicks,
             }
-        self.db.execute(
-            update(Match)
-            .where(Match.id == match_id)
-            .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2, **shootout)
+        league_id = self.db.scalar(select(Match.league_id).where(Match.id == match_id))
+        try:
+            if league_id is not None:
+                # Bloquea la liga: si dos partidos terminan a la vez, el segundo
+                # espera al primero y, al contar los pendientes, ya lo ve terminado.
+                self.db.execute(select(League.id).where(League.id == league_id).with_for_update())
+
+            self.db.execute(
+                update(Match)
+                .where(Match.id == match_id)
+                .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2, **shootout)
+            )
+            league_finished = league_id is not None and self._finish_league_if_done(league_id)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return league_finished
+
+    def _finish_league_if_done(self, league_id: int) -> bool:
+        pending = (
+            select(Match.id)
+            .where(Match.league_id == league_id, Match.status != MatchStatus.finished)
+            .exists()
         )
-        self.db.commit()
+        result = self.db.execute(
+            update(League)
+            .where(League.id == league_id, League.status == LeagueStatus.started, ~pending)
+            .values(status=LeagueStatus.finished)
+        )
+        return result.rowcount == 1
 
     def save_seed(self, match_id: int, seed: int) -> None:
         self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
@@ -93,12 +119,16 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
 
     def get_players(self, match_id: int) -> MatchPlayersData | None:
         row = self.db.execute(
-            select(Match.id, Match.status, Match.user_1_id, Match.user_2_id).where(
+            select(Match.id, Match.status, Match.league_id, Match.user_1_id, Match.user_2_id).where(
                 Match.id == match_id
             )
         ).first()
         if row is None:
             return None
         return MatchPlayersData(
-            id=row.id, status=row.status, user_1_id=row.user_1_id, user_2_id=row.user_2_id
+            id=row.id,
+            status=row.status,
+            league_id=row.league_id,
+            user_1_id=row.user_1_id,
+            user_2_id=row.user_2_id,
         )
