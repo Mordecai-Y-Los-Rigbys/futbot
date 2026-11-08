@@ -78,7 +78,7 @@ def test_creator_starts_the_league_and_the_fixture_is_saved(login_as, db_session
 
 
 def test_penalties_mode_leaves_room_for_the_shootout(login_as, db_session, creator, league):
-    set_league(db_session, league, allow_draws=False)
+    set_league(db_session, league, allow_draws=False, match_duration=5)
     assert login_as(creator).post(url(league.id)).status_code == 204
     times = [utc(m.scheduled_at) for m in matches_of(db_session, league.id)]
     assert times[1] - times[0] == timedelta(minutes=8, seconds=55)
