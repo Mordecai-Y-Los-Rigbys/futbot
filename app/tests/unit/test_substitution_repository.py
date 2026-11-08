@@ -21,15 +21,32 @@ def repo(db):
     return SqlAlchemySubstitutionRepository(db)
 
 
-def test_delete_by_match_deletes_the_substitutions_of_that_match_only(repo, db):
-    db.execute.return_value.rowcount = 2
+def test_apply_pending_for_a_nonexistent_match_changes_nothing(repo, db):
+    db.execute.return_value.one_or_none.return_value = None
 
-    assert repo.delete_by_match(7) == 2
+    assert repo.apply_pending(7) == []
+
+    db.commit.assert_not_called()
+    db.add.assert_not_called()
+
+
+def test_apply_pending_locks_the_match_row(repo, db):
+    db.execute.return_value.one_or_none.return_value = None
+
+    repo.apply_pending(7)
+
+    assert "FOR UPDATE" in literal_sql(db.execute.call_args_list[0].args[0])
+
+
+def test_list_applied_by_match_reads_the_applied_table(repo, db):
+    db.execute.return_value.all.return_value = []
+
+    assert repo.list_applied_by_match(7) == []
 
     sql = literal_sql(db.execute.call_args.args[0])
-    assert "DELETE FROM substitutions" in sql
-    assert "substitutions.match_id = 7" in sql
-    db.commit.assert_called_once()
+    assert "FROM applied_substitutions" in sql
+    assert "applied_substitutions.match_id = 7" in sql
+    assert "ORDER BY applied_substitutions.user_id ASC" in sql
 
 
 def test_list_by_match_filters_by_match_and_orders_by_team(repo, db):
