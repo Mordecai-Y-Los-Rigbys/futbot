@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pydantic import BaseModel
+
 from app.domain.match import MatchStatus
+from app.repositories.friendly_abstract import FriendlyClubData
+from app.repositories.league_access_abstract import LeagueAccessInfo
 
 
 class MatchStateData(BaseModel):
@@ -33,6 +37,20 @@ class MatchPlayersData(BaseModel):
     league_id: int | None
 
 
+class MatchDetailData(BaseModel):
+    id: int
+    league_id: int | None
+    name: str | None
+    status: MatchStatus
+    club1: FriendlyClubData
+    club2: FriendlyClubData | None
+    scheduled_at: datetime | None
+    created_at: datetime
+    score_1: int | None
+    score_2: int | None
+    league: LeagueAccessInfo | None  # None en los amistosos
+
+
 class AbstractMatchRepository(ABC):
     @abstractmethod
     def get_state(self, match_id: int) -> MatchStateData | None:
@@ -41,6 +59,11 @@ class AbstractMatchRepository(ABC):
     @abstractmethod
     def get_setup_data(self, match_id: int) -> MatchSetupData | None:
         """Datos del partido y nombres de los clubes, o None si no existe."""
+
+    @abstractmethod
+    def get_detail(self, match_id: int) -> MatchDetailData | None:
+        """Partido con sus dos clubes, su resultado y, si es de liga, los datos
+        de acceso de la liga. None si no existe."""
 
     @abstractmethod
     def mark_started(self, match_id: int) -> None:

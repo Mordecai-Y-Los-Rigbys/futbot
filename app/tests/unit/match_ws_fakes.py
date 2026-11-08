@@ -6,6 +6,7 @@ from app.repositories.match_abstract import (
     MatchSetupData,
     MatchStateData,
     MatchPlayersData,
+    MatchDetailData,
 )
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
@@ -42,6 +43,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history: list[str] = []
         self.seeds: dict[int, int] = {}
         self.players: dict[int, MatchPlayersData] = {}
+        self.details: dict[int, MatchDetailData] = {}
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
         self.penalties: dict[int, object] = {}
 
@@ -74,6 +76,9 @@ class FakeMatchRepo(AbstractMatchRepository):
 
     def get_players(self, match_id):
         return self.players.get(match_id)
+
+    def get_detail(self, match_id: int) -> MatchDetailData | None:
+        return self.details.get(match_id)
 
 
 class FakeSubstitutionRepo(AbstractSubstitutionRepository):

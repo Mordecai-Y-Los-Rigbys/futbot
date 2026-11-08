@@ -3,10 +3,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import (
+    CurrentSession,
+    get_current_session,
     get_current_user_id,
     get_json_body,
     get_match_behavior_service,
     get_match_connection_service,
+    get_match_service,
     get_substitution_service,
 )
 from app.helpers.ids import parse_path_id
@@ -15,18 +18,42 @@ from app.schemas.errors import (
     JoinMatchBadRequest,
     JoinMatchConflict,
     JoinMatchForbidden,
+    MatchAccessForbidden,
     MatchBehaviorConflict,
     MatchBehaviorForbidden,
     NextSubstitutionsConflict,
     ValidationBadRequest,
 )
+from app.schemas.friendly import MatchResponse
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import NextSubstitutions
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
+from app.services.match_service import MATCH_NOT_FOUND_MESSAGE, MatchService
 from app.services.substitution_service import SubstitutionService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
+
+
+@router.get(
+    "/{match_id}",
+    response_model=MatchResponse,
+    operation_id="getMatch",
+    summary="Obtener un partido (clubes, usuarios, estado y resultado)",
+    responses={
+        401: {"model": Error},
+        403: {"model": MatchAccessForbidden},
+        404: {"model": Error},
+    },
+)
+def get_match(
+    match_id: str,
+    session: CurrentSession = Depends(get_current_session),
+    service: MatchService = Depends(get_match_service),
+) -> MatchResponse:
+    return service.get_match(
+        parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
+    )
 
 
 @router.post(
