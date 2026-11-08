@@ -54,8 +54,7 @@ class FakeLeagueRepository(AbstractLeagueRepository):
             allow_draws=True,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
-        
-    
+
     def get_detail(self, league_id, user_id):
         self.detail_calls.append((league_id, user_id))
         return self.details.get(league_id)
@@ -66,7 +65,7 @@ class FakeLeagueRepository(AbstractLeagueRepository):
 
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
-    
+
     def get_leave_info(self, league_id):
         return self.leave_info.get(league_id)
 
@@ -89,9 +88,14 @@ class FakeSessionService:
 
     def __init__(self, sessions: dict[str, int]):
         self.sessions = sessions
+        self.deleted: list[str] = []
 
     def get_user_id(self, session_id: str) -> int | None:
         return self.sessions.get(session_id)
+
+    def delete(self, session_id: str) -> None:
+        self.sessions.pop(session_id, None)
+        self.deleted.append(session_id)
 
 
 @pytest.fixture()
@@ -105,8 +109,40 @@ def fake_teams():
 
 
 @pytest.fixture()
+def fake_players():
+    return FakePlayers()
+
+
+@pytest.fixture()
+def fake_behaviors():
+    return FakeBehaviors()
+
+
+@pytest.fixture()
+def fake_sessions():
+    return FakeSessionService({"valid-session": 7})
+
+
+@pytest.fixture()
 def service(fake_repo, fake_players, fake_behaviors):
     return LeagueService(fake_repo, fake_players, fake_behaviors)
+
+
+@pytest.fixture()
+def api(fake_repo, fake_players, fake_behaviors, fake_sessions):
+    app.dependency_overrides[get_session_service] = lambda: fake_sessions
+    app.dependency_overrides[get_league_service] = lambda: LeagueService(
+        fake_repo, fake_players, fake_behaviors
+    )
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def auth_api(api):
+    """Mismo cliente, con cookie de una sesión válida."""
+    api.cookies.set("session_id", "valid-session")
+    return api
 
 
 @pytest.fixture()
@@ -150,30 +186,3 @@ def make_detail(make_item):
         )
 
     return _make
-
-
-@pytest.fixture()
-def auth_api(api):
-    """Mismo cliente, con cookie de una sesión válida."""
-    api.cookies.set("session_id", "valid-session")
-    return api
-
-
-@pytest.fixture()
-def fake_players():
-    return FakePlayers()
-
-
-@pytest.fixture()
-def fake_behaviors():
-    return FakeBehaviors()
-
-
-@pytest.fixture()
-def api(fake_repo, fake_players, fake_behaviors):
-    app.dependency_overrides[get_session_service] = lambda: FakeSessionService({"valid-session": 7})
-    app.dependency_overrides[get_league_service] = lambda: LeagueService(
-        fake_repo, fake_players, fake_behaviors
-    )
-    yield TestClient(app)
-    app.dependency_overrides.clear()
