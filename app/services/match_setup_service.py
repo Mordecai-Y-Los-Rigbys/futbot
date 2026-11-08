@@ -35,6 +35,7 @@ class MatchSetup:
     pause_seconds: float = PAUSE_SECONDS
     allow_draws: bool = True
 
+
 class MatchSetupService:
     """Arma los equipos y la duración de un partido a partir de la base."""
 

@@ -120,8 +120,8 @@ class Match(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    
-    # Tanda de penales, solo si el partido se definió por penales. 
+
+    # Tanda de penales, solo si el partido se definió por penales.
     penalty_score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_winner: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)

@@ -98,7 +98,7 @@ def create_initial_state(
                     stats=setup.stats,
                     position=ZERO,
                     facing=_attack_direction(team),
-                    name=setup.name
+                    name=setup.name,
                 )
             )
     state = MatchState(players=players, ball=BallState(position=ZERO), seed=seed)
@@ -124,7 +124,7 @@ def penalty_state(state: MatchState, kicker_key: PlayerKey, defender_key: Player
     """Estado de un penal: solo el pateador, en la posición de delantero y con
     la pelota, y el defensor rival, en la posición de defensor. Conserva el
     tick y la semilla."""
-    
+
     kicker = copy.deepcopy(state.player(kicker_key))
     defender = copy.deepcopy(state.player(defender_key))
     for player, role in ((kicker, MemberRole.forward), (defender, MemberRole.defense)):
@@ -136,6 +136,7 @@ def penalty_state(state: MatchState, kicker_key: PlayerKey, defender_key: Player
     ball_spot = kicker.position + kicker.facing * (C.PLAYER_RADIUS + C.BALL_RADIUS)
     ball = BallState(position=ball_spot, owner=kicker_key)
     return MatchState(players=[kicker, defender], ball=ball, seed=state.seed, tick=state.tick)
+
 
 # --- Tick ---------------------------------------------------------------------
 

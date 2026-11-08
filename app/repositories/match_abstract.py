@@ -22,7 +22,8 @@ class PenaltyShootoutData(BaseModel):
     score_1: int
     score_2: int
     winner: int  # 1 si es club1, 2 si club2
-    kicks: list[dict] 
+    kicks: list[dict]
+
 
 class MatchPlayersData(BaseModel):
     id: int

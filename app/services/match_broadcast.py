@@ -47,16 +47,16 @@ def penalty_kick_record(kick: PenaltyKick) -> dict:
         "round": kick.round,
         "scored": kick.scored,
     }
-    
+
 
 def penalty_shootout(status: ShootoutStatus) -> dict:
     return {
         "score1": status.score_1,
         "score2": status.score_2,
         "winner": _club(status.winner),
-        "kicks": [penalty_kick_record(k) for k in status.kicks]
+        "kicks": [penalty_kick_record(k) for k in status.kicks],
     }
-    
+
 
 def _penalty_current(result: TickResult) -> dict | None:
     if result.phase is not Phase.PENALTIES:

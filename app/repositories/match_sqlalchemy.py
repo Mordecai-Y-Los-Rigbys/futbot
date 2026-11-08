@@ -54,6 +54,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             user_2_id=row.user_2_id,
             club_1_name=row.club_1_name,
             club_2_name=row.club_2_name,
+            allow_draws=row.allow_draws,
         )
 
     def mark_started(self, match_id: int) -> None:
@@ -89,7 +90,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
     def save_seed(self, match_id: int, seed: int) -> None:
         self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
         self.db.commit()
-    
+
     def get_players(self, match_id: int) -> MatchPlayersData | None:
         row = self.db.execute(
             select(Match.id, Match.status, Match.user_1_id, Match.user_2_id).where(

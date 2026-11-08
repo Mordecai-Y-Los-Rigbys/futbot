@@ -189,7 +189,7 @@ class MatchRunner:
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
             repo.finish(match_id, result.score_1, result.score_2, _penalties_data(result))
-            
+
 
 def _penalties_data(result: TickResult) -> PenaltyShootoutData | None:
     if result.shootout is None:

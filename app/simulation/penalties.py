@@ -39,37 +39,37 @@ from app.simulation.state import Goal, MatchState, PlayerKey, Team
 @dataclass(frozen=True)
 class PenaltyKick:
     """Un penal ya ejecutado."""
-    
+
     team: Team
     kicker_id: int
     kicker_name: str
     round: int
     scored: bool
-    
+
 
 @dataclass(frozen=True)
 class PenaltyCurrent:
     """Penal en curso: quién patea y quién defiende."""
-    
+
     team: Team
     kicker_id: int
     kicker_name: str
     defender_id: int
     defender_name: str
-    
+
 
 @dataclass(frozen=True)
 class ShootoutStatus:
     """Estado completo de la tanda en un tick."""
-    
+
     kicks: tuple[PenaltyKick, ...]
     score_1: int
     score_2: int
     current: PenaltyCurrent | None  # None cuando la tanda terminó
-    countdown_seconds: int | None   # de 3 a 1 en la cuenta previa; None con la pelota en juego
-    remaining_seconds: int | None   # de 8 a 0; None cuando la tanda terminó
+    countdown_seconds: int | None  # de 3 a 1 en la cuenta previa; None con la pelota en juego
+    remaining_seconds: int | None  # de 8 a 0; None cuando la tanda terminó
     winner: Team | None
-    
+
 
 @dataclass(frozen=True)
 class PenaltyTick:
@@ -78,11 +78,11 @@ class PenaltyTick:
     first: bool  # primer tick de la tanda
     kick: PenaltyKick | None  # el penal que terminó en este tick
     finished: bool
-    
+
 
 class Shootout:
     """Tanda en curso. `advance()` produce el siguiente tick."""
-    
+
     def __init__(
         self,
         final_state: MatchState,
@@ -94,7 +94,7 @@ class Shootout:
         self._behaviors = behaviors
         self._elapsed = elapsed
         self._period = period
-        self._rng = random.Ranodm(final_state.seed)
+        self._rng = random.Random(final_state.seed)
         self._countdown_ticks = C.PENALTY_COUNTDOWN_SECONDS * C.TICKS_PER_SECOND
         self._kick_ticks = C.PENALTY_SECONDS * C.TICKS_PER_SECOND
         self._kicks: list[PenaltyKick] = []
@@ -107,36 +107,36 @@ class Shootout:
         self._current: PenaltyCurrent
         self._offset = 0  # ticks jugados del penal
         self._begin_kick()
-        
+
     def advance(self) -> PenaltyTick:
         first = not self._started
         self._started = True
         offset = self._offset
         self._offset += 1
-        
+
         if offset < self._countdown_ticks:
             ticks_left = self._countdown_ticks - offset
             countdown = math.ceil(ticks_left / C.TICKS_PER_SECOND)  # de 3 a 1
             return self._tick(first, countdown, C.PENALTY_SECONDS)
-        
+
         played = offset - self._countdown_ticks + 1
         scored = self._play_tick(played - 1)
         remaining = math.ceil((self._kick_ticks - played) / C.TICKS_PER_SECOND)  # de 8 a 0
-        
+
         if scored is None and played < self._kick_ticks:
             return self._tick(first, None, remaining)
-        
+
         kick = self._register(scored is True)
         finished = self._decided()
         if finished:
             self._winner = self._pick_winner()
-            
+
         tick = self._tick(first, None, remaining, kick, finished)
         if not finished:
-            self._begin_tick()  # El tick siguiente ya es la cuenta previa del próximo
-        
+            self._begin_kick()  # El tick siguiente ya es la cuenta previa del próximo
+
         return tick
-        
+
     def _begin_kick(self) -> None:
         team = Team.HOME if len(self._kicks) % 2 == 0 else Team.AWAY
         role = C.PENALTY_KICKER_ORDER[self._taken[team] % len(C.PENALTY_KICKER_ORDER)]
@@ -149,11 +149,11 @@ class Shootout:
         self._current = PenaltyCurrent(
             team, kicker.player_id, kicker.name, defender.player_id, defender.name
         )
-        
+
     def _play_tick(self, play_index: int) -> bool | None:
         """Corre un tick del penal. True si el pateador convirtió, False si la
         pelota entró en su propio arco, None si no hubo gol."""
-        
+
         clock = MatchClock(
             elapsed=self._elapsed,
             remaining=(self._kick_ticks - play_index) / C.TICKS_PER_SECOND,
@@ -165,19 +165,19 @@ class Shootout:
             if isinstance(event, Goal):
                 return event.scoring_team is self._current.team
         return None
-    
-    def _register(self, scored:bool) -> PenaltyKick:
+
+    def _register(self, scored: bool) -> PenaltyKick:
         team = self._current.team
         self._taken[team] += 1
         if scored:
             self._scores[team] += 1
-        
+
         kick = PenaltyKick(
             team, self._current.kicker_id, self._current.kicker_name, self._taken[team], scored
         )
         self._kicks.append(kick)
         return kick
-    
+
     def _decided(self) -> bool:
         """True si ya no quedan penales o si un club ya no puede ser alcanzado."""
         left = {team: C.PENALTY_KICKS_PER_CLUB - taken for team, taken in self._taken.items()}
@@ -185,13 +185,13 @@ class Shootout:
         if home + left[Team.HOME] < away or away + left[Team.AWAY] < home:
             return True
         return left[Team.HOME] == 0 and left[Team.AWAY] == 0
-    
+
     def _pick_winner(self) -> Team:
         home, away = self._scores[Team.HOME], self._scores[Team.AWAY]
         if home != away:
             return Team.HOME if home > away else Team.AWAY
         return Team.HOME if self._rng.random() < 0.5 else Team.AWAY  # sorteo 50/50
-    
+
     def _tick(
         self,
         first: bool,
@@ -200,7 +200,7 @@ class Shootout:
         kick: PenaltyKick | None = None,
         finished: bool = False,
     ) -> PenaltyTick:
-        
+
         status = ShootoutStatus(
             kicks=tuple(self._kicks),
             score_1=self._scores[Team.HOME],

@@ -176,10 +176,10 @@ class MatchSession:
             raise RuntimeError("el partido ya terminó")
         seq = self._seq
         self._seq += 1
-        
+
         if self._shootout is not None:
             return self._penalty_tick(seq)
-        
+
         segment = self._segments[self._seg_index]
         offset = self._offset
         self._offset += 1
@@ -253,11 +253,11 @@ class MatchSession:
 
     def _goes_to_penalties(self) -> bool:
         return not self._allow_draws and self._score_1 == self._score_2
-    
+
     def _penalty_tick(self, seq: int) -> TickResult:
         penalty = self._shootout.advance()
         self._state = penalty.state
-        
+
         if penalty.finished:
             phase, event = Phase.FINISHED, Event.MATCH_END
             self._finished = True
@@ -266,9 +266,9 @@ class MatchSession:
         else:
             phase = Phase.PENALTIES
             event = Event.PENALTY_KICK if penalty.kick is not None else None
-        
+
         elapsed = self._played / C.TICKS_PER_SECOND  # el reloj no avanza en la tanda
-        
+
         return TickResult(
             tick=seq,
             phase=phase,
@@ -359,7 +359,7 @@ def build_session(
     countdown_seconds: float = C.COUNTDOWN_SECONDS,
     periods: int = C.PERIODS,
     pause_seconds: float = C.PAUSE_SECONDS,
-    allow_draws: bool = True
+    allow_draws: bool = True,
 ) -> MatchSession:
     """Crea el estado inicial (la semilla entra acá) y la sesión del partido."""
     state = create_initial_state(team_1.players, team_2.players, seed)
@@ -370,5 +370,5 @@ def build_session(
         countdown_seconds,
         periods,
         pause_seconds,
-        allow_draws
+        allow_draws,
     )
