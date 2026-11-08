@@ -94,8 +94,8 @@ def without_key(key):
     return b
 
 
-def club(id, username, name):
-    return FriendlyClubData(id=id, username=username, club_name=name)
+def club(id, username, name, avatar):
+    return FriendlyClubData(id=id, username=username, club_name=name, avatar=avatar)
 
 
 def joined_match():
@@ -103,8 +103,8 @@ def joined_match():
         id=100,
         name="Partido amistoso 1",
         status="scheduled",
-        club1=club(1, "usuario1", "Club Atletico"),
-        club2=club(2, "usuario2", "Club Visitante"),
+        club1=club(1, "usuario1", "Club Atletico", 3),
+        club2=club(2, "usuario2", "Club Visitante", 5),
         created_at=NOW,
     )
 
@@ -269,8 +269,8 @@ def test_service_success_returns_the_match_schema(repo):
     assert dumped["id"] == 100
     assert dumped["name"] == "Partido amistoso 1"
     assert dumped["status"] == "scheduled"
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico"}
-    assert dumped["club2"] == {"id": 2, "username": "usuario2", "name": "Club Visitante"}
+    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 3}
+    assert dumped["club2"] == {"id": 2, "username": "usuario2", "name": "Club Visitante", "avatar": 5}
     for k in ("leagueId", "scheduledAt", "result"):
         assert dumped[k] is None
     assert "2026-10-04T13:00:00Z" in out.model_dump_json(by_alias=True)
@@ -460,8 +460,8 @@ def test_endpoint_success_full_structure(auth_join_api, repo, expiry, start):
         "leagueId": None,
         "name": "Partido amistoso 1",
         "status": "scheduled",
-        "club1": {"id": 1, "username": "usuario1", "name": "Club Atletico"},
-        "club2": {"id": 2, "username": "usuario2", "name": "Club Visitante"},
+        "club1": {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 3},
+        "club2": {"id": 2, "username": "usuario2", "name": "Club Visitante", "avatar": 5},
         "scheduledAt": None,
         "createdAt": "2026-10-04T13:00:00Z",
         "result": None,

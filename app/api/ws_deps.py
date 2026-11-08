@@ -4,18 +4,19 @@ from typing import Callable, ContextManager, Iterator
 from app.database import SessionLocal
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
+from app.repositories.league_match_start_sqlalchemy import SqlAlchemyLeagueMatchStartRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.repositories.match_ws_token_sqlalchemy import SqlAlchemyMatchWsTokenRepository
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
-from app.services.match_connection_manager import MatchConnectionManager
-from app.services.match_handshake_service import MatchHandshakeService
 from app.services.friendly_expiry import FriendlyExpiryService
 from app.services.friendly_start import FriendlyStartService
+from app.services.league_match_start import LeagueMatchStartService
+from app.services.match_connection_manager import MatchConnectionManager
+from app.services.match_handshake_service import MatchHandshakeService
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup, MatchSetupService
-
 
 # Único registro de conexiones del proceso.
 _connection_manager = MatchConnectionManager()
@@ -96,9 +97,22 @@ async def _start_simulation(match_id: int) -> None:
 _friendly_start = FriendlyStartService(_start_repo_scope, _start_simulation)
 
 
+@contextmanager
+def _league_match_start_repo_scope() -> Iterator[SqlAlchemyLeagueMatchStartRepository]:
+    with SessionLocal() as db:
+        yield SqlAlchemyLeagueMatchStartRepository(db)
+
+
+_league_match_start = LeagueMatchStartService(_league_match_start_repo_scope, _start_simulation)
+
+
 def get_match_runner() -> MatchRunner:
     return _match_runner
 
 
 def get_friendly_start() -> FriendlyStartService:
     return _friendly_start
+
+
+def get_league_match_start() -> LeagueMatchStartService:
+    return _league_match_start
