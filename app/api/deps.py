@@ -12,6 +12,7 @@ from app.repositories.behavior_abstract import AbstractBehaviorRepository
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.league_abstract import AbstractLeagueRepository
+from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
@@ -24,6 +25,7 @@ from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
 from app.services.friendly_service import FriendlyService
+from app.services.league_access_service import LeagueAccessService
 from app.services.league_service import LeagueService
 from app.services.league_validation import INVALID_JSON
 from app.services.match_behavior_service import MatchBehaviorService
@@ -65,6 +67,10 @@ def get_league_service(
     behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
 ) -> LeagueService:
     return LeagueService(leagues, players, behaviors)
+
+
+def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessService:
+    return LeagueAccessService(SqlAlchemyLeagueAccessRepository(db))
 
 
 def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:

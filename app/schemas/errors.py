@@ -37,6 +37,11 @@ class LeaveLeagueConflict(BaseModel):
     message: str
 
 
+class StartLeagueConflict(BaseModel):
+    code: Literal["notInPreparation", "notEnoughParticipants"]
+    message: str
+
+
 class CreatePlayerBadRequest(BaseModel):
     code: Literal[
         "invalidFieldType",
