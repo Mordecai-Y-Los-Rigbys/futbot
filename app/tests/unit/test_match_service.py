@@ -151,3 +151,57 @@ def test_maps_clubs_with_avatar_and_league_fields(service, matches):
     assert out.club2.model_dump() == {"id": 2, "username": "user2", "name": "club2", "avatar": 4}
     assert (out.league_id, out.name, out.status) == (9, None, "scheduled")
     assert out.scheduled_at == SCHEDULED and out.created_at == CREATED
+
+
+# --- GET /matches/{id}/lineups -------------------------------------------------
+
+
+def starters(user_id: int) -> list[LineupPlayerData]:
+    """Titulares del usuario, a propósito fuera del orden del contrato."""
+    base = user_id * 10
+    return [
+        LineupPlayerData(player_id=base + 1, name=f"def{user_id}", role=MemberRole.defense),
+        LineupPlayerData(player_id=base + 3, name=f"del{user_id}", role=MemberRole.forward),
+        LineupPlayerData(player_id=base + 2, name=f"med{user_id}", role=MemberRole.midfield),
+    ]
+
+
+def lineup_of(user_id: int) -> list[dict]:
+    """Lo que tiene que devolver el service: delantero, mediocampista y defensor."""
+    base = user_id * 10
+    return [
+        {"player_id": base + 3, "name": f"del{user_id}", "role": "forward"},
+        {"player_id": base + 2, "name": f"med{user_id}", "role": "midfield"},
+        {"player_id": base + 1, "name": f"def{user_id}", "role": "defense"},
+    ]
+
+
+@pytest.mark.parametrize("league", [None, PRIVATE], ids=["amistoso", "liga"])
+def test_lineups_have_both_clubs_in_contract_order(service, matches, teams, league):
+    matches.get_detail.return_value = detail(league=league)
+    teams.get_lineup.side_effect = lambda match_id, league_id, user_id: starters(user_id)
+
+    lineups = service.get_lineups(5, "sid", 1).model_dump()
+
+    assert lineups == {"club1": lineup_of(1), "club2": lineup_of(2)}
+    league_id = league.id if league else None
+    called_with = {call.args for call in teams.get_lineup.call_args_list}
+    assert called_with == {(5, league_id, 1), (5, league_id, 2)}
+
+
+def test_lineups_of_a_waiting_friendly_have_no_second_club(service, matches, teams):
+    matches.get_detail.return_value = detail(club2=None)
+    teams.get_lineup.return_value = starters(1)
+
+    lineups = service.get_lineups(5, "sid", 1)
+
+    assert lineups.club2 is None
+    teams.get_lineup.assert_called_once_with(5, None, 1)
+
+
+def test_non_player_cannot_see_friendly_lineups(service, matches, teams):
+    matches.get_detail.return_value = detail()
+    with pytest.raises(ApiError) as error:
+        service.get_lineups(5, "sid", OUTSIDER)
+    assert (error.value.status_code, error.value.code) == (403, "notAPlayerInMatch")
+    teams.get_lineup.assert_not_called()
