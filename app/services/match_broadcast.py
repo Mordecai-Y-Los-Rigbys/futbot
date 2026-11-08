@@ -7,7 +7,8 @@ from fastapi import WebSocket
 
 from app.services.match_connection_manager import MatchConnectionManager
 from app.simulation.geometry import Vec
-from app.simulation.match_rules import Event, TickResult
+from app.simulation.match_rules import Event, Phase, TickResult
+from app.simulation.penalties import PenaltyKick, ShootoutStatus
 from app.simulation.state import Team
 
 # Un tick dura 50 ms y el alcance pide tick + emisión < 100 ms: un suscriptor
@@ -34,6 +35,42 @@ def _position(vector: Vec) -> dict:
     return {"x": _r(vector.x), "y": _r(vector.y)}
 
 
+def _club(team: Team) -> str:
+    return "club1" if team is Team.HOME else "club2"
+
+
+def penalty_kick_record(kick: PenaltyKick) -> dict:
+    return {
+        "club": _club(kick.team),
+        "kickerId": kick.kicker_id,
+        "kickerName": kick.kicker_name,
+        "round": kick.round,
+        "scored": kick.scored,
+    }
+    
+
+def penalty_shootout(status: ShootoutStatus) -> dict:
+    return {
+        "score1": status.score_1,
+        "score2": status.score_2,
+        "winner": _club(status.winner),
+        "kicks": [penalty_kick_record(k) for k in status.kicks]
+    }
+    
+
+def _penalty_current(result: TickResult) -> dict | None:
+    if result.phase is not Phase.PENALTIES:
+        return None
+    current = result.shootout.current
+    return {
+        "club": _club(current.team),
+        "kickerId": current.kicker_id,
+        "kickerName": current.kicker_name,
+        "defenderId": current.defender_id,
+        "defenderName": current.defender_name,
+    }
+
+
 def _event(result: TickResult, ctx: TickContext) -> dict | None:
     if result.event is Event.PERIOD_START:
         return {
@@ -50,13 +87,18 @@ def _event(result: TickResult, ctx: TickContext) -> dict | None:
             "reason": result.pause_reason.value,
             "durationSeconds": result.pause_duration_seconds,
         }
+    if result.event is Event.PENALTIES_START:
+        return {"type": "penaltiesStart"}
+    if result.event is Event.PENALTY_KICK:
+        return {"type": "penaltyKick", **penalty_kick_record(result.penalty_kick)}
     if result.event is Event.MATCH_END:
+        shootout = result.shootout
         return {
             "type": "matchEnd",
             "result": {
                 "score1": result.score_1,
                 "score2": result.score_2,
-                "penalties": None,  # TODO: PenaltyShootout cuando exista la tanda
+                "penalties": penalty_shootout(shootout) if shootout is not None else None,
             },
         }
     return None
@@ -71,6 +113,8 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     suscriptor.
     """
     state = result.state
+    shootout = result.shootout
+    in_penalties = result.phase is Phase.PENALTIES
     return {
         "type": "tick",
         "players": [
@@ -79,8 +123,12 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
         "ballPosition": _position(state.ball.position),
         "score1": result.score_1,
         "score2": result.score_2,
-        "penaltyScore1": 0,  # TODO: tanda de penales
-        "penaltyScore2": 0,
+        "penaltyScore1": shootout.score_1 if shootout else 0,  # TODO: tanda de penales
+        "penaltyScore2": shootout.score_2 if shootout else 0,
+        "penaltyKicks": [penalty_kick_record(k) for k in shootout.kicks] if shootout else [],
+        "penaltyCurrent": _penalty_current(result),
+        "penaltyCountdownSeconds": shootout.countdown_seconds if in_penalties else None,
+        "penaltyRemainingSeconds": shootout.remaining_seconds if in_penalties else None,
         "elapsedTime": int(result.elapsed),
         "pauseRemainingSeconds": result.pause_remaining_seconds,  # None fuera de la pausa
         "phase": result.phase.value,

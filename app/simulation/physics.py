@@ -120,6 +120,23 @@ def reset_positions(state: MatchState) -> MatchState:
     return new
 
 
+def penalty_state(state: MatchState, kicker_key: PlayerKey, defender_key: PlayerKey):
+    """Estado de un penal: solo el pateador, en la posición de delantero y con
+    la pelota, y el defensor rival, en la posición de defensor. Conserva el
+    tick y la semilla."""
+    
+    kicker = copy.deepcopy(state.player(kicker_key))
+    defender = copy.deepcopy(state.player(defender_key))
+    for player, role in ((kicker, MemberRole.forward), (defender, MemberRole.defense)):
+        player.position = _absolute(player.team, *C.INITIAL_POSITIONS[role.number])
+        player.facing = _attack_direction(player.team)
+        player.move = None
+        player.next_kick_tick = NO_KICK_COOLDOWN
+        player.regain_blocked_until = NOT_REGAIN_BLOCKED
+    ball_spot = kicker.position + kicker.facing * (C.PLAYER_RADIUS + C.BALL_RADIUS)
+    ball = BallState(position=ball_spot, owner=kicker_key)
+    return MatchState(players=[kicker, defender], ball=ball, seed=state.seed, tick=state.tick)
+
 # --- Tick ---------------------------------------------------------------------
 
 
