@@ -1,20 +1,30 @@
 from datetime import timezone
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.domain.league import LeagueStatus
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
+from app.models.match import Match
+from app.models.session_league_unlock import SessionLeagueUnlock
 from app.models.team_member import TeamMember
+from app.models.user import User
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
+    JoinLeagueData,
+    LeagueParticipantData,
+    JoinLeagueStateConflict,
     LeagueCreatorData,
+    LeagueDetailData,
+    LeagueJoinState,
+    LeagueLeaveInfo,
     LeagueListItemData,
     LeaguePageData,
-    LeagueLeaveInfo,
-    LeagueDetailData
+    LeagueStartState,
+    PlanFixture,
+    StartLeagueConflict,
 )
 
 
@@ -121,7 +131,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
     def get_match_duration_minutes(self, league_id: int) -> int | None:
         # scalar() devuelve None si la liga no existe
         return self.db.scalar(select(League.match_duration).where(League.id == league_id))
-    
+
     def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
         row = self.db.execute(
             select(League.status, League.creator_id).where(League.id == league_id)
@@ -157,7 +167,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         except Exception:
             self.db.rollback()
             raise
-    
+
     def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
         participants_count = (
             select(func.count(func.distinct(LeagueParticipant.user_id)))
@@ -188,3 +198,156 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             min_participants=league.min_participants,
             joined=bool(is_joined),
         )
+
+    def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
+        rows = self.db.execute(
+            select(User.id, User.username, User.club_name, User.avatar)
+            .join(LeagueParticipant, LeagueParticipant.user_id == User.id)
+            .where(LeagueParticipant.league_id == league_id)
+            .order_by(User.id.asc())
+        ).all()
+        return [
+            LeagueParticipantData(
+                id=row.id, username=row.username, club_name=row.club_name, avatar=row.avatar
+            )
+            for row in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # Inscripción (POST /leagues/{id}/participants)
+    # ------------------------------------------------------------------
+
+    def _join_state(self, league: League, user_id: int) -> LeagueJoinState:
+        count = self.db.scalar(
+            select(func.count())
+            .select_from(LeagueParticipant)
+            .where(LeagueParticipant.league_id == league.id)
+        )
+        is_participant = self.db.scalar(
+            select(
+                exists().where(
+                    LeagueParticipant.league_id == league.id,
+                    LeagueParticipant.user_id == user_id,
+                )
+            )
+        )
+        return LeagueJoinState(
+            private=league.private,
+            password=league.password,
+            status=league.status,
+            max_participants=league.max_participants,
+            participants_count=count or 0,
+            is_participant=bool(is_participant),
+        )
+
+    def get_join_state(self, league_id: int, user_id: int) -> LeagueJoinState | None:
+        league = self.db.get(League, league_id)
+        return None if league is None else self._join_state(league, user_id)
+
+    def join(self, data: JoinLeagueData) -> JoinLeagueStateConflict | None:
+        try:
+            # Bloquea la fila de la liga hasta el commit: dos inscripciones
+            # simultáneas se serializan y la segunda ve a la primera al contar.
+            # populate_existing: la liga ya puede estar en la sesión (la leyó
+            # get_join_state) y hay que releer su estado, no usar el cacheado.
+            # En SQLite FOR UPDATE se ignora (los tests de concurrencia usan Postgres).
+            league = self.db.scalars(
+                select(League)
+                .where(League.id == data.league_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).one()
+
+            conflict = self._join_state(league, data.user_id).conflict()
+            if conflict is not None:
+                self.db.rollback()
+                return conflict
+
+            self.db.add(
+                LeagueParticipant(
+                    league_id=data.league_id,
+                    user_id=data.user_id,
+                    coach_behavior_id=data.coach_behavior_id,
+                )
+            )
+            self.db.flush()  # el participante debe existir antes que sus miembros (FK)
+            self.db.add_all(
+                TeamMember(
+                    league_id=data.league_id,
+                    match_id=None,
+                    user_id=data.user_id,
+                    player_id=m.player_id,
+                    behavior_id=m.behavior_id,
+                    role=m.role,
+                )
+                for m in data.members
+            )
+            if data.unlock_session and (
+                self.db.get(SessionLeagueUnlock, (data.session_id, data.league_id)) is None
+            ):
+                self.db.add(
+                    SessionLeagueUnlock(session_id=data.session_id, league_id=data.league_id)
+                )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return None
+
+    # ------------------------------------------------------------------
+    # Inicio (POST /leagues/{id}/start)
+    # ------------------------------------------------------------------
+
+    def _participant_ids(self, league_id: int) -> list[int]:
+        return list(
+            self.db.scalars(
+                select(LeagueParticipant.user_id).where(LeagueParticipant.league_id == league_id)
+            )
+        )
+
+    def _start_state(self, league: League, participants_count: int) -> LeagueStartState:
+        return LeagueStartState(
+            creator_id=league.creator_id,
+            status=league.status,
+            min_participants=league.min_participants,
+            participants_count=participants_count,
+            match_duration=league.match_duration,
+            allow_draws=league.allow_draws,
+        )
+
+    def get_start_state(self, league_id: int) -> LeagueStartState | None:
+        league = self.db.get(League, league_id)
+        if league is None:
+            return None
+        return self._start_state(league, len(self._participant_ids(league_id)))
+
+    def start(self, league_id: int, plan_fixture: PlanFixture) -> StartLeagueConflict | None:
+        try:
+            league = self.db.scalars(
+                select(League)
+                .where(League.id == league_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).one()
+            participant_ids = self._participant_ids(league_id)
+
+            conflict = self._start_state(league, len(participant_ids)).conflict()
+            if conflict is not None:
+                self.db.rollback()
+                return conflict
+
+            league.status = LeagueStatus.started
+            self.db.add_all(
+                Match(
+                    league_id=league_id,
+                    user_1_id=m.user_1_id,
+                    user_2_id=m.user_2_id,
+                    scheduled_at=m.scheduled_at,
+                )
+                for m in plan_fixture(participant_ids)
+            )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return None

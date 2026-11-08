@@ -1,4 +1,3 @@
-import os
 from dotenv import load_dotenv
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -12,12 +11,19 @@ from app.api.behaviors import router as behaviors_router
 from app.api.leagues import router as leagues_router
 from app.api.players import router as players_router
 from app.api.ws_matches import router as ws_matches_router
+from app.api.ws_leagues import router as ws_leagues_router
 from app.api.friendlies import router as friendlies_router
-from app.api.ws_deps import get_friendly_expiry, get_friendly_start, get_match_runner
+from app.api.ws_deps import (
+    get_friendly_expiry,
+    get_friendly_start,
+    get_league_match_start,
+    get_match_runner,
+)
 from app.api.matches import router as matches_router
 from app.api.ranking import router as ranking_router
 from app.api.users import router as users_router
 
+from app.config import allowed_origins
 from app.database import Base, engine
 from app.errors import (
     ApiError,
@@ -37,9 +43,12 @@ Base.metadata.create_all(bind=engine)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     expiry = get_friendly_expiry()
     start = get_friendly_start()
+    league_start = get_league_match_start()
     await expiry.recover()
     await start.recover()
+    await league_start.recover()
     yield
+    league_start.shutdown()
     start.shutdown()
     await get_match_runner().shutdown()
     expiry.shutdown()
@@ -53,6 +62,7 @@ app.include_router(players_router)
 app.include_router(behaviors_router)
 app.include_router(leagues_router)
 app.include_router(ws_matches_router)
+app.include_router(ws_leagues_router)
 app.include_router(friendlies_router)
 app.include_router(matches_router)
 app.include_router(ranking_router)
@@ -60,13 +70,9 @@ app.include_router(users_router)
 
 
 # Configuración de CORS
-origins = [
-    os.getenv("FRONTEND_URL", "http://localhost:5173"),
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=allowed_origins(),
     allow_credentials=True,  # Vital para que viajen las cookies
     allow_methods=["*"],
     allow_headers=["*"],

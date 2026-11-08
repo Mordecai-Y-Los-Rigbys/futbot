@@ -10,6 +10,7 @@ class MatchClub(CamelModel):
     id: int
     username: str
     name: str  # el spec expone el club_name como `name`
+    avatar: int
 
 
 class MatchResponse(CamelModel):
@@ -25,8 +26,10 @@ class MatchResponse(CamelModel):
     created_at: datetime
     result: dict | None = None
 
-    @field_serializer("created_at")
-    def _serialize_created_at(self, value: datetime) -> str:
+    @field_serializer("created_at", "scheduled_at")
+    def _serialize_utc(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
