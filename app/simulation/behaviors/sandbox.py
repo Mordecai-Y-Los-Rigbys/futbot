@@ -183,7 +183,9 @@ def run_behavior(
 
     deadline = timer() + time_limit
 
-    def check_time(frame: FrameType, event: str, arg: Any) -> Callable[..., Any]:
+    def check_time(frame: FrameType, event: str, arg: Any) -> Callable[..., Any] | None:
+        if frame.f_code is not behavior.code:
+            return None
         if timer() > deadline:
             raise BehaviorTimeout(f"superó el límite de {time_limit} s")
         return check_time

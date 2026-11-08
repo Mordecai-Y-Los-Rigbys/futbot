@@ -135,3 +135,16 @@ def test_actions_feed_the_physics():
     actions = actions_of({H: "ball = ball_position()\ngo_to(ball[0], ball[1])"}, s)
     after = step(s, actions).state
     assert after.player(H).position.x > s.player(H).position.x
+
+
+def test_a_huge_operation_only_costs_that_player_its_tick():
+    two_home_players = state(
+        player(HOME, 1, x=20.0), player(HOME, 2, x=30.0), player(AWAY, 1, x=80.0)
+    )
+    sources = {(HOME, 1): "go_to(5, 5)\nx = 9**9**9", (HOME, 2): "go_to(1, 1)"}
+
+    actions = actions_of(sources, two_home_players)  # reloj real y presupuesto de siempre
+
+    assert actions[(HOME, 1)] == PlayerActions()
+    # El compañero se ejecuta: la operación se cortó sin gastar el tiempo del equipo.
+    assert actions[(HOME, 2)] == PlayerActions(move=GoTo(1.0, 1.0))
