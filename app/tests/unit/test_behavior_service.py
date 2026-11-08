@@ -2,11 +2,13 @@ from unittest.mock import create_autospec
 
 import pytest
 
-from app.errors import ApiError
+from app.domain.behavior import BehaviorType
+from app.errors import ApiError, BehaviorConflictError, ValidationApiError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
     CreateBehaviorData,
+    DuplicateBehaviorNameError,
 )
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
 from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
@@ -17,6 +19,7 @@ def repo():
     mock = create_autospec(AbstractBehaviorRepository, instance=True)
     mock.list_by_user.return_value = ([], 0)
     mock.get_by_id.return_value = None
+    mock.name_taken.return_value = False
     return mock
 
 
@@ -102,3 +105,74 @@ def test_create_default_behaviors_creates_a_copy_for_the_user(service, repo):
     repo.create_many.assert_called_once_with(
         7, [CreateBehaviorData(name=b["name"], code=b["code"]) for b in DEFAULT_BEHAVIORS]
     )
+
+
+TOO_LONG = "x = 1\n" * 251
+
+
+def body(name="nuevo", code="go_to(1, 2)", behavior_type="playerBehavior"):
+    return {"name": name, "code": code, "type": behavior_type}
+
+
+def conflict_of(service, request_body):
+    with pytest.raises(BehaviorConflictError) as exc:
+        service.create_behavior(user_id=1, body=request_body)
+    return exc.value
+
+
+def test_create_saves_the_behavior_of_the_user(service, repo):
+    created = behavior(id=9, user_id=1, name="nuevo", code="x = 1")
+    repo.create.return_value = created
+
+    request_body = body(code="x = ball_position()", behavior_type="coachBehavior")
+    result = service.create_behavior(user_id=1, body=request_body)
+
+    assert result is created
+    repo.name_taken.assert_called_once_with(1, "nuevo")
+    repo.create.assert_called_once_with(
+        1,
+        CreateBehaviorData(
+            name="nuevo", code="x = ball_position()", type=BehaviorType.coach_behavior
+        ),
+    )
+
+
+def test_create_with_an_invalid_body_does_not_touch_the_repository(service, repo):
+    with pytest.raises(ValidationApiError):
+        service.create_behavior(user_id=1, body={})
+
+    repo.name_taken.assert_not_called()
+    repo.create.assert_not_called()
+
+
+def test_a_taken_name_is_duplicate_name_before_the_code_rules(service, repo):
+    repo.name_taken.return_value = True
+
+    error = conflict_of(service, body(code=TOO_LONG + "import os"))
+
+    assert (error.status_code, error.code, error.code_error) == (409, "duplicateName", None)
+    repo.create.assert_not_called()
+
+
+def test_a_code_too_long_is_reported_before_an_invalid_code(service, repo):
+    error = conflict_of(service, body(code="import os\n" + TOO_LONG))
+
+    assert (error.status_code, error.code, error.code_error) == (409, "codeTooLong", None)
+    repo.create.assert_not_called()
+
+
+def test_an_invalid_code_reports_the_rule_and_its_location(service, repo):
+    error = conflict_of(service, body(code="x = 1\nkick()", behavior_type="coachBehavior"))
+
+    assert (error.status_code, error.code) == (409, "invalidCode")
+    assert error.code_error == {"rule": "primitiveNotAllowedForType", "line": 2, "column": 1}
+    assert error.message.startswith("Línea 2, columna 1: ")
+    repo.create.assert_not_called()
+
+
+def test_a_name_taken_at_the_same_time_is_duplicate_name(service, repo):
+    repo.create.side_effect = DuplicateBehaviorNameError()
+
+    error = conflict_of(service, body())
+
+    assert (error.status_code, error.code, error.code_error) == (409, "duplicateName", None)
