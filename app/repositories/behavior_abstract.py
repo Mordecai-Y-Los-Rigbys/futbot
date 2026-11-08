@@ -21,6 +21,11 @@ class CreateBehaviorData(BaseModel):
     type: BehaviorType = BehaviorType.player_behavior
 
 
+class UpdateBehaviorData(BaseModel):
+    name: str
+    code: str
+
+
 class DuplicateBehaviorNameError(Exception):
     """El usuario ya tiene un behavior con ese nombre."""
 
@@ -44,8 +49,12 @@ class AbstractBehaviorRepository(ABC):
         """Crea los behaviors para el usuario. No confirma la transacción."""
 
     @abstractmethod
-    def name_taken(self, user_id: int, name: str) -> bool:
-        """True si el usuario ya tiene un behavior con ese nombre, de cualquier tipo."""
+    def name_taken(self, user_id: int, name: str, except_id: int | None = None) -> bool:
+        """True si el usuario ya tiene un behavior con ese nombre, de cualquier tipo.
+
+        Si se pasa `except_id`, ese behavior no se tiene en cuenta: al editarlo,
+        su propio nombre no está repetido.
+        """
 
     @abstractmethod
     def create(self, user_id: int, data: CreateBehaviorData) -> BehaviorData:
@@ -53,6 +62,16 @@ class AbstractBehaviorRepository(ABC):
 
         Raises:
             DuplicateBehaviorNameError: otro request creó el mismo nombre al mismo tiempo.
+        """
+
+    @abstractmethod
+    def update(self, behavior_id: int, data: UpdateBehaviorData) -> BehaviorData | None:
+        """Cambia nombre y código, y confirma la transacción.
+
+        Devuelve None si el behavior ya no existe (se eliminó mientras tanto).
+
+        Raises:
+            DuplicateBehaviorNameError: otro request usó el mismo nombre al mismo tiempo.
         """
 
     @abstractmethod

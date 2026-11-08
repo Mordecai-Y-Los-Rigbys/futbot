@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.repositories.behavior_abstract import (
     BehaviorData,
     CreateBehaviorData,
     DuplicateBehaviorNameError,
+    UpdateBehaviorData,
 )
 
 
@@ -49,13 +50,11 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
         self.db.flush()
         return [BehaviorData.model_validate(r) for r in records]
 
-    def name_taken(self, user_id: int, name: str) -> bool:
-        return (
-            self.db.scalar(
-                select(Behavior.id).where(Behavior.user_id == user_id, Behavior.name == name)
-            )
-            is not None
-        )
+    def name_taken(self, user_id: int, name: str, except_id: int | None = None) -> bool:
+        query = select(Behavior.id).where(Behavior.user_id == user_id, Behavior.name == name)
+        if except_id is not None:
+            query = query.where(Behavior.id != except_id)
+        return self.db.scalar(query) is not None
 
     def create(self, user_id: int, data: CreateBehaviorData) -> BehaviorData:
         record = Behavior(user_id=user_id, name=data.name, code=data.code, type=data.type)
@@ -68,6 +67,23 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
             self.db.rollback()
             raise DuplicateBehaviorNameError() from error
         return BehaviorData.model_validate(record)
+
+    def update(self, behavior_id: int, data: UpdateBehaviorData) -> BehaviorData | None:
+        # Un solo UPDATE: si el behavior se eliminó después de leerlo, no toca ninguna fila.
+        query = (
+            update(Behavior)
+            .where(Behavior.id == behavior_id)
+            .values(name=data.name, code=data.code)
+            .returning(Behavior)
+        )
+        try:
+            record = self.db.execute(query).scalar_one_or_none()
+            result = BehaviorData.model_validate(record) if record is not None else None
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            raise DuplicateBehaviorNameError() from error
+        return result
 
     def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
         return set(
