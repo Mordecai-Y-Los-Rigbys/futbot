@@ -42,7 +42,7 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def create(self, data):
         raise NotImplementedError
-    
+
     def get_detail(self, league_id: int, user_id: int):
         raise NotImplementedError
 
@@ -59,6 +59,12 @@ class FakeLeagues(AbstractLeagueRepository):
         raise NotImplementedError
 
     def join(self, data):
+        raise NotImplementedError
+
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
         raise NotImplementedError
 
 
