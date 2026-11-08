@@ -274,16 +274,22 @@ def test_filter_combined_with_pagination(api, owner, make_leagues_bulk):
 # --- contenido y relaciones ---------------------------------------------------
 
 
-def test_creator_uses_username_and_club_name(api, create_user, make_league):
-    creator = create_user("mgonzalez", "Boca Juniors FC")
+def test_creator_has_username_club_name_and_avatar(api, create_user, make_league):
+    creator = create_user("mgonzalez", "Boca Juniors FC", avatar=3)
     make_league(creator)
     c = api.get("/leagues").json()["items"][0]["creator"]
-    assert c == {
-        "id": creator.id,
-        "username": "mgonzalez",
-        "name": "Boca Juniors FC",
-        "avatar": creator.avatar,
-    }
+    assert c == {"id": creator.id, "username": "mgonzalez", "name": "Boca Juniors FC", "avatar": 3}
+
+
+def test_each_league_has_its_own_creator_avatar(login_as, create_user, make_league):
+    viewer = login_as(create_user("viewer", avatar=4))
+    make_league(create_user("ana", avatar=3), name="Liga Ana")
+    make_league(create_user("beto", avatar=5), name="Liga Beto")
+
+    items = viewer.get("/leagues").json()["items"]
+    avatars = {i["name"]: i["creator"]["avatar"] for i in items}
+
+    assert avatars == {"Liga Ana": 3, "Liga Beto": 5}
 
 
 def test_participants_count_of_new_league_is_1(api, owner, make_league):
