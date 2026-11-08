@@ -13,7 +13,8 @@ from app.repositories.league_abstract import (
     LeagueDetailData,
     LeagueListItemData,
     LeaguePageData,
-    LeagueFixtureData
+    LeagueFixtureData,
+    LeagueParticipantData,
 )
 from app.services.league_service import LeagueService
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers, FakeTeams
@@ -34,6 +35,8 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         self.detail_calls: list[tuple[int, int]] = []
         self.fixtures: dict[int, LeagueFixtureData] = {}
         self.fixture_calls: list[int] = []
+        self.participant_lists: dict[int, list[LeagueParticipantData]] = {}
+        self.participants_calls: list[int] = []
 
     def list_page(self, name, offset, limit):
         self.calls.append({"name": name, "offset": offset, "limit": limit})
@@ -58,6 +61,10 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def get_detail(self, league_id, user_id):
         self.detail_calls.append((league_id, user_id))
         return self.details.get(league_id)
+
+    def list_participants(self, league_id):
+        self.participants_calls.append(league_id)
+        return self.participant_lists.get(league_id, [])
 
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
