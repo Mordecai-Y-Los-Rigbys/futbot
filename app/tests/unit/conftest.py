@@ -82,6 +82,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
     def join(self, data):
         raise NotImplementedError
 
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
+        raise NotImplementedError
+
 
 class FakeSessionService:
     """Reemplaza a SessionService: session_id -> user_id, sin base."""
@@ -163,9 +169,7 @@ def make_item():
         return LeagueListItemData(
             id=id,
             name=name,
-            creator=LeagueCreatorData(
-                id=7, username=username, club_name=club_name, avatar=avatar
-            ),
+            creator=LeagueCreatorData(id=7, username=username, club_name=club_name, avatar=avatar),
             status=status,
             participants_count=participants_count,
             max_participants=max_participants,

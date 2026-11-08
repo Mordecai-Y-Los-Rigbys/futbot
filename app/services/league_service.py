@@ -1,3 +1,5 @@
+import random
+from datetime import datetime, timezone
 from typing import Any
 
 from app.errors import ApiError
@@ -10,6 +12,7 @@ from app.repositories.league_abstract import (
     JoinLeagueStateConflict,
     LeagueListItemData,
     LeagueParticipantData,
+    StartLeagueConflict,
 )
 from app.domain.league import LeagueStatus
 from app.helpers.ids import parse_path_id
@@ -24,6 +27,7 @@ from app.schemas.league import (
 )
 from app.services.join_league_validation import parse_join_league
 from app.services.league_access_service import verify_league_password
+from app.services.league_fixture import build_fixture, match_slot
 from app.services.league_validation import parse_create_league
 from app.services.team_ownership import ensure_owned_team, ensure_owned_typed_team
 
@@ -36,6 +40,20 @@ _JOIN_CONFLICT_MESSAGES: dict[str, str] = {
     "leagueFull": "La liga ya alcanzó su cupo máximo de participantes.",
     "alreadyParticipating": "Ya participás en esta liga.",
 }
+
+_START_CONFLICT_MESSAGES: dict[str, str] = {
+    "notInPreparation": "La liga ya no está en preparación.",
+    "notEnoughParticipants": "La liga todavía no alcanzó el mínimo de participantes.",
+}
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _raise_start_conflict(conflict: StartLeagueConflict | None) -> None:
+    if conflict is not None:
+        raise ApiError(409, conflict, _START_CONFLICT_MESSAGES[conflict])
 
 
 def _password_matches(given: str, stored: str | None) -> bool:
@@ -84,11 +102,13 @@ class LeagueService:
         players: AbstractPlayerRepository,
         behaviors: AbstractBehaviorRepository,
         notifier: LeagueParticipantsNotifier | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.repo = repo
         self.players = players
         self.behaviors = behaviors
         self.notifier = notifier
+        self.rng = rng or random.Random()
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
         """Lista paginada de las ligas.
@@ -151,7 +171,7 @@ class LeagueService:
             )
         )
         return _to_summary(created)
-    
+
     def leave_league(self, user_id: int, raw_league_id: str) -> None:
         """Quita al usuario de una liga en preparación y libera su cupo.
 
@@ -267,5 +287,34 @@ class LeagueService:
         )
 
         # Solo ante una inscripción exitosa; un intento fallido no emite nada
+        if self.notifier is not None:
+            self.notifier.participants_changed(league_id)
+
+    def start_league(self, league_id: int, user_id: int) -> None:
+        """Inicia la liga y genera su fixture (POST /leagues/{id}/start)
+
+        Args:
+            league_id: id ya parseado
+            user_id: usuario autenticado; tiene que ser el creador.
+
+        Raises:
+            ApiError 404: la liga no existe.
+            ApiError 403: el usuario no es el creador.
+            ApiError 409: notInPreparation o notEnoughParticipants.
+        """
+        state = self.repo.get_start_state(league_id)
+        if state is None:
+            raise ApiError(404, None, LEAGUE_NOT_FOUND_MESSAGE)
+        if state.creator_id != user_id:
+            raise ApiError(403, None, "Solo el creador puede iniciar la liga.")
+        _raise_start_conflict(state.conflict())
+
+        started_at = _utcnow()
+        slot = match_slot(state.match_duration, state.allow_draws)
+
+        _raise_start_conflict(
+            self.repo.start(league_id, lambda ids: build_fixture(ids, started_at, slot, self.rng))
+        )
+
         if self.notifier is not None:
             self.notifier.participants_changed(league_id)

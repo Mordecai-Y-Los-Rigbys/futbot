@@ -10,6 +10,9 @@ class FakeTeams(AbstractTeamRepository):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
 
+    def set_behavior(self, match_id, league_id, player_id, behavior_id):
+        raise NotImplementedError
+
 
 class FakePlayers:
     """Por defecto, todo id pertenece al usuario. `owned` lo restringe."""
