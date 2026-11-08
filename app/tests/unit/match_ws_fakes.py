@@ -7,6 +7,7 @@ from app.repositories.match_abstract import (
     MatchStateData,
     MatchPlayersData,
     MatchDetailData,
+    PenaltyShootoutData,
 )
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
@@ -45,7 +46,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.players: dict[int, MatchPlayersData] = {}
         self.details: dict[int, MatchDetailData] = {}
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
-        self.penalties: dict[int, object] = {}
+        self.penalties: dict[int, PenaltyShootoutData | None] = {}
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
         self.states[match_id] = MatchStateData(id=match_id, status=MatchStatus(status).value)
@@ -60,7 +61,13 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history.append("started")
         self._set_status(match_id, MatchStatus.started)
 
-    def finish(self, match_id: int, score_1: int, score_2: int, penalties=None) -> None:
+    def finish(
+        self,
+        match_id: int,
+        score_1: int,
+        score_2: int,
+        penalties: PenaltyShootoutData | None = None,
+    ) -> None:
         self.history.append("finished")
         self.results[match_id] = (score_1, score_2)
         self.penalties[match_id] = penalties

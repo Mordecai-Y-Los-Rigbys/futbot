@@ -11,20 +11,19 @@ from contextlib import AbstractContextManager
 
 from starlette.concurrency import run_in_threadpool
 
-from app.repositories.match_abstract import AbstractMatchRepository, PenaltyShootoutData
+from app.repositories.match_abstract import PenaltyShootoutData
 from app.repositories.substitution_abstract import AbstractSubstitutionRepository
 from app.services.match_broadcast import (
     SEND_TIMEOUT,
     TickContext,
     broadcast_tick,
     build_tick_payload,
-    penalty_shootout,
+    penalty_kick_record,
 )
-from app.services.match_connection_manager import MatchConnectionManager
-from app.services.match_setup_service import MatchSetup
 from app.simulation.behaviors.sandbox import CompiledBehavior
 from app.simulation import constants as C
 from app.simulation.match_rules import MatchSession, Phase, TickResult, build_session
+from app.simulation.state import Team
 
 logger = logging.getLogger(__name__)
 
@@ -220,12 +219,12 @@ class MatchRunner:
 
 
 def _penalties_data(result: TickResult) -> PenaltyShootoutData | None:
-    if result.shootout is None:
+    shootout = result.shootout
+    if shootout is None:
         return None
-    shootout = penalty_shootout(result.shootout)
     return PenaltyShootoutData(
-        score_1=shootout["score1"],
-        score_2=shootout["score2"],
-        winner=1 if shootout["winner"] == "club1" else 2,
-        kicks=shootout["kicks"],
+        score_1=shootout.score_1,
+        score_2=shootout.score_2,
+        winner=1 if shootout.winner is Team.HOME else 2,
+        kicks=[penalty_kick_record(kick) for kick in shootout.kicks],
     )

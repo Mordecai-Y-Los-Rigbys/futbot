@@ -120,7 +120,7 @@ def reset_positions(state: MatchState) -> MatchState:
     return new
 
 
-def penalty_state(state: MatchState, kicker_key: PlayerKey, defender_key: PlayerKey):
+def penalty_state(state: MatchState, kicker_key: PlayerKey, defender_key: PlayerKey) -> MatchState:
     """Estado de un penal: solo el pateador, en la posición de delantero y con
     la pelota, y el defensor rival, en la posición de defensor. Conserva el
     tick y la semilla."""

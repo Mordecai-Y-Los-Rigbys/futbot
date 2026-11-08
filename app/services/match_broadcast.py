@@ -123,7 +123,7 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
         "ballPosition": _position(state.ball.position),
         "score1": result.score_1,
         "score2": result.score_2,
-        "penaltyScore1": shootout.score_1 if shootout else 0,  # TODO: tanda de penales
+        "penaltyScore1": shootout.score_1 if shootout else 0,
         "penaltyScore2": shootout.score_2 if shootout else 0,
         "penaltyKicks": [penalty_kick_record(k) for k in shootout.kicks] if shootout else [],
         "penaltyCurrent": _penalty_current(result),
