@@ -8,7 +8,7 @@ from app.repositories.behavior_abstract import (
     CreateBehaviorData,
     DuplicateBehaviorNameError,
 )
-from app.services.behavior_validation import parse_create_behavior
+from app.services.behavior_validation import parse_create_behavior, parse_update_behavior
 from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 from app.simulation.behaviors.validation import (
     MAX_CODE_CHARS,
@@ -18,6 +18,7 @@ from app.simulation.behaviors.validation import (
 )
 
 PAGE_SIZE = 50
+BEHAVIOR_NOT_FOUND_MESSAGE = "Comportamiento no encontrado."
 
 
 class BehaviorService:
@@ -42,7 +43,7 @@ class BehaviorService:
         """404 si no existe, 403 si es de otro usuario. Solo lectura."""
         behavior = self.repository.get_by_id(behavior_id)
         if behavior is None:
-            raise ApiError(404, None, "Comportamiento no encontrado.")
+            raise ApiError(404, None, BEHAVIOR_NOT_FOUND_MESSAGE)
         if behavior.user_id != user_id:
             raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
         return behavior
@@ -69,6 +70,34 @@ class BehaviorService:
             return self.repository.create(user_id, data)
         except DuplicateBehaviorNameError:
             raise _duplicate_name()
+
+    def update_behavior(self, user_id: int, behavior_id: int, body: Any) -> BehaviorData:
+        """Cambia nombre y código de un behavior del usuario. El tipo no cambia.
+
+        Raises:
+            ApiError 404: notFound si no existe; deletedConcurrently si se eliminó
+                mientras se procesaba el cambio.
+            ValidationApiError 400: el body no cumple el contrato.
+            ApiError 403: el behavior es de otro usuario.
+            BehaviorConflictError 409: duplicateName, codeTooLong o invalidCode,
+                el primero que falla en ese orden.
+        """
+        behavior = self.repository.get_by_id(behavior_id)
+        if behavior is None:
+            raise ApiError(404, "notFound", BEHAVIOR_NOT_FOUND_MESSAGE)
+        data = parse_update_behavior(body)
+        if behavior.user_id != user_id:
+            raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
+        if self.repository.name_taken(user_id, data.name, except_id=behavior_id):
+            raise _duplicate_name()
+        _ensure_valid_code(data.code, behavior.type)
+        try:
+            updated = self.repository.update(behavior_id, data)
+        except DuplicateBehaviorNameError:
+            raise _duplicate_name()
+        if updated is None:
+            raise ApiError(404, "deletedConcurrently", "El comportamiento se eliminó.")
+        return updated
 
 
 def _duplicate_name() -> BehaviorConflictError:

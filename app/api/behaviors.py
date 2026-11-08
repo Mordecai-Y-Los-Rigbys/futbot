@@ -10,9 +10,10 @@ from app.schemas.errors import (
     CreateBehaviorConflict,
     Error,
     ListPageBadRequest,
+    UpdateBehaviorNotFound,
     ValidationBadRequest,
 )
-from app.services.behavior_service import PAGE_SIZE, BehaviorService
+from app.services.behavior_service import BEHAVIOR_NOT_FOUND_MESSAGE, PAGE_SIZE, BehaviorService
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
 
@@ -77,6 +78,28 @@ def get_behavior(
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
     behavior = service.get_owned_behavior(
-        user_id, _parse_id(behavior_id, "Comportamiento no encontrado.")
+        user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE)
     )
     return BehaviorDetail.model_validate(behavior)
+
+
+@router.put(
+    "/{behavior_id}",
+    response_model=BehaviorDetail,
+    operation_id="updateBehavior",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": UpdateBehaviorNotFound},
+        409: {"model": CreateBehaviorConflict},
+    },
+)
+def update_behavior(
+    behavior_id: str,
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),
+    service: BehaviorService = Depends(get_behavior_service),
+) -> BehaviorDetail:
+    parsed_id = _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE, "notFound")
+    return BehaviorDetail.model_validate(service.update_behavior(user_id, parsed_id, body))

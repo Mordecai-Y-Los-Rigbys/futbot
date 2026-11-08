@@ -28,8 +28,8 @@ def service(repo):
     return BehaviorService(repo)
 
 
-def behavior(id=5, user_id=1, name="a", code="x"):
-    return BehaviorData(id=id, user_id=user_id, name=name, code=code)
+def behavior(id=5, user_id=1, name="a", code="x", behavior_type=BehaviorType.player_behavior):
+    return BehaviorData(id=id, user_id=user_id, name=name, code=code, type=behavior_type)
 
 
 # --- list_behaviors -----------------------------------------------------------
