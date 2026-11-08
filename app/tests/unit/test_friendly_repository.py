@@ -24,7 +24,7 @@ def fake_match(id=1, name="Amistoso", created_at=None):
         name=name,
         status=MatchStatus.scheduled,
         created_at=created_at or datetime(2026, 1, 1),
-        user_1=SimpleNamespace(id=3, username="mgonzalez", club_name="Boca Juniors FC", avatar=1),
+        user_1=SimpleNamespace(id=3, username="mgonzalez", club_name="Boca Juniors FC", avatar=3),
     )
 
 
@@ -83,9 +83,9 @@ def test_maps_rows_to_dtos(repo, db):
     assert item.name == "Amistoso"
     assert item.status == "scheduled"
     assert item.club1.id == 3
+    assert item.club1.avatar == 3
     assert item.club1.username == "mgonzalez"
     assert item.club1.club_name == "Boca Juniors FC"
-    assert item.club1.avatar == 1
 
 
 def test_match_without_name_is_mapped(repo, db):
