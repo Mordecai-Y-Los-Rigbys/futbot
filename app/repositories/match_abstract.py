@@ -39,8 +39,12 @@ class AbstractMatchRepository(ABC):
         """Pasa el partido de scheduled a started."""
 
     @abstractmethod
-    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
-        """Guarda el resultado y pasa el partido a finished."""
+    def finish(self, match_id: int, score_1: int, score_2: int) -> bool:
+        """Guarda el resultado y pasa el partido a finished.
+
+        Si era el último partido sin terminar de una liga en curso, pasa la
+        liga a finished en la misma transacción. Devuelve True solo en ese caso.
+        """
 
     @abstractmethod
     def save_seed(self, match_id: int, seed: int) -> None:
