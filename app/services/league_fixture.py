@@ -31,8 +31,11 @@ def build_fixture(
 
     Ordena los ids antes de sortear: con la misma semilla, el fixture no
     depende del orden en que la base devuelve a los participantes.
+
+    Se sortea el lado de cada club.
     """
     pairs = list(combinations(sorted(participant_ids), 2))
+    pairs = [(a, b) if rng.random() < 0.5 else (b, a) for a, b in pairs]
     rng.shuffle(pairs)
     first = started_at + FIRST_MATCH_DELAY
     return [
