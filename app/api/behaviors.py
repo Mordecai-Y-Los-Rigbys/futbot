@@ -1,13 +1,39 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_behavior_service, get_current_user_id
+from app.api.deps import get_behavior_service, get_current_user_id, get_json_body
 from app.helpers.ids import parse_path_id as _parse_id
 from app.api.pagination import parse_page
 from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
-from app.schemas.errors import Error, ListPageBadRequest
+from app.schemas.errors import (
+    CreateBehaviorConflict,
+    Error,
+    ListPageBadRequest,
+    ValidationBadRequest,
+)
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
+
+
+@router.post(
+    "",
+    response_model=BehaviorDetail,
+    status_code=201,
+    operation_id="createBehavior",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        409: {"model": CreateBehaviorConflict},
+    },
+)
+def create_behavior(
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),  # depende de la sesión: 401 antes que 400
+    service: BehaviorService = Depends(get_behavior_service),
+) -> BehaviorDetail:
+    return BehaviorDetail.model_validate(service.create_behavior(user_id, body))
 
 
 # /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.
