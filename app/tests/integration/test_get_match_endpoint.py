@@ -149,7 +149,25 @@ def test_private_league_participant_not_playing_gets_the_match(
     third = create_user("third")
     add_participant(match.league, third)
     assert login_as(third).get(f"/matches/{match.id}").status_code == 200
-    
+
+
+def test_private_league_creator_not_playing_gets_the_match(
+    login_as, create_user, make_league, add_participant, make_match, owner, rival
+):
+    league = make_league(owner, status="started", private=True)
+    third = create_user("third")
+    add_participant(league, rival)
+    add_participant(league, third)
+    match = make_match(
+        league_id=league.id,
+        user_1_id=rival.id,
+        user_2_id=third.id,
+        scheduled_at=SCHEDULED,
+    )
+    r = login_as(owner).get(f"/matches/{match.id}")
+    assert r.status_code == 200
+    assert "secret" not in r.text
+
 
 def test_private_league_outsider_is_403(login_as, outsider, league_match):
     match = league_match(private=True)
