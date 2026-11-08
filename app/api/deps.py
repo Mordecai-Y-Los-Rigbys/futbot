@@ -109,8 +109,13 @@ def get_auth_service(
     )
 
 
-def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
-    return SubstitutionService(SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db))
+def get_substitution_service(
+    db: Session = Depends(get_db),
+    runner: MatchRunner = Depends(get_match_runner),
+) -> SubstitutionService:
+    return SubstitutionService(
+        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db), runner
+    )
 
 
 def get_match_behavior_service(
@@ -179,3 +184,4 @@ async def get_json_body(
         return json.loads(raw)
     except ValueError:
         return INVALID_JSON
+
