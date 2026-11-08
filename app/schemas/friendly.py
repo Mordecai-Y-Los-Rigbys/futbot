@@ -6,12 +6,6 @@ from pydantic import field_serializer
 from app.schemas.base import CamelModel
 
 
-def _to_utc_z(value: datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
 class MatchClub(CamelModel):
     id: int
     username: str
@@ -32,13 +26,13 @@ class MatchResponse(CamelModel):
     created_at: datetime
     result: dict | None = None
 
-    @field_serializer("created_at")
-    def _serialize_created_at(self, value: datetime) -> str:
-        return _to_utc_z(value)
-
-    @field_serializer("scheduled_at")
-    def _serialize_scheduled_at(self, value: datetime | None) -> str | None:
-        return None if value is None else _to_utc_z(value)
+    @field_serializer("created_at", "scheduled_at")
+    def _serialize_utc(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class MatchPage(CamelModel):

@@ -34,6 +34,7 @@ from app.services.league_validation import INVALID_JSON
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.match_runner import MatchRunner
+from app.services.match_service import MatchService
 from app.services.player_service import PlayerService
 from app.services.session_service import SessionService
 from app.services.substitution_service import SubstitutionService
@@ -79,6 +80,13 @@ def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessServ
 
 def get_match_connection_service(db: Session = Depends(get_db)) -> MatchConnectionService:
     return MatchConnectionService(SqlAlchemyMatchConnectionRepository(db))
+
+
+def get_match_service(db: Session = Depends(get_db)) -> MatchService:
+    return MatchService(
+        SqlAlchemyMatchRepository(db),
+        LeagueAccessService(SqlAlchemyLeagueAccessRepository(db)),
+    )
 
 
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
