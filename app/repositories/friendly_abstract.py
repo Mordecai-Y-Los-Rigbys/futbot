@@ -8,6 +8,7 @@ class FriendlyClubData(BaseModel):
     id: int
     username: str
     club_name: str
+    avatar: int
 
 
 class FriendlyMatchData(BaseModel):

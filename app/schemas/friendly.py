@@ -10,6 +10,7 @@ class MatchClub(CamelModel):
     id: int
     username: str
     name: str  # el spec expone el club_name como `name`
+    avatar: int
 
 
 class MatchResponse(CamelModel):
