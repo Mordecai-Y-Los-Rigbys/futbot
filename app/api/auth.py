@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import get_auth_service
+from app.api.deps import (
+    CurrentSession,
+    get_auth_service,
+    get_current_session,
+    get_session_service,
+)
 from app.schemas.auth import (
     LogInRequest,
     RegisterUserRequest,
@@ -10,6 +15,7 @@ from app.schemas.auth import (
     RegisterUserBadRequest,
 )
 from app.services.auth_service import AuthService
+from app.services.session_service import SessionService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -71,3 +77,21 @@ def user_login(
     )
 
     return User.model_validate(user)
+
+
+@router.post(
+    "/log-out",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    operation_id="logOut",
+    responses={401: {"model": ErrorResponse}},
+)
+def user_logout(
+    session: CurrentSession = Depends(get_current_session),
+    service: SessionService = Depends(get_session_service),
+) -> Response:
+    service.delete(session.id)
+
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie("session_id", httponly=True, samesite="lax")
+    return response
