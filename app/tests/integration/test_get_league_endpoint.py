@@ -186,6 +186,7 @@ def test_private_league_is_readable_by_a_non_participant(login_as, owner, create
     assert response.status_code == 200
     assert response.json()["private"] is True
     assert response.json()["joined"] is False
+    assert response.json()["minParticipants"] == 3
 
 
 def test_the_password_is_never_exposed(login_as, owner, create_user, make_league):
