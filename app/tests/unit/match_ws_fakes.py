@@ -38,6 +38,7 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.seeds: dict[int, int] = {}
         self.players: dict[int, MatchPlayersData] = {}
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
+        self.penalties: dict[int, object] = {}
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
         self.states[match_id] = MatchStateData(id=match_id, status=MatchStatus(status).value)
@@ -52,9 +53,10 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history.append("started")
         self._set_status(match_id, MatchStatus.started)
 
-    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
+    def finish(self, match_id: int, score_1: int, score_2: int, penalties=None) -> None:
         self.history.append("finished")
         self.results[match_id] = (score_1, score_2)
+        self.penalties[match_id] = penalties
         self._set_status(match_id, MatchStatus.finished)
 
     def _set_status(self, match_id: int, status: MatchStatus) -> None:

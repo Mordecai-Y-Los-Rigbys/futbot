@@ -24,6 +24,10 @@ TICK_KEYS = {
     "score2",
     "penaltyScore1",
     "penaltyScore2",
+    "penaltyKicks",
+    "penaltyCurrent",
+    "penaltyCountdownSeconds",
+    "penaltyRemainingSeconds",
     "elapsedTime",
     "pauseRemainingSeconds",
     "phase",
@@ -67,7 +71,16 @@ class FakeManager:
         self.match_closed.append((match_id, code, reason))
 
 
-def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, duration=1, **kwargs):
+def build(
+    manager,
+    repo,
+    substitutions=None,
+    periods=1,
+    pause_seconds=15,
+    duration=1,
+    allow_draws=True,
+    **kwargs
+):
     substitutions = substitutions if substitutions is not None else FakeSubstitutionRepo()
     setup = MatchSetup(
         make_team(),
@@ -78,6 +91,7 @@ def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, durati
         club_2_name="Club Dos",
         periods=periods,
         pause_seconds=pause_seconds,
+        allow_draws=allow_draws,
     )
 
     @contextmanager

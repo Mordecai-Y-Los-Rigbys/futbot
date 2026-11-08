@@ -14,6 +14,7 @@ from app.tests.unit.match_ws_fakes import FakeMatchRepo
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
     return StarterData(
         player_id=player_id,
+        name=f"Jugador {player_id}",
         role=role,
         power=60,
         agility=60,
@@ -42,7 +43,7 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def create(self, data):
         raise NotImplementedError
-    
+
     def get_detail(self, league_id: int, user_id: int):
         raise NotImplementedError
 
@@ -72,7 +73,7 @@ class FakeTeams(AbstractTeamRepository):
         return self.starters.get(user_id, [])
 
 
-def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
+def setup_data(league_id=None, user_2_id=2, club_2="Club Dos", allow_draws=True) -> MatchSetupData:
     return MatchSetupData(
         id=1,
         league_id=league_id,
@@ -80,6 +81,7 @@ def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData
         user_2_id=user_2_id,
         club_1_name="Club Uno",
         club_2_name=club_2,
+        allow_draws=allow_draws,
     )
 
 
