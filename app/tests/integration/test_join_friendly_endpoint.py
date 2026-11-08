@@ -62,12 +62,12 @@ def schedulers():
 
 @pytest.fixture()
 def creator(create_user):
-    return create_user("creator", "Creator FC")
+    return create_user("creator", "Creator FC", avatar=3)
 
 
 @pytest.fixture()
 def joiner(create_user):
-    return create_user("joiner")
+    return create_user("joiner", avatar=5)
 
 
 @pytest.fixture()
@@ -197,7 +197,8 @@ def test_join_keeps_the_same_match_and_registers_the_rival(
     assert body["status"] == "scheduled"
     assert body["leagueId"] is None and body["scheduledAt"] is None and body["result"] is None
     assert body["club1"] == created["club1"]
-    assert body["club2"] == {"id": joiner.id, "username": "joiner", "name": "club-joiner"}
+    assert body["club1"]["avatar"] == 3
+    assert body["club2"] == {"id": joiner.id, "username": "joiner", "name": "club-joiner", "avatar": 5}
 
     match = match_row(db_session, created["id"])
     assert (match.user_1_id, match.user_2_id) == (creator.id, joiner.id)

@@ -38,6 +38,7 @@ def _password_errors(body: dict, private: bool) -> FieldErrors:
     # "" no es error de validación: lo resuelve el 403 invalidLeaguePassword
     return []
 
+
 def _coach_errors(body: dict) -> FieldErrors:
     value = body.get("coachBehaviorId")
     if value is None:  # ausente o null: el equipo no tiene DT

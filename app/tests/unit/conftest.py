@@ -51,15 +51,14 @@ class FakeLeagueRepository(AbstractLeagueRepository):
             allow_draws=True,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
-        
-    
+
     def get_detail(self, league_id, user_id):
         self.detail_calls.append((league_id, user_id))
         return self.details.get(league_id)
 
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
-    
+
     def get_leave_info(self, league_id):
         return self.leave_info.get(league_id)
 
@@ -74,6 +73,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         raise NotImplementedError
 
     def join(self, data):
+        raise NotImplementedError
+
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
         raise NotImplementedError
 
 
@@ -120,9 +125,7 @@ def make_item():
         return LeagueListItemData(
             id=id,
             name=name,
-            creator=LeagueCreatorData(
-                id=7, username=username, club_name=club_name, avatar=avatar
-            ),
+            creator=LeagueCreatorData(id=7, username=username, club_name=club_name, avatar=avatar),
             status=status,
             participants_count=participants_count,
             max_participants=max_participants,
