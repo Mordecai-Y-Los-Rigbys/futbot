@@ -33,6 +33,11 @@ class JoinMatchForbidden(BaseModel):
     message: str
 
 
+class MatchAccessForbidden(BaseModel):
+    code: Literal["notAPlayerInMatch", "leagueAccessRequired"]
+    message: str
+
+
 class JoinMatchConflict(BaseModel):
     code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
     message: str
