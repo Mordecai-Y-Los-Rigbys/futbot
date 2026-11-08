@@ -32,8 +32,8 @@ class SessionService:
             )
         )
 
-    def get_user_id(self, session_id: str) -> int | None:
-        """Devuelve el user_id si la sesión existe y no expiró; si no, None."""
+    def get_valid(self, session_id: str) -> SessionData | None:
+        """Devuelve la sesión si existe y no expiró; si no, None."""
         session = self.repository.get_by_id(session_id)
         if session is None:
             return None
@@ -42,7 +42,12 @@ class SessionService:
             self.repository.delete(session_id)  # limpieza de sesiones vencidas
             return None
 
-        return session.user_id
+        return session
+
+    def get_user_id(self, session_id: str) -> int | None:
+        """Devuelve el user_id si la sesión existe y no expiró; si no, None."""
+        session = self.get_valid(session_id)
+        return None if session is None else session.user_id
 
     def delete(self, session_id: str) -> None:
         """Cierra la sesión (logout). No falla si no existe."""
