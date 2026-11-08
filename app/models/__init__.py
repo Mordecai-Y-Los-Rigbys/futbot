@@ -10,6 +10,7 @@ from app.domain.team_member import MemberRole
 from app.models.team_member import TeamMember
 from app.models.match_ws_token import MatchWsToken  # noqa: F401
 from app.models.session_league_unlock import SessionLeagueUnlock  # noqa: F401
+from app.models.substitution import AppliedSubstitution, Substitution  # noqa: F401
 
 __all__ = [
     "UserSession",
@@ -23,4 +24,7 @@ __all__ = [
     "TeamMember",
     "MatchWsToken",
     "SessionLeagueUnlock",
+    "Substitution",
+    "AppliedSubstitution",
 ]
+
