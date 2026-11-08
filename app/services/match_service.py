@@ -1,9 +1,6 @@
 from app.domain.match import MatchStatus
 from app.errors import ApiError
-from app.repositories.match_abstract import (
-    AbstractMatchRepository,
-    MatchDetailData
-    )
+from app.repositories.match_abstract import AbstractMatchRepository, MatchDetailData
 from app.schemas.friendly import MatchResponse
 from app.services.friendly_service import to_match_club
 from app.services.league_access_service import LeagueAccessService
@@ -15,11 +12,7 @@ def _result(match: MatchDetailData) -> dict | None:
     if match.status != MatchStatus.finished:
         return None
     # TODO: penalties cuando el modelo Match guarde la tanda de penales.
-    return {
-        "score1": match.score_1,
-        "score2": match.score_2,
-        "penalties": None
-    }
+    return {"score1": match.score_1, "score2": match.score_2, "penalties": None}
 
 
 def _to_response(match: MatchDetailData) -> MatchResponse:
@@ -32,34 +25,24 @@ def _to_response(match: MatchDetailData) -> MatchResponse:
         club2=to_match_club(match.club2) if match.club2 is not None else None,
         scheduled_at=match.scheduled_at,
         created_at=match.created_at,
-        result=_result(match)
+        result=_result(match),
     )
 
 
 def _is_player(match: MatchDetailData, user_id: int) -> bool:
-    return match.club1.id == user_id or (
-        match.club2 is not None and
-        match.club2.id == user_id
-    )
+    return match.club1.id == user_id or (match.club2 is not None and match.club2.id == user_id)
 
 
 class MatchService:
     """Consultas de partidos."""
 
     def __init__(
-        self,
-        matches: AbstractMatchRepository,
-        league_access: LeagueAccessService
+        self, matches: AbstractMatchRepository, league_access: LeagueAccessService
     ) -> None:
         self.matches = matches
         self.league_access = league_access
 
-    def get_match(
-        self,
-        match_id: int,
-        session_id: str,
-        user_id: int
-    ) -> MatchResponse:
+    def get_match(self, match_id: int, session_id: str, user_id: int) -> MatchResponse:
         """Partido de liga o amistoso, en cualquier estado.
 
         Raises:
@@ -75,14 +58,8 @@ class MatchService:
         return _to_response(match)
 
     def _require_spectator_access(
-        self,
-        match: MatchDetailData,
-        session_id: str,
-        user_id: int
+        self, match: MatchDetailData, session_id: str, user_id: int
     ) -> None:
         if match.league is None:
-            raise ApiError(
-                403, "notAPlayerInMatch",
-                "Un amistoso solo lo ven sus jugadores."
-            )
+            raise ApiError(403, "notAPlayerInMatch", "Un amistoso solo lo ven sus jugadores.")
         self.league_access.require_access(session_id, user_id, match.league)

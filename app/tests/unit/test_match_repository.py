@@ -19,7 +19,7 @@ def _user(user_id, avatar=1):
         club_name=f"club{user_id}",
         avatar=avatar,
     )
-    
+
 
 def _match(**fields):
     base = dict(
@@ -77,7 +77,7 @@ def test_detail_is_none_when_the_match_does_not_exist(repo, db):
     db.get.return_value = None
     assert repo.get_detail(99) is None
     db.get.assert_called_once_with(Match, 99, options=ANY)
-    
+
 
 def test_detail_of_a_waiting_friendly_has_no_rival_and_no_league(repo, db):
     db.get.return_value = _match()
@@ -89,8 +89,14 @@ def test_detail_of_a_waiting_friendly_has_no_rival_and_no_league(repo, db):
 def test_detail_of_a_league_match_maps_both_clubs_and_the_league(repo, db):
     league = SimpleNamespace(id=9, creator_id=1, private=True, password="secret")
     db.get.return_value = _match(
-        league_id=9, name=None, user_1=_user(1, avatar=2), user_2=_user(2, avatar=4),
-        league=league, status=MatchStatus.finished, score_1=2, score_2=1
+        league_id=9,
+        name=None,
+        user_1=_user(1, avatar=2),
+        user_2=_user(2, avatar=4),
+        league=league,
+        status=MatchStatus.finished,
+        score_1=2,
+        score_2=1,
     )
     out = repo.get_detail(5)
     assert (out.club1.avatar, out.club2.avatar) == (2, 4)

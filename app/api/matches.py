@@ -9,7 +9,7 @@ from app.api.deps import (
     get_json_body,
     get_match_connection_service,
     get_match_service,
-    get_substitution_service
+    get_substitution_service,
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
@@ -18,7 +18,7 @@ from app.schemas.errors import (
     JoinMatchConflict,
     JoinMatchForbidden,
     MatchAccessForbidden,
-    NextSubstitutionsConflict
+    NextSubstitutionsConflict,
 )
 from app.schemas.friendly import MatchResponse
 from app.schemas.match_connection import JoinMatchResponse
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/matches", tags=["matches"])
         401: {"model": Error},
         403: {"model": MatchAccessForbidden},
         404: {"model": Error},
-    }
+    },
 )
 def get_match(
     match_id: str,
@@ -47,9 +47,7 @@ def get_match(
     service: MatchService = Depends(get_match_service),
 ) -> MatchResponse:
     return service.get_match(
-        parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE),
-        session.id,
-        session.user_id
+        parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
     )
 
 

@@ -42,7 +42,7 @@ def client(service):
     app.dependency_overrides[get_match_service] = lambda: service
     yield TestClient(app)
     app.dependency_overrides.clear()
-    
+
 
 def test_success_is_camel_case(client, service):
     client.cookies.set("session_id", "ok")
@@ -60,7 +60,7 @@ def test_success_is_camel_case(client, service):
         "result": None,
     }
     service.get_match.assert_called_once_with(5, "ok", 7)
-    
+
 
 @pytest.mark.parametrize(
     "scheduled_at, expected",
@@ -80,7 +80,7 @@ def test_no_session_is_401_before_anything(client, service, path):
     r = client.get(path)
     assert r.status_code == 401 and r.json()["code"] is None
     service.get_match.assert_not_called()
-    
+
 
 @pytest.mark.parametrize("bad", ["abc", "0", "-1", "1.5", "2147483648"])
 def test_invalid_id_is_404(client, service, bad):
@@ -88,7 +88,7 @@ def test_invalid_id_is_404(client, service, bad):
     r = client.get(f"/matches/{bad}")
     assert r.status_code == 404 and r.json()["code"] is None
     service.get_match.assert_not_called()
-    
+
 
 @pytest.mark.parametrize(
     "status, code",

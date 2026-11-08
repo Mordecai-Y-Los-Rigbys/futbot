@@ -18,7 +18,7 @@ PUBLIC = LeagueAccessInfo(9, 1, False, None)
 OUTSIDER = 7
 
 
-def club(user_id: int, avatar: int = 1 ) -> FriendlyClubData:
+def club(user_id: int, avatar: int = 1) -> FriendlyClubData:
     return FriendlyClubData(
         id=user_id,
         username=f"user{user_id}",
@@ -78,7 +78,7 @@ def test_nonexistent_match_is_404(service, matches, access):
     matches.get_detail.return_value = None
     assert error_of(service) == (404, None)
     access.require_access.assert_not_called()
-    
+
 
 @pytest.mark.parametrize("league", [None, PRIVATE], ids=["amistoso", "liga privada"])
 @pytest.mark.parametrize("user_id", [1, 2])
@@ -86,21 +86,21 @@ def test_players_see_their_match(service, matches, access, league, user_id):
     matches.get_detail.return_value = detail(league=league)
     assert service.get_match(5, "sid", user_id).id == 5
     access.require_access.assert_not_called()
-    
+
 
 def test_waiting_friendly_creator_sees_it(service, matches):
     matches.get_detail.return_value = detail(club2=None)
     out = service.get_match(5, "sid", 1)
     assert out.club2 is None
     assert out.result is None
-    
+
 
 @pytest.mark.parametrize("club2", [club(2), None], ids=["con rival", "sin rival"])
 def test_friendly_outsider_is_403_not_a_player(service, matches, access, club2):
     matches.get_detail.return_value = detail(club2=club2)
     assert error_of(service) == (403, "notAPlayerInMatch")
     access.require_access.assert_not_called()
-    
+
 
 @pytest.mark.parametrize("league", [PUBLIC, PRIVATE], ids=["pública", "privada"])
 def test_league_outsider_asks_league_access(service, matches, access, league):
@@ -113,7 +113,7 @@ def test_league_access_error_passes_through(service, matches, access):
     matches.get_detail.return_value = detail(league=PRIVATE)
     access.require_access.side_effect = ApiError(403, "leagueAccessRequired", "x")
     assert error_of(service) == (403, "leagueAccessRequired")
-    
+
 
 @pytest.mark.parametrize(
     "status", [MatchStatus.scheduled, MatchStatus.started, MatchStatus.cancelled]
@@ -121,18 +121,16 @@ def test_league_access_error_passes_through(service, matches, access):
 def test_result_is_null_unless_finished(service, matches, status):
     matches.get_detail.return_value = detail(status=status)
     assert service.get_match(5, "sid", 1).result is None
-    
+
 
 def test_finished_match_without_shootout_has_scores_and_null_penalties(service, matches):
-    matches.get_detail.return_value = detail(
-        status=MatchStatus.finished, score_1=2, score_2=1
-    )
+    matches.get_detail.return_value = detail(status=MatchStatus.finished, score_1=2, score_2=1)
     assert service.get_match(5, "sid", 1).result == {
         "score1": 2,
         "score2": 1,
         "penalties": None,
     }
-    
+
 
 def test_maps_clubs_with_avatar_and_league_fields(service, matches):
     matches.get_detail.return_value = detail(league=PRIVATE).model_copy(

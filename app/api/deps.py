@@ -103,9 +103,7 @@ def get_auth_service(
 
 
 def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
-    return SubstitutionService(
-        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db)
-    )
+    return SubstitutionService(SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db))
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:

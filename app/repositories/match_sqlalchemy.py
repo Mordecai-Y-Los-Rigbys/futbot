@@ -11,7 +11,7 @@ from app.repositories.match_abstract import (
     MatchDetailData,
     MatchPlayersData,
     MatchSetupData,
-    MatchStateData
+    MatchStateData,
 )
 
 
@@ -44,12 +44,9 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             score_1=match.score_1,
             score_2=match.score_2,
             league=(
-                LeagueAccessInfo(
-                    league.id,
-                    league.creator_id,
-                    league.private,
-                    league.password
-                ) if league is not None else None
+                LeagueAccessInfo(league.id, league.creator_id, league.private, league.password)
+                if league is not None
+                else None
             ),
         )
 
