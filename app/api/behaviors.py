@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import get_behavior_service, get_current_user_id, get_json_body
 from app.helpers.ids import parse_path_id as _parse_id
@@ -8,6 +8,7 @@ from app.api.pagination import parse_page
 from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
 from app.schemas.errors import (
     CreateBehaviorConflict,
+    DeleteBehaviorConflict,
     Error,
     ListPageBadRequest,
     UpdateBehaviorNotFound,
@@ -103,3 +104,23 @@ def update_behavior(
 ) -> BehaviorDetail:
     parsed_id = _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE, "notFound")
     return BehaviorDetail.model_validate(service.update_behavior(user_id, parsed_id, body))
+
+
+@router.delete(
+    "/{behavior_id}",
+    status_code=204,
+    operation_id="deleteBehavior",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": DeleteBehaviorConflict},
+    },
+)
+def delete_behavior(
+    behavior_id: str,
+    user_id: int = Depends(get_current_user_id),
+    service: BehaviorService = Depends(get_behavior_service),
+) -> Response:
+    service.delete_behavior(user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE))
+    return Response(status_code=204)
