@@ -14,9 +14,10 @@ from app.domain.match import MatchStatus
 from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
-from app.models.substitution import Substitution
+from app.models.substitution import AppliedSubstitution, Substitution
 from app.models.team_member import MemberRole, TeamMember
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
+from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.tests.integration.match_factories import add_league, add_team
 
 pytestmark = pytest.mark.integration
@@ -302,37 +303,117 @@ def test_list_by_match_ignores_other_matches_and_empty_teams(db_session, league_
     )
 
 
-# --- delete_by_match (fin de cada pausa) ---
+# --- apply_pending (empieza cada pausa) ---
 
-def test_delete_by_match_deletes_the_substitution_of_each_team(db_session, league_match):
+def applied_by_user(db, match):
+    rows = SqlAlchemySubstitutionRepository(db).list_applied_by_match(match.id)
+    return {r.user_id: r for r in rows}
+
+
+def roles_of(db, team):
+    db.expire_all()
+    return {m.player_id: db.get(TeamMember, m.id).role for m in team}
+
+
+def test_apply_pending_swaps_the_roles_and_returns_the_incoming_player(db_session, league_match):
     match, teams = league_match
-    substitute(db_session, match, teams[1])
-    substitute(db_session, match, teams[2])
-    repo = SqlAlchemySubstitutionRepository(db_session)
+    out, inn = teams[1][0], teams[1][3]  # sale el delantero, entra un suplente
+    out_player, in_player = out.player_id, inn.player_id
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
 
-    assert repo.delete_by_match(match.id) == 2
-    assert remaining(db_session) == set()
-    assert repo.delete_by_match(match.id) == 0  # sin cambios, no falla
+    swaps = SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
+
+    assert len(swaps) == 1
+    assert swaps[0].club == "club1"
+    assert swaps[0].out_player_id == out_player
+    assert swaps[0].incoming.player_id == in_player
+    assert swaps[0].incoming.role is MemberRole.forward  # toma el rol del que sale
+    assert swaps[0].incoming.behavior_code == "pass"
+    roles = roles_of(db_session, teams[1])
+    assert roles[out_player] is MemberRole.substitute
+    assert roles[in_player] is MemberRole.forward
+    # el cambio persiste: es el equipo de la liga
+    starters = SqlAlchemyTeamRepository(db_session).get_starters(match.id, match.league_id, 1)
+    assert in_player in {r.player_id for r in starters}
+    assert out_player not in {r.player_id for r in starters}
 
 
-def test_delete_by_match_when_only_one_team_asked(db_session, league_match):
-    match, teams = league_match
-    substitute(db_session, match, teams[2])
-
-    assert SqlAlchemySubstitutionRepository(db_session).delete_by_match(match.id) == 1
-    assert remaining(db_session) == set()
-
-
-def test_a_new_substitution_can_be_requested_after_the_pause(db_session, league_match):
+def test_apply_pending_moves_the_pending_to_applied(db_session, league_match):
     match, teams = league_match
     substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).delete_by_match(match.id)
+    names = names_of(db_session, teams[1], 0, 3)
 
-    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)  # ventana siguiente
-    assert remaining(db_session) == {(match.id, 1)}
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
+
+    assert by_user(db_session, match) == {}  # ya no está pendiente
+    applied = applied_by_user(db_session, match)
+    assert (applied[1].starter_name, applied[1].substitute_name) == names
 
 
-def test_other_matches_are_not_touched(db_session, league_match):
+def test_each_team_applies_its_own_substitution(db_session, league_match):
+    match, teams = league_match
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    substitute(db_session, match, teams[2], out_idx=1, in_idx=4)
+
+    swaps = SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
+
+    assert {s.club for s in swaps} == {"club1", "club2"}
+    assert set(applied_by_user(db_session, match)) == {1, 2}
+
+
+def test_a_new_pause_replaces_the_previous_applied_ones(db_session, league_match):
+    match, teams = league_match
+    repo = SqlAlchemySubstitutionRepository(db_session)
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    repo.apply_pending(match.id)
+    assert set(applied_by_user(db_session, match)) == {1}
+
+    substitute(db_session, match, teams[2], out_idx=1, in_idx=4)  # solo pide el equipo 2
+    repo.apply_pending(match.id)
+
+    assert set(applied_by_user(db_session, match)) == {2}  # el equipo 1 queda sin cambio
+
+
+def test_a_pause_without_pending_clears_the_applied_ones(db_session, league_match):
+    match, teams = league_match
+    repo = SqlAlchemySubstitutionRepository(db_session)
+    substitute(db_session, match, teams[1])
+    repo.apply_pending(match.id)
+
+    assert repo.apply_pending(match.id) == []
+    assert applied_by_user(db_session, match) == {}
+
+
+def test_a_request_made_during_the_pause_stays_pending_for_the_next_one(db_session, league_match):
+    match, teams = league_match
+    repo = SqlAlchemySubstitutionRepository(db_session)
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    repo.apply_pending(match.id)
+
+    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)  # PUT durante la pausa
+
+    assert set(by_user(db_session, match)) == {1}  # pendiente
+    applied = applied_by_user(db_session, match)[1]  # sigue mostrándose la aplicada
+    assert (applied.starter_name, applied.substitute_name) == names_of(
+        db_session, teams[1], 0, 3
+    )
+
+
+def test_an_invalid_pending_substitution_is_discarded(db_session, league_match):
+    match, teams = league_match
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+    # Antes de la pausa el suplente que iba a entrar pasó a ser titular (y el medio, suplente).
+    teams[1][3].role, teams[1][1].role = MemberRole.midfield, MemberRole.substitute
+    db_session.commit()
+
+    assert SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id) == []
+
+    assert by_user(db_session, match) == {}  # se descartó, no queda pendiente
+    assert applied_by_user(db_session, match) == {}
+    assert roles_of(db_session, teams[1])[teams[1][0].player_id] is MemberRole.forward
+
+
+def test_apply_pending_does_not_touch_other_matches(db_session, league_match):
     match, teams = league_match
     other = Match(
         league_id=match.league_id,
@@ -347,9 +428,22 @@ def test_other_matches_are_not_touched(db_session, league_match):
     substitute(db_session, other, teams[1])
     other_id = other.id
 
-    SqlAlchemySubstitutionRepository(db_session).delete_by_match(match.id)
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
 
     assert remaining(db_session) == {(other_id, 1)}
+
+
+def test_apply_pending_for_a_nonexistent_match_returns_nothing(db_session, league_match):
+    assert SqlAlchemySubstitutionRepository(db_session).apply_pending(999999) == []
+
+
+def test_applied_substitutions_are_deleted_with_the_match(db_session, friendly_match):
+    match, teams = friendly_match
+    substitute(db_session, match, teams[1])
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
+    db_session.delete(match)
+    db_session.commit()
+    assert db_session.scalars(select(AppliedSubstitution)).all() == []
 
 
 def test_endpoint_outsider_is_403_and_not_started_is_409(
@@ -376,3 +470,4 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
     assert r.json()["club1"] == dict(
         zip(("starterName", "substituteName"), names_of(db_session, teams[1], 0, 3))
     )
+
