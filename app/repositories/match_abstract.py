@@ -49,6 +49,7 @@ class MatchDetailData(BaseModel):
     score_1: int | None
     score_2: int | None
     league: LeagueAccessInfo | None  # None en los amistosos
+    penalties: PenaltyShootoutData | None = None  # None si no hubo tanda
 
 
 class AbstractMatchRepository(ABC):

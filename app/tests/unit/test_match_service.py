@@ -7,7 +7,11 @@ from app.domain.match import MatchStatus
 from app.errors import ApiError
 from app.repositories.friendly_abstract import FriendlyClubData
 from app.repositories.league_access_abstract import LeagueAccessInfo
-from app.repositories.match_abstract import AbstractMatchRepository, MatchDetailData
+from app.repositories.match_abstract import (
+    AbstractMatchRepository,
+    MatchDetailData,
+    PenaltyShootoutData,
+)
 from app.services.league_access_service import LeagueAccessService
 from app.services.match_service import MatchService
 
@@ -129,6 +133,25 @@ def test_finished_match_without_shootout_has_scores_and_null_penalties(service, 
         "score1": 2,
         "score2": 1,
         "penalties": None,
+    }
+
+
+KICKS = [
+    {"club": "club1", "kickerId": 3, "kickerName": "J3", "round": 1, "scored": True},
+    {"club": "club2", "kickerId": 13, "kickerName": "J13", "round": 1, "scored": False},
+]
+
+
+@pytest.mark.parametrize("winner, club", [(1, "club1"), (2, "club2")])
+def test_finished_match_with_shootout_has_the_penalties(service, matches, winner, club):
+    shootout = PenaltyShootoutData(score_1=1, score_2=1, winner=winner, kicks=KICKS)
+    finished = detail(league=PUBLIC, status=MatchStatus.finished, score_1=0, score_2=0)
+    matches.get_detail.return_value = finished.model_copy(update={"penalties": shootout})
+
+    assert service.get_match(5, "sid", 1).result == {
+        "score1": 0,
+        "score2": 0,
+        "penalties": {"score1": 1, "score2": 1, "winner": club, "kicks": KICKS},
     }
 
 

@@ -18,6 +18,17 @@ from app.repositories.match_abstract import (
 )
 
 
+def _penalties(match: Match) -> PenaltyShootoutData | None:
+    if match.penalty_winner is None:
+        return None
+    return PenaltyShootoutData(
+        score_1=match.penalty_score_1,
+        score_2=match.penalty_score_2,
+        winner=match.penalty_winner,
+        kicks=match.penalty_kicks,
+    )
+
+
 class SqlAlchemyMatchRepository(AbstractMatchRepository):
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -51,6 +62,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 if league is not None
                 else None
             ),
+            penalties=_penalties(match),
         )
 
     def get_state(self, match_id: int) -> MatchStateData | None:
