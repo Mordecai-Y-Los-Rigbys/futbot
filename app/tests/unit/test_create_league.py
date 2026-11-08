@@ -68,6 +68,14 @@ def test_league_without_allow_draws_is_created_in_normal_mode(auth_api, fake_rep
     resp = post(auth_api, payload())
     assert resp.status_code == 201
     assert fake_repo.created[0].allow_draws is True
+    assert resp.json()["allowDraws"] is True
+
+
+def test_league_with_allow_draws_false_is_created_in_penalties_mode(auth_api, fake_repo):
+    resp = post(auth_api, payload(allowDraws=False))
+    assert resp.status_code == 201
+    assert fake_repo.created[0].allow_draws is False
+    assert resp.json()["allowDraws"] is False
 
 
 def test_boundaries_are_valid(auth_api):
