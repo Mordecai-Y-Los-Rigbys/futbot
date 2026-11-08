@@ -22,6 +22,7 @@ class MatchPlayersData(BaseModel):
     status: MatchStatus
     user_1_id: int
     user_2_id: int | None
+    league_id: int | None
 
 
 class AbstractMatchRepository(ABC):
@@ -51,4 +52,4 @@ class AbstractMatchRepository(ABC):
 
     @abstractmethod
     def get_players(self, match_id: int) -> MatchPlayersData | None:
-        """Estado y usuarios del partido, o None si no existe."""
+        """Estado, liga y usuarios del partido, o None si no existe."""

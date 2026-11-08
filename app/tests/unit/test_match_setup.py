@@ -80,6 +80,9 @@ class FakeTeams(AbstractTeamRepository):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
 
+    def set_behavior(self, match_id, league_id, player_id, behavior_id):
+        raise NotImplementedError
+
 
 def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
     return MatchSetupData(

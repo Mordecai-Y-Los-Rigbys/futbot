@@ -57,3 +57,9 @@ def test_slot_in_penalties_mode_adds_the_shootout():
 @pytest.mark.parametrize("duration", [1, 10])
 def test_slot_uses_the_league_duration(duration):
     assert match_slot(duration, True) - match_slot(1, True) == timedelta(minutes=duration - 1)
+
+
+def test_the_side_of_each_club_is_drawn():
+    sides = pairs(fixture(list(range(1, 9))))
+    assert any(a < b for a, b in sides)
+    assert any(a > b for a, b in sides)
