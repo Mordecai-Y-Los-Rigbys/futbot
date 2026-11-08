@@ -1,4 +1,5 @@
 from typing import Any
+
 from fastapi import APIRouter, Depends, Query, Response
 from starlette.concurrency import run_in_threadpool
 
