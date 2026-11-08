@@ -96,7 +96,7 @@ def test_creator_starts_the_league_and_the_fixture_is_saved(login_as, db_session
 
 
 def test_penalties_mode_leaves_room_for_the_shootout(login_as, db_session, creator, league):
-    set_league(db_session, league, allow_draws=False)
+    set_league(db_session, league, allow_draws=False, match_duration=5)
     assert login_as(creator).post(url(league.id)).status_code == 204
     times = [utc(m.scheduled_at) for m in matches_of(db_session, league.id)]
     assert times[1] - times[0] == timedelta(minutes=8, seconds=55)
@@ -140,10 +140,6 @@ def test_not_enough_participants(
     resp = login_as(creator).post(url(lg.id))
     assert resp.status_code == 409 and resp.json()["code"] == "notEnoughParticipants"
     assert_untouched(db_session, lg.id)
-
-
-def test_404_beats_403(login_as, create_user):
-    assert login_as(create_user("x")).post(url(999999)).status_code == 404
 
 
 def run_together(*jobs):

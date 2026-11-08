@@ -139,7 +139,7 @@ def join_league(
 
 
 @router.post(
-    "/{league_id}/start",
+    "/{id}/start",
     status_code=204,
     response_class=Response,
     operation_id="startLeague",
@@ -152,12 +152,12 @@ def join_league(
     },
 )
 async def start_league(
-    league_id: str,
+    id: str,
     user_id: int = Depends(get_current_user_id),
     service: LeagueService = Depends(get_league_service),
     match_start: LeagueMatchStartService = Depends(get_league_match_start),
 ) -> Response:
-    parsed_id = parse_path_id(league_id, LEAGUE_NOT_FOUND_MESSAGE)
+    parsed_id = parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE)
     await run_in_threadpool(service.start_league, parsed_id, user_id)
     await match_start.schedule_league(parsed_id)
     return Response(status_code=204)

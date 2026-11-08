@@ -188,7 +188,7 @@ def test_endpoint_error_schedules_nothing(auth_league_api, repo, match_start):
     match_start.schedule_league.assert_not_awaited()
 
 
-@pytest.mark.parametrize("path", [URL, "/leagues/abc/start", "leagues/0/start"])
+@pytest.mark.parametrize("path", [URL, "/leagues/abc/start", "/leagues/0/start"])
 def test_no_cookie_is_401_even_with_a_bad_id(league_api, repo, path):
     resp = league_api.post(path)
     assert resp.status_code == 401 and resp.json()["code"] is None
