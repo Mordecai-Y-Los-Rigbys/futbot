@@ -287,6 +287,7 @@ def test_get_detail_does_not_filter_by_status_or_privacy(repo, db):
     assert "status" not in where
     assert "private" not in where
 
+
 # --- list_participants --------------------------------------------------------
 
 

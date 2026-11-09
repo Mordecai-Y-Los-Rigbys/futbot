@@ -87,6 +87,7 @@ def get_match_service(db: Session = Depends(get_db)) -> MatchService:
     return MatchService(
         SqlAlchemyMatchRepository(db),
         LeagueAccessService(SqlAlchemyLeagueAccessRepository(db)),
+        SqlAlchemyTeamRepository(db),
     )
 
 
@@ -114,8 +115,13 @@ def get_auth_service(
     )
 
 
-def get_substitution_service(db: Session = Depends(get_db)) -> SubstitutionService:
-    return SubstitutionService(SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db))
+def get_substitution_service(
+    db: Session = Depends(get_db),
+    runner: MatchRunner = Depends(get_match_runner),
+) -> SubstitutionService:
+    return SubstitutionService(
+        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db), runner
+    )
 
 
 def get_match_behavior_service(

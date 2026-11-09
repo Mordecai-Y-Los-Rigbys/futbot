@@ -13,6 +13,9 @@ class FakeTeams(AbstractTeamRepository):
         return self.starters.get(user_id, [])
     
 
+    def get_lineup(self, match_id, league_id, user_id):
+        raise NotImplementedError
+
     def set_behavior(self, match_id, league_id, player_id, behavior_id):
         raise NotImplementedError
 
