@@ -16,7 +16,7 @@ from app.repositories.friendly_abstract import (
 from app.schemas.errors import Error, JoinFriendlyMatchConflict, ValidationBadRequest
 from app.services.friendly_service import FriendlyService
 from app.services.friendly_validation import JoinFriendlyInput, parse_join_friendly
-from app.services.league_validation import INVALID_JSON, MemberInput
+from app.services.field_validation import INVALID_JSON, MemberInput
 from app.tests.unit.member_cases import MEMBERS_IDS, MEMBERS_PARAMS, MISSING, err
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
 

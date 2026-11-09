@@ -2,7 +2,7 @@ import pytest
 
 from app.errors import ValidationApiError
 from app.services.friendly_validation import parse_create_friendly
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 from app.tests.unit.member_cases import MEMBERS_IDS, MEMBERS_PARAMS, MISSING, TEAM, err
 
 

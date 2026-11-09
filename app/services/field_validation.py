@@ -31,7 +31,7 @@ def field_error(field: str, reason: str) -> dict[str, str]:
 
 def is_readable(body: Any) -> bool:
     """Convención 9: JSON roto, body vacío o algo que no es un objeto es ilegible."""
-    return body is not INVALID_JSON and isinstance(body, dict)
+    return isinstance(body, dict)
 
 
 def all_required(fields: tuple[str, ...] | list[str]) -> FieldErrors:

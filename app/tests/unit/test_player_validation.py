@@ -1,8 +1,8 @@
 import pytest
 
 from app.errors import ValidationApiError
+from app.services.field_validation import INVALID_JSON
 from app.services.player_validation import (
-    INVALID_JSON,
     STATS,
     CreatePlayerData,
     parse_create_player,
