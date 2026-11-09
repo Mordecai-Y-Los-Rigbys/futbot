@@ -18,9 +18,8 @@ from app.schemas.behavior import (
     behavior_test_request_schema,
 )
 from app.schemas.errors import (
-    Error,
     CreateBehaviorConflict,
-    ListPageBadRequest,
+    Error,
     TestBehaviorConflict,
     UpdateBehaviorNotFound,
     ValidationBadRequest,
@@ -55,7 +54,7 @@ def create_behavior(
     "/me",
     response_model=BehaviorPage,
     responses={
-        400: {"model": ListPageBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )

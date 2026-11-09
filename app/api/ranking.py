@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_current_user_id, get_ranking_service
-from app.api.pagination import parse_page_field
+from app.api.pagination import parse_page
 from app.schemas.errors import Error, ValidationBadRequest
 from app.schemas.ranking import GlobalRankingPage
 from app.services.ranking_service import RankingService
@@ -25,4 +25,4 @@ def get_global_ranking(
     _user_id: int = Depends(get_current_user_id),  # 401 antes que cualquier 400
     service: RankingService = Depends(get_ranking_service),
 ) -> GlobalRankingPage:
-    return service.get_global_ranking(page=parse_page_field(page), name=name or None)
+    return service.get_global_ranking(page=parse_page(page), name=name or None)

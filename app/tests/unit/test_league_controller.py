@@ -1,7 +1,7 @@
 import pytest
 
 from app.repositories.league_abstract import LeaguePageData
-from app.schemas.errors import ListPageBadRequest
+from app.schemas.errors import ValidationBadRequest
 from app.schemas.league import LeaguePage
 
 ITEM_FIELDS = {
@@ -47,23 +47,24 @@ def test_401_has_priority_over_invalid_page(api, fake_repo):
 
 
 @pytest.mark.parametrize(
-    "query, code",
+    "query, reason",
     [
-        ("page=abc", "pageNotAnInteger"),
-        ("page=1.5", "pageNotAnInteger"),
-        ("page=", "pageNotAnInteger"),
-        ("page=0", "pageBelowMinimum"),
-        ("page=-1", "pageBelowMinimum"),
-        ("page=2147483648", "pageTooLarge"),
+        ("page=abc", "invalidType"),
+        ("page=1.5", "invalidType"),
+        ("page=", "invalidType"),
+        ("page=0", "outOfRange"),
+        ("page=-1", "outOfRange"),
+        ("page=2147483648", "outOfRange"),
     ],
 )
-def test_invalid_page_returns_400_never_422(auth_api, fake_repo, query, code):
+def test_invalid_page_returns_400_never_422(auth_api, fake_repo, query, reason):
     resp = auth_api.get(f"/leagues?{query}")
     assert resp.status_code == 400
     body = resp.json()
-    assert body["code"] == code
+    assert body["code"] == "invalidFields"
+    assert body["errors"] == [{"field": "page", "reason": reason}]
     assert body["message"]
-    ListPageBadRequest.model_validate(body)
+    ValidationBadRequest.model_validate(body)
     assert fake_repo.calls == []
 
 

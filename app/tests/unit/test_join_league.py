@@ -18,7 +18,7 @@ from app.schemas.errors import (
 )
 from app.services.join_league_validation import JoinLeagueInput, parse_join_league
 from app.services.league_service import LeagueService
-from app.services.league_validation import INVALID_JSON, MemberInput
+from app.services.field_validation import INVALID_JSON, MemberInput
 from app.tests.unit.repo_fakes import FakePlayers
 
 ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]

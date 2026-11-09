@@ -3,8 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.errors import ValidationApiError
-from app.services.field_validation import field_error, id_reason, string_reason
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON, field_error, id_reason, string_reason
 
 CLUBS = ("club1", "club2")
 ROLES = ("forward", "midfield", "defense")

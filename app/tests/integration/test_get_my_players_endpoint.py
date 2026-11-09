@@ -88,14 +88,31 @@ def test_get_my_players_response_structure(make_user, create_player, auth_cookie
     assert item["stats"]["speed"] == 60
 
 
-@pytest.mark.parametrize("bad_page", ["abc", "-1", "99999999999"])
-def test_get_my_players_bad_pagination_returns_400(make_user, auth_cookies, client, bad_page):
+@pytest.mark.parametrize(
+    "bad_page, reason",
+    [
+        ("abc", "invalidType"),
+        ("1.5", "invalidType"),
+        ("0", "outOfRange"),
+        ("-1", "outOfRange"),
+        ("99999999999", "outOfRange"),
+    ],
+)
+def test_get_my_players_bad_pagination_returns_400(
+    make_user, auth_cookies, client, bad_page, reason
+):
     user = make_user(1)
     client.cookies.update(auth_cookies(user.id))
 
     resp = client.get(f"/players/me?page={bad_page}")
 
     assert resp.status_code == 400
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [{"field": "page", "reason": reason}]
+
+
+def test_get_my_players_bad_page_without_session_is_401(client):
+    assert client.get("/players/me?page=abc").status_code == 401
 
 
 def test_get_my_players_filtering_and_escaping_db(make_user, create_player, auth_cookies, client):

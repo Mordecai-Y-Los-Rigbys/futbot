@@ -4,7 +4,7 @@ import pytest
 
 from app.errors import ValidationApiError
 from app.services.behavior_test_validation import LineupMemberInput, parse_behavior_test
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 
 LINEUP = [
     ("club1", "forward"),
