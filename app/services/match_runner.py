@@ -48,6 +48,7 @@ class MatchRunner:
         seed_factory: Callable[[], int] = lambda: secrets.randbits(63),
         send_timeout: float = SEND_TIMEOUT,
         on_match_change: Callable[[int], None] | None = None,
+        on_match_finished: Callable[[int], None] | None = None,
     ) -> None:
         """Juega cada partido en tiempo real y transmite sus ticks.
 
@@ -71,6 +72,7 @@ class MatchRunner:
         self._on_match_change = on_match_change
         self._pending: dict[int, dict[int, CompiledBehavior]] = {}
         self._pending_lock = threading.Lock()
+        self._on_match_finished = on_match_finished
 
     def start(self, match_id: int) -> asyncio.Task:
         """Arranca el partido (idempotente). Hay que llamarlo con el event loop corriendo."""
@@ -194,7 +196,7 @@ class MatchRunner:
     def _mark_started(self, match_id: int) -> None:
         with self._repo_scope() as repo:
             repo.mark_started(match_id)
-        self._notify_change(match_id)
+        self._notify(self._on_match_change, match_id)
 
     def _end_pause(self, match_id: int) -> None:
         try:
@@ -206,14 +208,15 @@ class MatchRunner:
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
             repo.finish(match_id, result.score_1, result.score_2)
-        self._notify_change(match_id)
+        self._notify(self._on_match_change, match_id)
+        self._notify(self._on_match_finished, match_id)
 
-    def _notify_change(self, match_id: int) -> None:
-        """Avisa que el partido cambió de estado. Un aviso que falla no frena el partido."""
-        if self._on_match_change is None:
+    def _notify(self, callback: Callable[[int], None] | None, match_id: int) -> None:
+        """Avisa que el partido cambió. Un aviso que falla no frena el partido."""
+        if callback is None:
             return
         try:
-            self._on_match_change(match_id)
+            callback(match_id)
         except Exception:
             logger.exception("No se pudo avisar el cambio del partido %s", match_id)
 

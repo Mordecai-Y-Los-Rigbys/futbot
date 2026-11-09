@@ -507,3 +507,27 @@ def test_changes_from_another_thread_never_break_a_tick(monkeypatch):
     assert accepted  # el hilo llegó a encolar con el partido corriendo
     assert all(x in (original, a, b) for x in used)
     assert manager.match_closed == [(1, 1000, "matchEnd")]
+
+
+def test_only_the_result_notifies_the_finished_match():
+    repo = FakeMatchRepo()
+    repo.add(1)
+    seen = []
+    runner = build(
+        FakeManager([FakeWs()]),
+        repo,
+        on_match_finished=lambda match_id: seen.append((match_id, repo.states[1].status)),
+    )
+    run(runner)
+    # No se avisa al empezar, y al avisar el resultado ya está guardado.
+    assert seen == [(1, "finished")]
+
+
+def test_a_failing_finished_notification_does_not_stop_the_match(caplog):
+    def boom(match_id):
+        raise RuntimeError("canal caído")
+
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), on_match_finished=boom))
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudo avisar el cambio del partido" in caplog.text
