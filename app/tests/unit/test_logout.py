@@ -129,8 +129,9 @@ def test_a_rejected_logout_does_not_touch_the_league_channels(api):
     assert ended == []
 
 
-def test_the_league_channels_are_participants_and_fixture():
+def test_the_league_channels_are_participants_fixture_and_ranking():
     assert ws_league_deps.get_league_channel_managers() == [
         ws_league_deps.get_league_participants_manager(),
         ws_league_deps.get_league_fixture_manager(),
+        ws_league_deps.get_league_ranking_manager(),
     ]

@@ -8,7 +8,9 @@ from app.api.ws_league_deps import (
     get_fixture_handshake_scope,
     get_league_fixture_manager,
     get_league_participants_manager,
+    get_league_ranking_manager,
     get_participants_handshake_scope,
+    get_ranking_handshake_scope,
 )
 from app.errors import ApiError
 from app.services.league_channel_handshake import LeagueChannelGrant, LeagueChannelHandshakeService
@@ -83,5 +85,15 @@ async def league_fixture_stream(
     league_id: str,
     handshake_scope: HandshakeScope = Depends(get_fixture_handshake_scope),
     manager: LeagueChannelManager = Depends(get_league_fixture_manager),
+) -> None:
+    await _stream(websocket, league_id, handshake_scope, manager)
+
+
+@router.websocket("/ws/leagues/{league_id}/ranking")
+async def league_ranking_stream(
+    websocket: WebSocket,
+    league_id: str,
+    handshake_scope: HandshakeScope = Depends(get_ranking_handshake_scope),
+    manager: LeagueChannelManager = Depends(get_league_ranking_manager),
 ) -> None:
     await _stream(websocket, league_id, handshake_scope, manager)
