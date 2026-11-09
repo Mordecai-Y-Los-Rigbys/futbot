@@ -227,7 +227,7 @@ def test_match_stream_reaches_open_and_late_connections(client, manager):
     después recibe solo desde ese momento (sin replay)."""
 
     def emit(ws, payload):
-        (subscriber, _user_id) = manager.subscribers(1)[0]
+        subscriber, _user_id = manager.subscribers(1)[0]
         ws.portal.call(subscriber.send_json, payload)
 
     with client.websocket_connect(url()) as first:

@@ -72,7 +72,12 @@ def test_service_items_follow_the_match_schema(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(items=[match_data()], total=1)
     out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     dumped = out.model_dump(by_alias=True)["items"][0]
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 3}
+    assert dumped["club1"] == {
+        "id": 1,
+        "username": "usuario1",
+        "name": "Club Atletico",
+        "avatar": 3,
+    }
     for k in ("leagueId", "club2", "scheduledAt", "result"):
         assert dumped[k] is None
     assert "2026-10-03T18:00:00Z" in out.model_dump_json(by_alias=True)
