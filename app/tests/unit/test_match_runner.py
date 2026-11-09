@@ -36,6 +36,7 @@ TICK_KEYS = {
     "penaltyRemainingSeconds",
     "elapsedTime",
     "pauseRemainingSeconds",
+    "pausesLeft",
     "phase",
     "event",
 }
