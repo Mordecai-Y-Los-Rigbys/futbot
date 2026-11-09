@@ -43,6 +43,26 @@ def _rank(clubs: list[ClubRankingData]) -> list[tuple[int, ClubRankingData]]:
     return ranked
 
 
+def to_league_ranking(clubs: list[ClubRankingData]) -> list[LeagueRankingEntry]:
+    """Ordena y mapea los totales de los participantes al schema LeagueRanking."""
+    return [
+        LeagueRankingEntry(
+            position=position,
+            name=club.name,
+            avatar=club.avatar,
+            played=club.won_regular + club.won_penalties + club.drawn + club.lost,
+            won_regular=club.won_regular,
+            won_penalties=club.won_penalties,
+            drawn=club.drawn,
+            lost=club.lost,
+            goals=club.goals_for,
+            goal_difference=club.goals_for - club.goals_against,
+            score=_score(club),
+        )
+        for position, club in _rank(clubs)
+    ]
+    
+
 class RankingService:
     """Ranking global y ranking de liga."""
 
@@ -90,19 +110,4 @@ class RankingService:
         if status == LeagueStatus.cancelled:
             raise ApiError(409, "leagueCancelled", "La liga fue cancelada.")
 
-        return [
-            LeagueRankingEntry(
-                position=position,
-                name=club.name,
-                avatar=club.avatar,
-                played=club.won_regular + club.won_penalties + club.drawn + club.lost,
-                won_regular=club.won_regular,
-                won_penalties=club.won_penalties,
-                drawn=club.drawn,
-                lost=club.lost,
-                goals=club.goals_for,
-                goal_difference=club.goals_for - club.goals_against,
-                score=_score(club),
-            )
-            for position, club in _rank(self.repo.list_league_club_totals(league_id))
-        ]
+        return to_league_ranking(self.repo.list_league_club_totals(league_id))
