@@ -82,6 +82,9 @@ class AbstractMatchRepository(ABC):
 
         Si era el último partido sin terminar de una liga en curso, pasa la
         liga a finished en la misma transacción. Devuelve True solo en ese caso.
+
+        En un partido de liga, crea en la misma transacción una notificación por
+        participante y, si la liga terminó, otra de fin de liga (después).
         """
 
     @abstractmethod
