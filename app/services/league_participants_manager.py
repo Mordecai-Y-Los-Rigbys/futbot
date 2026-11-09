@@ -38,7 +38,7 @@ def build_participants_payload(state: LeagueParticipantsState) -> dict:
 
 
 PARTICIPANTS_CHANNEL = LeagueChannelSpec(
-    build_payload=build_participants_payload,
+    build_payload=lambda state, _user_id: build_participants_payload(state),
     close_reasons=CLOSE_REASONS,
 )
 
