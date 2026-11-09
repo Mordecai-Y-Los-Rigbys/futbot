@@ -27,6 +27,11 @@ class CreateLeagueBadRequest(BaseModel):
     message: str
 
 
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
+    message: str
+    
+    
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
