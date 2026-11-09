@@ -11,6 +11,7 @@ from app.simulation.physics import create_initial_state
 from app.simulation.simulate import simulate_match
 from app.simulation.state import Team
 from app.simulation.run import default_team as make_team
+from app.tests.unit.penalty_helpers import IDLE, SCORE, play
 from app.tests.unit.tick_schema import TickPayload
 
 CTX = TickContext(club_1="Club Uno", club_2="Club Dos", countdown_seconds=1)
@@ -25,6 +26,10 @@ def payload(**over) -> dict:
         "score2": 0,
         "penaltyScore1": 0,
         "penaltyScore2": 0,
+        "penaltyKicks": [],
+        "penaltyCurrent": None,
+        "penaltyCountdownSeconds": None,
+        "penaltyRemainingSeconds": None,
         "elapsedTime": 5,
         "pauseRemainingSeconds": None,
         "phase": "playing",
@@ -103,6 +108,10 @@ def without(key):
         "score2",
         "penaltyScore1",
         "penaltyScore2",
+        "penaltyKicks",
+        "penaltyCurrent",
+        "penaltyCountdownSeconds",
+        "penaltyRemainingSeconds",
         "elapsedTime",
         "pauseRemainingSeconds",
         "phase",
@@ -249,3 +258,28 @@ def test_goal_in_the_last_tick_arrives_as_match_end_with_the_score_updated():
     assert parsed.event.type == "matchEnd"
     assert (parsed.event.result.score1, parsed.score1) == (1, 1)
     assert parsed.event.result.penalties is None
+
+
+def test_every_tick_of_a_shootout_follows_the_contract():
+    payloads = [on_the_wire(t) for t in play(SCORE, IDLE)]
+    for payload in payloads:
+        TickPayload.model_validate(payload)
+
+    last = payloads[-1]
+    assert last["event"]["result"] == {
+        "score1": 0,
+        "score2": 0,
+        "penalties": {
+            "score1": last["penaltyScore1"],
+            "score2": last["penaltyScore2"],
+            "winner": "club1",
+            "kicks": last["penaltyKicks"],
+        },
+    }
+    assert last["penaltyKicks"][0] == {
+        "club": "club1",
+        "kickerId": 3,
+        "kickerName": "J3",
+        "round": 1,
+        "scored": True,
+    }

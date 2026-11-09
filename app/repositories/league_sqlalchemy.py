@@ -9,10 +9,12 @@ from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.session_league_unlock import SessionLeagueUnlock
 from app.models.team_member import TeamMember
+from app.models.user import User
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
     JoinLeagueData,
+    LeagueParticipantData,
     JoinLeagueStateConflict,
     LeagueCreatorData,
     LeagueDetailData,
@@ -50,6 +52,7 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
         ),
         status=getattr(record.status, "value", record.status),
         participants_count=participants_count,
+        min_participants=record.min_participants,
         max_participants=record.max_participants,
         private=record.private,
         created_at=created_at,
@@ -193,9 +196,22 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         league, count, is_joined = row
         return LeagueDetailData(
             **_to_data(league, count).model_dump(),
-            min_participants=league.min_participants,
             joined=bool(is_joined),
         )
+
+    def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
+        rows = self.db.execute(
+            select(User.id, User.username, User.club_name, User.avatar)
+            .join(LeagueParticipant, LeagueParticipant.user_id == User.id)
+            .where(LeagueParticipant.league_id == league_id)
+            .order_by(User.id.asc())
+        ).all()
+        return [
+            LeagueParticipantData(
+                id=row.id, username=row.username, club_name=row.club_name, avatar=row.avatar
+            )
+            for row in rows
+        ]
 
     # ------------------------------------------------------------------
     # Inscripción (POST /leagues/{id}/participants)
