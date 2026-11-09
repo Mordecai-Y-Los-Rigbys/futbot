@@ -118,6 +118,13 @@ def test_players_see_their_match(call, service, matches, access, league, user_id
     access.require_access.assert_not_called()
 
 
+def test_waiting_friendly_creator_sees_it(service, matches):
+    matches.get_detail.return_value = detail(club2=None)
+    out = service.get_match(5, "sid", 1)
+    assert out.club2 is None
+    assert out.result is None
+
+
 @BOTH_METHODS
 @pytest.mark.parametrize("club2", [club(2), None], ids=["con rival", "sin rival"])
 def test_friendly_outsider_is_403_not_a_player(call, service, matches, access, teams, club2):
