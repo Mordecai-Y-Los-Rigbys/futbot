@@ -38,6 +38,7 @@ def parse_update_behavior(body: Any) -> UpdateBehaviorData:
         ValidationApiError: 400 con todos los campos que fallan, en el orden del schema.
     """
     _ensure_object(body, UPDATE_FIELDS)
+    body = _strip_name(body)
     _raise_errors(UPDATE_FIELDS, {"name": _name_reason(body), "code": _string_reason(body, "code")})
     return UpdateBehaviorData(name=body["name"], code=body["code"])
 

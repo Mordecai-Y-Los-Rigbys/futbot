@@ -45,3 +45,7 @@ def test_missing_fields_are_required_in_the_order_of_the_schema():
         {"field": "name", "reason": "required"},
         {"field": "code", "reason": "required"},
     ]
+
+
+def test_the_spaces_around_the_name_are_removed():
+    assert parse_update_behavior({**VALID, "name": "  Delantero 2 "}).name == "Delantero 2"
