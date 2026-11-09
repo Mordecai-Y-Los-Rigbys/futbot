@@ -154,5 +154,5 @@ class MatchBehaviorConflict(BaseModel):
 
 
 class TestBehaviorConflict(BaseModel):
-    code: Literal["notPlayerBehavior"]
+    code: Literal["notPlayerBehavior", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
