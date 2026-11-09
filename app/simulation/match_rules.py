@@ -181,48 +181,6 @@ class MatchSession:
         return remaining
 
     @property
-    def next_tick_starts_pause(self) -> bool:
-        """True si el próximo `advance()` produce el primer tick de una pausa.
-
-        Es el momento de aplicar las sustituciones: tiene que ser antes de
-        ese tick para que ya muestre al suplente en la cancha.
-        """
-        return (
-            self._offset == 0
-            and self._seg_index < len(self._segments)
-            and self._segments[self._seg_index].phase is Phase.PAUSED
-        )
-
-    def substitute(
-        self,
-        team: Team,
-        role: MemberRole,
-        player: PlayerSetup,
-        behavior: CompiledBehavior,
-    ) -> None:
-        """El suplente `player` toma el lugar del titular de `role` en `team`.
-
-        Entra en la posición del titular, con su propio comportamiento y sin
-        heredar su movimiento ni sus cooldowns. El número de camiseta sale del
-        rol, así que el jugador conserva el `key` del titular. Siempre quedan
-        tres titulares por equipo.
-        """
-        key: PlayerKey = (team, role.number)  # un suplente no tiene número: ValueError
-        state = copy.deepcopy(self._state)  # los ticks ya emitidos no deben cambiar
-        starter = state.player(key)
-        replacement = PlayerState(
-            player_id=player.player_id,
-            team=team,
-            role=role,
-            stats=player.stats,
-            position=starter.position,
-            facing=starter.facing,
-        )
-        state.players[state.players.index(starter)] = replacement
-        self._state = state
-        self._behaviors = {**self._behaviors, key: behavior}
-
-    @property
     def pause_starts(self) -> list[float]:
         """Segundos de juego en los que empieza cada pausa."""
         starts, played = [], 0
