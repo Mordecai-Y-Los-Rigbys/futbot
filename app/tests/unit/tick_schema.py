@@ -51,10 +51,44 @@ class PauseEvent(_Strict):
     durationSeconds: int = Field(ge=1)
 
 
+Club = Literal["club1", "club2"]
+
+
+class PenaltyKickRecord(_Strict):
+    club: Club
+    kickerId: int
+    kickerName: str = Field(max_length=20)
+    round: int = Field(ge=1, le=5)
+    scored: bool
+
+
+class PenaltyShootout(_Strict):
+    score1: int = Field(ge=0, le=5)
+    score2: int = Field(ge=0, le=5)
+    winner: Club
+    kicks: list[PenaltyKickRecord]
+
+
+class PenaltyCurrent(_Strict):
+    club: Club
+    kickerId: int
+    kickerName: str = Field(max_length=20)
+    defenderId: int
+    defenderName: str = Field(max_length=20)
+
+
+class PenaltiesStartEvent(_Strict):
+    type: Literal["penaltiesStart"]
+
+
+class PenaltyKickEvent(PenaltyKickRecord):
+    type: Literal["penaltyKick"]
+
+
 class MatchResult(_Strict):
     score1: int
     score2: int
-    penalties: None  # TODO: PenaltyShootout cuando exista la tanda
+    penalties: Optional[PenaltyShootout]
 
 
 class MatchEndEvent(_Strict):
@@ -63,7 +97,14 @@ class MatchEndEvent(_Strict):
 
 
 TickEvent = Annotated[
-    Union[GoalEvent, PeriodStartEvent, PauseEvent, MatchEndEvent],
+    Union[
+        GoalEvent,
+        PeriodStartEvent,
+        PauseEvent,
+        PenaltiesStartEvent,
+        PenaltyKickEvent,
+        MatchEndEvent,
+    ],
     Field(discriminator="type"),
 ]
 
@@ -76,9 +117,13 @@ class TickPayload(_Strict):
     score2: int = Field(ge=0)
     penaltyScore1: int = Field(ge=0)
     penaltyScore2: int = Field(ge=0)
+    penaltyKicks: list[PenaltyKickRecord]
+    penaltyCurrent: Optional[PenaltyCurrent]
+    penaltyCountdownSeconds: Optional[int] = Field(ge=1, le=3)
+    penaltyRemainingSeconds: Optional[int] = Field(ge=0, le=8)
     elapsedTime: int = Field(ge=0)
-    pauseRemainingSeconds: Optional[int] = Field(ge=0)  # requerido, null fuera de `paused`
-    phase: Literal["countdown", "playing", "paused", "finished"]
+    pauseRemainingSeconds: Optional[int] = Field(ge=0)
+    phase: Literal["countdown", "playing", "paused", "penalties", "finished"]
     event: Optional[TickEvent]  # requerido: la clave siempre viaja, aunque sea null
 
     @model_validator(mode="after")
@@ -97,6 +142,22 @@ class TickPayload(_Strict):
             raise ValueError("`goal` solo viaja con `phase: playing`")
         if isinstance(event, PauseEvent) and self.phase != "paused":
             raise ValueError("`pause` solo viaja con `phase: paused`")
+        if isinstance(event, (PenaltiesStartEvent, PenaltyKickEvent)) and self.phase != "penalties":
+            raise ValueError("los eventos de la tanda solo viajan con `phase: penalties`")
+
+        # El penal en curso y su tiempo viajan solo en la tanda.
+        in_penalties = self.phase == "penalties"
+        if in_penalties != (self.penaltyCurrent is not None):
+            raise ValueError("`penaltyCurrent` viaja solo con `phase: penalties`")
+        if in_penalties != (self.penaltyRemainingSeconds is not None):
+            raise ValueError("`penaltyRemainingSeconds` viaja solo con `phase: penalties`")
+        if not in_penalties and self.penaltyCountdownSeconds is not None:
+            raise ValueError("`penaltyCountdownSeconds` viaja solo con `phase: penalties`")
+
+        # El marcador de la tanda coincide con los penales convertidos.
+        for club, score in (("club1", self.penaltyScore1), ("club2", self.penaltyScore2)):
+            if score != sum(k.scored for k in self.penaltyKicks if k.club == club):
+                raise ValueError("el marcador de la tanda no coincide con `penaltyKicks`")
 
         # `pauseRemainingSeconds` es un número en `paused` y null en el resto.
         if (self.phase == "paused") != (self.pauseRemainingSeconds is not None):
@@ -106,7 +167,7 @@ class TickPayload(_Strict):
         # [0, 100]) en el tick de un gol, y también en el último tick si el
         # gol cae ahí: matchEnd tiene prioridad sobre goal. En una pausa la
         # pelota siempre está dentro de la cancha.
-        ball_in_goal = isinstance(event, (GoalEvent, MatchEndEvent))
+        ball_in_goal = isinstance(event, (GoalEvent, PenaltyKickEvent, MatchEndEvent))
         margin = GOAL_MARGIN if ball_in_goal else 0.0
         ball = self.ballPosition
         if not -margin <= ball.x <= FIELD_LENGTH + margin:

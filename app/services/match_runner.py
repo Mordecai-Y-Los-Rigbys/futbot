@@ -12,13 +12,14 @@ from contextlib import AbstractContextManager
 
 from starlette.concurrency import run_in_threadpool
 
-from app.repositories.match_abstract import AbstractMatchRepository
+from app.repositories.match_abstract import AbstractMatchRepository, PenaltyShootoutData
 from app.repositories.substitution_abstract import AbstractSubstitutionRepository, AppliedSwap
 from app.services.match_broadcast import (
     SEND_TIMEOUT,
     TickContext,
     broadcast_tick,
     build_tick_payload,
+    penalty_kick_record,
 )
 from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_progress import MatchProgress
@@ -137,6 +138,7 @@ class MatchRunner:
                 setup.countdown_seconds,
                 setup.periods,
                 setup.pause_seconds,
+                setup.allow_draws,
             )
             context = TickContext(
                 club_1=setup.club_1_name,
@@ -251,7 +253,7 @@ class MatchRunner:
 
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
-            repo.finish(match_id, result.score_1, result.score_2)
+            repo.finish(match_id, result.score_1, result.score_2, _penalties_data(result))
 
     def _apply_pending(self, match_id: int, session: MatchSession) -> None:
         """Aplica los cambios de behavior pendientes antes del próximo tick."""
@@ -265,3 +267,14 @@ class MatchRunner:
                     "Partido %s: el jugador %s ya no está en cancha", match_id, player_id
                 )
 
+
+def _penalties_data(result: TickResult) -> PenaltyShootoutData | None:
+    shootout = result.shootout
+    if shootout is None:
+        return None
+    return PenaltyShootoutData(
+        score_1=shootout.score_1,
+        score_2=shootout.score_2,
+        winner=1 if shootout.winner is Team.HOME else 2,
+        kicks=[penalty_kick_record(kick) for kick in shootout.kicks],
+    )
