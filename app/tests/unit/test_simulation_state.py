@@ -18,6 +18,7 @@ from app.simulation.physics import (
     PlayerSetup,
     create_initial_state,
     reset_positions,
+    single_player_state,
     step,
 )
 from app.domain.team_member import MemberRole
@@ -143,3 +144,16 @@ def test_no_tunable_numbers_outside_constants(module):
         and node.value not in allowed
     ]
     assert found == []
+
+
+# --- prueba de un comportamiento ----------------------------------------------
+
+
+def test_single_player_state_has_only_that_player_in_club1():
+    state = single_player_state(PlayerSetup(7, MemberRole.forward, stats()))
+
+    player = state.players[0]
+    assert len(state.players) == 1
+    assert (player.key, player.player_id) == ((HOME, 3), 7)
+    assert (player.position, player.facing) == (Vec(40.0, 30.0), Vec(1.0, 0.0))
+    assert (state.ball.position, state.ball.owner) == (Vec(50.0, 30.0), None)
