@@ -99,6 +99,9 @@ PENALTY_SECONDS = 8  # tiempo de juego del pateador para convertir
 # Orden en que patean los titulares, en ciclo: delantero, medio, defensor.
 PENALTY_KICKER_ORDER = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
 
+# Prueba de un comportamiento: segundos de cuenta regresiva antes de empezar.
+BEHAVIOR_TEST_COUNTDOWN_SECONDS = 3
+
 # Estructura de estado de jugador.
 NO_KICK_COOLDOWN = 0  # puede patear desde el primer tick
 NOT_REGAIN_BLOCKED = -1  # nunca bloqueado: todos los ticks son > -1

@@ -2,9 +2,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.domain.behavior import CodeRule
+from app.schemas.base import CamelModel
+
 
 class Error(BaseModel):
     code: str | None = None
+    message: str
+
+
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
     message: str
 
 
@@ -101,6 +109,11 @@ class SubstitutionsConflict(BaseModel):
     message: str
 
 
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
+    message: str
+
+
 # --- PUT /matches/{id}/behavior ------------------------------------------------
 
 
@@ -112,3 +125,23 @@ class MatchBehaviorForbidden(BaseModel):
 class MatchBehaviorConflict(BaseModel):
     code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
+
+
+class TestBehaviorConflict(BaseModel):
+    code: Literal["notPlayerBehavior", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
+    message: str
+
+
+# --- POST /behaviors -----------------------------------------------------------
+
+
+class CodeError(BaseModel):
+    rule: CodeRule
+    line: int
+    column: int
+
+
+class CreateBehaviorConflict(CamelModel):
+    code: Literal["duplicateName", "codeTooLong", "invalidCode"]
+    message: str
+    code_error: CodeError | None

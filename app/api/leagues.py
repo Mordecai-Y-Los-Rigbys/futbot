@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Response
 from starlette.concurrency import run_in_threadpool
 
-
 from app.api.deps import (
     CurrentSession,
     get_current_session,
@@ -11,6 +10,7 @@ from app.api.deps import (
     get_json_body,
     get_league_access_service,
     get_league_service,
+    get_ranking_service,
 )
 from app.api.league_access import router as league_access_router
 from app.api.pagination import parse_page
@@ -21,14 +21,18 @@ from app.schemas.errors import (
     Error,
     JoinLeagueConflict,
     JoinLeagueForbidden,
+    LeagueDataConflict,
     LeaveLeagueConflict,
     StartLeagueConflict,
     ValidationBadRequest,
 )
-from app.schemas.league_access import LeagueAccessForbidden
+from app.schemas.friendly import MatchResponse
 from app.schemas.league import LeagueDetail, LeaguePage, LeagueParticipant, LeagueSummary
+from app.schemas.league_access import LeagueAccessForbidden
+from app.schemas.ranking import LeagueRankingEntry
 from app.services.league_access_service import LeagueAccessService
 from app.services.league_match_start import LeagueMatchStartService
+from app.services.ranking_service import RankingService
 from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
@@ -160,6 +164,52 @@ def list_league_participants(
     league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
     access.require_access(session.id, session.user_id, league)  # 403
     return service.list_participants(league.id)
+
+
+@router.get(
+    "/{id}/ranking",
+    response_model=list[LeagueRankingEntry],
+    operation_id="getLeagueRanking",
+    summary="Obtener el ranking de una liga",
+    responses={
+        401: {"model": Error},
+        403: {"model": LeagueAccessForbidden},
+        404: {"model": Error},
+        409: {"model": LeagueDataConflict},
+    },
+)
+def get_league_ranking(
+    id: str,
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    access: LeagueAccessService = Depends(get_league_access_service),
+    service: RankingService = Depends(get_ranking_service),
+) -> list[LeagueRankingEntry]:
+    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
+    access.require_access(session.id, session.user_id, league)  # 403
+    return service.get_league_ranking(league.id)
+
+
+@router.get(
+    "/{id}/fixture",
+    response_model=list[MatchResponse],
+    operation_id="getLeagueFixture",
+    summary="Obtener el fixture de una liga",
+    responses={
+        401: {"model": Error},
+        403: {"model": LeagueAccessForbidden},
+        404: {"model": Error},
+        409: {"model": LeagueDataConflict},
+    },
+)
+def get_league_fixture(
+    id: str,
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    access: LeagueAccessService = Depends(get_league_access_service),
+    service: LeagueService = Depends(get_league_service),
+) -> list[MatchResponse]:
+    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
+    access.require_access(session.id, session.user_id, league)  # 403
+    return service.get_fixture(league.id)  # 409
 
 
 @router.post(
