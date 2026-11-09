@@ -24,6 +24,7 @@ class LeagueListItemData(BaseModel):
     creator: LeagueCreatorData
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
     allow_draws: bool
@@ -37,7 +38,6 @@ class LeagueParticipantData(LeagueCreatorData):
 
 
 class LeagueDetailData(LeagueListItemData):
-    min_participants: int
     joined: bool
 
 
