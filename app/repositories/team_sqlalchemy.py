@@ -57,7 +57,7 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
             select(Player.id, Player.name, TeamMember.role)
             .join(Player, Player.id == TeamMember.player_id)
             .where(
-                _team_owner(match_id.league_id),
+                _team_owner(match_id, league_id),
                 TeamMember.user_id == user_id,
                 TeamMember.role != MemberRole.substitute,
             )
