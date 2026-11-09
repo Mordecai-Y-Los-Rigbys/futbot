@@ -1,3 +1,5 @@
+import builtins
+
 import pytest
 
 from app.domain.behavior import BehaviorType, CodeRule
@@ -111,6 +113,7 @@ def test_the_primitive_lists_match_the_primitives_the_match_provides():
         ("x = {1, 2}", CodeRule.construct_not_allowed),
         ("x = __builtins__", CodeRule.construct_not_allowed),
         ("x = ().__class__", CodeRule.construct_not_allowed),
+        ("kick(__x=1)", CodeRule.construct_not_allowed),
     ],
 )
 def test_each_rule_is_reported(code, rule):
@@ -164,6 +167,61 @@ def test_an_operator_without_position_uses_the_position_of_its_comparison():
     assert (violation.line, violation.column) == (2, 5)
 
 
+def test_on_a_tie_the_first_node_in_the_code_wins():
+    # El `in` no tiene posición y toma la de la comparación, que es la misma que la de `abs`.
+    violation = find_code_violation("x = abs(1) in my_goal", PLAYER)
+    assert (violation.rule, violation.column) == (CodeRule.call_not_allowed, 5)
+
+
 def test_the_message_has_the_location():
     violation = find_code_violation("x = 1\ny = abs(1)", PLAYER)
     assert violation.message.startswith("Línea 2, columna 5: ")
+
+
+def test_a_syntax_error_is_reported_even_with_an_earlier_error():
+    violation = find_code_violation("import os\nif True", PLAYER)
+    assert (violation.rule, violation.line, violation.column) == (CodeRule.syntax_error, 2, 8)
+
+
+@pytest.mark.parametrize(
+    "code, column",
+    [("kick(force=1, force=2)", 15), ("kick(x='ñ', force=1, force=2)", 22)],
+    ids=["ascii", "con ñ"],
+)
+def test_an_error_python_only_finds_when_compiling_is_a_syntax_error(code, column):
+    violation = find_code_violation(code, PLAYER)
+    assert (violation.rule, violation.line, violation.column) == (CodeRule.syntax_error, 1, column)
+
+
+@pytest.mark.parametrize("line_break", ["\r\n", "\r"], ids=["crlf", "cr"])
+def test_crlf_and_a_lone_cr_are_one_line_break(line_break):
+    code = line_break.join(["x = 1", "", "y = 'ñ' + abs(1)"])
+    violation = find_code_violation(code, PLAYER)
+    assert (violation.line, violation.column) == (3, 11)
+
+
+@pytest.mark.parametrize(
+    "code, column",
+    [("x = 1 +\x0cabs(1)", 9), ("x = '\u2028' + abs(1)", 11)],
+    ids=["form feed", "separador de línea Unicode"],
+)
+def test_characters_python_does_not_take_as_line_breaks_do_not_split(code, column):
+    violation = find_code_violation(code, PLAYER)
+    assert (violation.line, violation.column) == (1, column)
+
+
+@pytest.mark.parametrize("line_break", ["\r\n", "\r"], ids=["crlf", "cr"])
+def test_line_breaks_are_counted_like_python_does(line_break):
+    assert not is_code_too_long(("x = 1" + line_break) * MAX_CODE_LINES)
+    assert is_code_too_long(("x = 1" + line_break) * (MAX_CODE_LINES + 1))
+
+
+def test_the_validator_never_runs_the_code(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("el validador ejecutó el código")
+
+    monkeypatch.setattr(builtins, "exec", fail)
+    monkeypatch.setattr(builtins, "eval", fail)
+
+    assert find_code_violation("x = ball_position()\nkick()", PLAYER) is None
+    assert rule_of("import os") == CodeRule.import_not_allowed
