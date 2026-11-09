@@ -37,6 +37,7 @@ def add_match(db_session):
             penalty_score_1=(4 if penalty_winner == 1 else 3) if penalty_winner else None,
             penalty_score_2=(3 if penalty_winner == 1 else 4) if penalty_winner else None,
             penalty_winner=penalty_winner,
+            penalty_kicks=[] if penalty_winner else None,
         )
         db_session.add(match)
         db_session.commit()
@@ -228,8 +229,8 @@ def test_endpoint_is_read_only(login_as, creator, public_league, add_match, user
     "fields",
     [
         dict(status=F, score_1=1, score_2=1, penalty_winner=1),  # falta el resultado de la tanda
-        dict(status=F, score_1=2, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=1),  # no empató
-        dict(status=F, score_1=1, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=3),
+        dict(status=F, score_1=2, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=1, penalty_kicks=[]),  # no empató
+        dict(status=F, score_1=1, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=3, penalty_kicks=[]),
     ],
 )
 def test_invalid_penalty_combinations_are_rejected(db_session, users, fields):
