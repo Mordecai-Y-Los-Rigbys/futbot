@@ -80,3 +80,12 @@ class FakeNotifications:
 
     def recipients(self, league_id: int) -> list[int]:
         return list(self.participants.get(league_id, []))
+
+    def mark_seen_up_to(self, user_id: int, notification_id: int) -> bool:
+        mine = self.by_user.get(user_id, [])
+        if all(n.id != notification_id for n in mine):
+            return False
+        self.by_user[user_id] = [
+            replace(n, seen=True) if n.id <= notification_id else n for n in mine
+        ]
+        return True

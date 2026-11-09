@@ -46,3 +46,8 @@ class NotificationRepository(Protocol):
     def recipients(self, league_id: int) -> list[int]:
         """Usuarios que reciben las notificaciones de la liga: sus participantes."""
         ...
+
+    def mark_seen_up_to(self, user_id: int, notification_id: int) -> bool:
+        """Marca como vistas la notificación y las anteriores del usuario (id menor
+        o igual). False, sin cambiar nada, si la notificación no es del usuario."""
+        ...

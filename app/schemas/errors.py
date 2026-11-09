@@ -162,3 +162,11 @@ class MatchBehaviorForbidden(BaseModel):
 class MatchBehaviorConflict(BaseModel):
     code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
+
+
+# --- POST /notifications/seen --------------------------------------------------
+
+
+class MarkNotificationsSeenConflict(BaseModel):
+    code: Literal["notificationNotOwned"]
+    message: str

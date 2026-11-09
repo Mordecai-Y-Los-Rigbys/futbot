@@ -227,3 +227,44 @@ def test_recipients_are_the_participants_of_the_league(db_session, league, users
     repo = SqlAlchemyNotificationRepository(db_session)
     assert sorted(repo.recipients(league.id)) == [1, 2, 3]
     assert repo.recipients(other.id) == [4]
+
+
+# --- marcar como vistas -------------------------------------------------------
+
+
+def seen_of(db_session, user_id) -> dict[int, bool]:
+    db_session.expire_all()
+    rows = db_session.scalars(select(Notification).where(Notification.user_id == user_id))
+    return {n.id: n.seen for n in rows}
+
+
+def test_mark_seen_marks_the_given_one_and_the_older_ones(db_session, league):
+    a, b, c = (add_notification(db_session, 1, league.id, minutes=m) for m in range(3))
+    assert SqlAlchemyNotificationRepository(db_session).mark_seen_up_to(1, b.id) is True
+    assert seen_of(db_session, 1) == {a.id: True, b.id: True, c.id: False}
+
+
+def test_mark_seen_does_not_touch_other_users(db_session, league):
+    theirs = add_notification(db_session, 2, league.id)
+    mine = add_notification(db_session, 1, league.id)
+    SqlAlchemyNotificationRepository(db_session).mark_seen_up_to(1, mine.id)
+    assert seen_of(db_session, 2) == {theirs.id: False}
+
+
+@pytest.mark.parametrize("whose", ["other", "missing"])
+def test_mark_seen_of_a_notification_that_is_not_mine_changes_nothing(db_session, league, whose):
+    mine = add_notification(db_session, 1, league.id)
+    other = add_notification(db_session, 2, league.id)
+    target = other.id if whose == "other" else 999
+    assert SqlAlchemyNotificationRepository(db_session).mark_seen_up_to(1, target) is False
+    assert seen_of(db_session, 1) == {mine.id: False}
+    assert seen_of(db_session, 2) == {other.id: False}
+
+
+def test_mark_seen_twice_is_idempotent(db_session, league):
+    n = add_notification(db_session, 1, league.id)
+    repo = SqlAlchemyNotificationRepository(db_session)
+    assert repo.mark_seen_up_to(1, n.id) is True
+    assert repo.mark_seen_up_to(1, n.id) is True
+    assert seen_of(db_session, 1) == {n.id: True}
+    assert repo.get_state(1).has_unseen is False
