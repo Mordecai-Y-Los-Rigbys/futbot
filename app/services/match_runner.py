@@ -250,6 +250,7 @@ class MatchRunner:
                             strength=incoming.strength,
                             speed=incoming.speed,
                         ),
+                        incoming.name,
                     ),
                     compile_behavior(incoming.behavior_code),
                 )
