@@ -99,12 +99,8 @@ PENALTY_SECONDS = 8  # tiempo de juego del pateador para convertir
 # Orden en que patean los titulares, en ciclo: delantero, medio, defensor.
 PENALTY_KICKER_ORDER = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
 
-
-# Prueba de un comportamiento: un solo período, sin pausas.
+# Prueba de un comportamiento: dura lo mismo que un amistoso, en un solo período.
 BEHAVIOR_TEST_COUNTDOWN_SECONDS = 3
-BEHAVIOR_TEST_DURATION_SECONDS = 60  # de juego, sin contar la cuenta regresiva
-# Las cinco stats del jugador de la prueba (suman 300, como las de cualquier jugador).
-BEHAVIOR_TEST_STAT = 60
 
 # Estructura de estado de jugador.
 NO_KICK_COOLDOWN = 0  # puede patear desde el primer tick
