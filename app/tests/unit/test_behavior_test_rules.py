@@ -93,9 +93,11 @@ def test_goal_counts_and_next_tick_everyone_is_back_at_the_start():
     session = build_test_session(club(0, {MemberRole.forward: FORWARD_CODE}), club_2, seed=1)
     start = positions(session.advance())
     ticks = []
-    while not ticks or ticks[-1].event is not Event.GOAL:
+    while not session.finished and (not ticks or ticks[-1].event is not Event.GOAL):
         ticks.append(session.advance())
-    goal, after = ticks[-1], session.advance()
+    goal = ticks[-1]
+    assert goal.event is Event.GOAL, "no hubo ningún gol en toda la prueba"
+    after = session.advance()
 
     assert (goal.scoring_team, goal.score_1, goal.score_2) == (Team.HOME, 1, 0)
     assert goal.state.ball.position.x > C.FIELD_LENGTH  # el tick del gol la muestra adentro
@@ -127,3 +129,20 @@ def test_each_player_plays_in_its_club_and_role_with_its_behavior():
     assert moved == [(Team.AWAY, 2)]
     # (0, 0) es relativo a club2: en coordenadas absolutas, hacia (100, 60).
     assert after[(Team.AWAY, 2)].x > before[(Team.AWAY, 2)].x
+
+
+# --- clubes mal armados -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_club, message",
+    [
+        (club(10)[:2], "se necesitan 3 titulares y hay 2"),
+        (club(10)[:2] + [starter(99, MemberRole.defense)], "el rol defense está repetido"),
+        (club(10)[:2] + [starter(99, MemberRole.substitute)], "hay un substitute"),
+    ],
+    ids=["missing_role", "repeated_role", "substitute"],
+)
+def test_a_club_without_one_starter_per_role_is_an_error(bad_club, message):
+    with pytest.raises(ValueError, match=message):
+        build_test_session(club(0), bad_club, seed=1)
