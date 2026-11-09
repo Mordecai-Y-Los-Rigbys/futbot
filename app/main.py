@@ -12,6 +12,7 @@ from app.api.leagues import router as leagues_router
 from app.api.players import router as players_router
 from app.api.ws_matches import router as ws_matches_router
 from app.api.ws_leagues import router as ws_leagues_router
+from app.api.ws_behavior_tests import router as ws_behavior_tests_router
 from app.api.friendlies import router as friendlies_router
 from app.api.ws_deps import (
     get_friendly_expiry,
@@ -62,6 +63,7 @@ app.include_router(behaviors_router)
 app.include_router(leagues_router)
 app.include_router(ws_matches_router)
 app.include_router(ws_leagues_router)
+app.include_router(ws_behavior_tests_router)
 app.include_router(friendlies_router)
 app.include_router(matches_router)
 app.include_router(users_router)
