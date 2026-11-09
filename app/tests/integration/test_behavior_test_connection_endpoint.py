@@ -1,5 +1,6 @@
 """POST /behaviors/{id}/test-connections contra la base real (Postgres)."""
 
+import itertools
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -39,8 +40,10 @@ def other(create_user):
 
 @pytest.fixture()
 def make_behavior(db_session):
+    numbers = itertools.count(1)  # cada behavior con su nombre: no se repiten por usuario
+
     def _make(user, type=BehaviorType.player_behavior):
-        record = Behavior(user_id=user.id, name="b", code="pass", type=type)
+        record = Behavior(user_id=user.id, name=f"b{next(numbers)}", code="pass", type=type)
         db_session.add(record)
         db_session.commit()
         return record

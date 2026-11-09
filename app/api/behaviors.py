@@ -19,6 +19,7 @@ from app.schemas.behavior import (
 )
 from app.schemas.errors import (
     Error,
+    CreateBehaviorConflict,
     ListPageBadRequest,
     TestBehaviorConflict,
     ValidationBadRequest,
@@ -30,6 +31,25 @@ from app.services.behavior_test_connection_service import (
 )
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
+
+
+@router.post(
+    "",
+    response_model=BehaviorDetail,
+    status_code=201,
+    operation_id="createBehavior",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        409: {"model": CreateBehaviorConflict},
+    },
+)
+def create_behavior(
+    user_id: int = Depends(get_current_user_id),  # se resuelve antes: 401 gana sobre 400
+    body: Any = Depends(get_json_body),
+    service: BehaviorService = Depends(get_behavior_service),
+) -> BehaviorDetail:
+    return BehaviorDetail.model_validate(service.create_behavior(user_id, body))
 
 
 # /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.
