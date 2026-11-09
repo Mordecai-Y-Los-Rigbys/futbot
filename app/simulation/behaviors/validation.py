@@ -92,7 +92,7 @@ class CodeViolation:
 
 
 def is_code_too_long(code: str) -> bool:
-    """Más de MAX_CODE_LINES líneas o más de MAX_CODE_CHARS caracteres.
+    r"""Más de MAX_CODE_LINES líneas o más de MAX_CODE_CHARS caracteres.
 
     Un salto de línea al final no agrega una línea. Los saltos se cuentan como en
     Python: `\r\n` es uno solo, y un `\r` solo también es un salto.
@@ -158,6 +158,9 @@ def _rule_for(node: ast.AST, behavior_type: BehaviorType) -> tuple[CodeRule, str
         return _call_rule(node, behavior_type)
     if isinstance(node, ast.Name):
         return _name_rule(node)
+    if isinstance(node, ast.keyword) and (node.arg or "").startswith(FORBIDDEN_NAME_PREFIX):
+        # El nombre de un argumento (`kick(__x=1)`) no es un ast.Name.
+        return CodeRule.construct_not_allowed, f"no se permite el nombre `{node.arg}`"
     if not isinstance(node, ALLOWED_NODES):
         construct = CONSTRUCT_NAMES.get(type(node), type(node).__name__)
         return CodeRule.construct_not_allowed, f"no se permite usar {construct}"
@@ -198,9 +201,10 @@ def _walk(tree: ast.AST):
             position = (node.lineno, node.col_offset)
         yield node, position, is_decorator
         decorators = getattr(node, "decorator_list", [])
-        pending.extend(
-            (child, position, child in decorators) for child in ast.iter_child_nodes(node)
-        )
+        # Al revés, porque se saca del final: así los hijos salen en el orden del código
+        # y, ante un empate de posición, gana el que está antes (`abs(1) in my_goal`).
+        children = list(ast.iter_child_nodes(node))
+        pending.extend((child, position, child in decorators) for child in reversed(children))
 
 
 def _char_column(lines: list[str], line: int, byte_offset: int) -> int:

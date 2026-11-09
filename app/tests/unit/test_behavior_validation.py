@@ -113,6 +113,7 @@ def test_the_primitive_lists_match_the_primitives_the_match_provides():
         ("x = {1, 2}", CodeRule.construct_not_allowed),
         ("x = __builtins__", CodeRule.construct_not_allowed),
         ("x = ().__class__", CodeRule.construct_not_allowed),
+        ("kick(__x=1)", CodeRule.construct_not_allowed),
     ],
 )
 def test_each_rule_is_reported(code, rule):
@@ -164,6 +165,12 @@ def test_on_the_same_line_the_first_error_by_column_is_reported():
 def test_an_operator_without_position_uses_the_position_of_its_comparison():
     violation = find_code_violation("x = 1\ny = 2 in my_goal", PLAYER)
     assert (violation.line, violation.column) == (2, 5)
+
+
+def test_on_a_tie_the_first_node_in_the_code_wins():
+    # El `in` no tiene posición y toma la de la comparación, que es la misma que la de `abs`.
+    violation = find_code_violation("x = abs(1) in my_goal", PLAYER)
+    assert (violation.rule, violation.column) == (CodeRule.call_not_allowed, 5)
 
 
 def test_the_message_has_the_location():
