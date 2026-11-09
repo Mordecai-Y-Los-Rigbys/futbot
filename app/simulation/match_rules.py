@@ -21,6 +21,7 @@ el primer tick de la pausa: la pelota nunca queda dentro del arco en `paused`.
 """
 
 import copy
+import dataclasses
 import enum
 import math
 from collections.abc import Mapping, Sequence
@@ -88,6 +89,10 @@ class TickResult:
     pause_duration_seconds: int | None = None  # solo en ticks `paused`
     shootout: ShootoutStatus | None = None  # solo en la tanda y en su tick final
     penalty_kick: PenaltyKick | None = None  # solo si event == PENALTY_KICK
+    # Pausas que todavía no empezaron. No cuenta la pausa en curso: el tick con el
+    # evento `pause` ya trae el valor decrementado. Es la única fuente de la regla:
+    # el `pausesLeft` del tick y el 409 `noPausesLeft` salen de acá.
+    pauses_left: int = 0
 
 
 @dataclass(frozen=True)
@@ -98,6 +103,7 @@ class _Segment:
     ticks: int
     period: int
     restart: bool = False  # su primer tick reinicia el partido (saque normal)
+    pauses_left: int = 0  # pausas que no empezaron cuando salen los ticks de este tramo
 
 
 class MatchSession:
@@ -152,6 +158,13 @@ class MatchSession:
             # el último período absorbe el resto de la división
             ticks = base if period < self._periods else self._play_ticks - base * (period - 1)
             segments.append(_Segment(Phase.PLAYING, ticks, period, restart))
+        # Pausas por empezar en cada tramo: las pausas que vienen después de él. Una
+        # pausa no se cuenta a sí misma, así que su primer tick ya trae el valor nuevo.
+        pending = 0
+        for index in range(len(segments) - 1, -1, -1):
+            segments[index] = dataclasses.replace(segments[index], pauses_left=pending)
+            if segments[index].phase is Phase.PAUSED:
+                pending += 1
         return segments
 
     @property
@@ -361,6 +374,7 @@ class MatchSession:
             period=self._periods,
             shootout=penalty.status,
             penalty_kick=penalty.kick if event is Event.PENALTY_KICK else None,
+            pauses_left=0,  # la tanda viene después del último período: ya empezaron todas
         )
 
     def _reset_after_goal(self) -> None:
@@ -420,6 +434,7 @@ class MatchSession:
             pause_reason=pause_reason,
             pause_remaining_seconds=pause_remaining,
             pause_duration_seconds=round(self._pause_seconds) if paused else None,
+            pauses_left=segment.pauses_left,
         )
 
 
