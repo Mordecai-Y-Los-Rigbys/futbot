@@ -107,6 +107,7 @@ class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
                     out_player_id=member_out.player_id,
                     incoming=StarterData(
                         player_id=player.id,
+                        name=player.name,
                         role=role,
                         power=player.power,
                         agility=player.agility,
