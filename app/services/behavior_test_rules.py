@@ -15,7 +15,7 @@ transmisión.
 from app.repositories.team_abstract import StarterData
 from app.services.match_setup_service import build_team
 from app.simulation.constants import BEHAVIOR_TEST_COUNTDOWN_SECONDS, FRIENDLY_MATCH_DURATION
-from app.simulation.match_rules import MatchSession, build_session
+from app.simulation.match_rules import MatchSession, TeamSetup, build_session
 
 
 def build_test_session(
@@ -27,11 +27,19 @@ def build_test_session(
         ValueError: algún club no tiene exactamente un titular por rol.
     """
     return build_session(
-        build_team(club_1),
-        build_team(club_2),
+        _build_club(club_1, 1),
+        _build_club(club_2, 2),
         FRIENDLY_MATCH_DURATION * 60,
         seed,
         countdown_seconds=BEHAVIOR_TEST_COUNTDOWN_SECONDS,
         periods=1,
         pause_seconds=0,
     )
+
+
+def _build_club(rows: list[StarterData], number: int) -> TeamSetup:
+    # Los dos clubes son del mismo usuario: el error dice cuál falló.
+    try:
+        return build_team(rows)
+    except ValueError as error:
+        raise ValueError(f"club {number}: {error}") from error

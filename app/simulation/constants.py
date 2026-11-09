@@ -99,7 +99,7 @@ PENALTY_SECONDS = 8  # tiempo de juego del pateador para convertir
 # Orden en que patean los titulares, en ciclo: delantero, medio, defensor.
 PENALTY_KICKER_ORDER = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
 
-# Prueba de un comportamiento: dura lo mismo que un amistoso, en un solo período.
+# Prueba de un comportamiento: segundos de cuenta regresiva antes de empezar.
 BEHAVIOR_TEST_COUNTDOWN_SECONDS = 3
 
 # Estructura de estado de jugador.

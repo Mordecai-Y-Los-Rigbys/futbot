@@ -133,16 +133,22 @@ def test_each_player_plays_in_its_club_and_role_with_its_behavior():
 
 # --- clubes mal armados -------------------------------------------------------
 
+# Está seguro entre los dos primeros roles de `club(10)[:2]`.
+REPEATED_ROLE = C.STARTER_ROLES[0]
+
 
 @pytest.mark.parametrize(
     "bad_club, message",
     [
         (club(10)[:2], "se necesitan 3 titulares y hay 2"),
-        (club(10)[:2] + [starter(99, MemberRole.defense)], "el rol defense está repetido"),
+        (
+            club(10)[:2] + [starter(99, REPEATED_ROLE)],
+            f"el rol {REPEATED_ROLE.value} está repetido",
+        ),
         (club(10)[:2] + [starter(99, MemberRole.substitute)], "hay un substitute"),
     ],
     ids=["missing_role", "repeated_role", "substitute"],
 )
 def test_a_club_without_one_starter_per_role_is_an_error(bad_club, message):
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=f"^club 2: {message}"):
         build_test_session(club(0), bad_club, seed=1)
