@@ -24,6 +24,8 @@ from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.user_sqlalchemy import SqlAlchemyUserRepository
+from app.repositories.behavior_test_token_sqlalchemy import SqlAlchemyBehaviorTestTokenRepository
+from app.services.behavior_test_connection_service import BehaviorTestConnectionService
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
 from app.services.friendly_service import FriendlyService
@@ -56,6 +58,16 @@ def get_player_repository(db: Session = Depends(get_db)) -> AbstractPlayerReposi
 
 def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
     return BehaviorService(SqlAlchemyBehaviorRepository(db))
+
+
+def get_behavior_test_connection_service(
+    db: Session = Depends(get_db),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+    players: AbstractPlayerRepository = Depends(get_player_repository),
+) -> BehaviorTestConnectionService:
+    return BehaviorTestConnectionService(
+        behaviors, players, SqlAlchemyBehaviorTestTokenRepository(db)
+    )
 
 
 def get_friendly_service(

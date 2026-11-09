@@ -10,6 +10,7 @@ class BehaviorData(BaseModel):
     user_id: int
     name: str
     code: str
+    type: BehaviorType = BehaviorType.player_behavior
 
     model_config = {"from_attributes": True}
 
