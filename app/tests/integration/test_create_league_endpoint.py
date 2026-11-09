@@ -79,6 +79,13 @@ def test_create_league_enrolls_creator_with_team(login_as, create_user, team_of,
     assert api.get("/leagues").json()["total"] == 1  # visible en el listado
 
 
+def test_response_includes_min_participants(login_as, create_user, team_of):
+    creator = create_user("creator")
+    resp = login_as(creator).post("/leagues", json=body_for(team_of(creator), minParticipants=4))
+    assert resp.status_code == 201
+    assert resp.json()["minParticipants"] == 4
+
+
 def test_response_creator_has_avatar(login_as, create_user, team_of):
     creator = create_user("creator", avatar=3)
 

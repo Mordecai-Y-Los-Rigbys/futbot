@@ -55,6 +55,7 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
         ),
         status=getattr(record.status, "value", record.status),
         participants_count=participants_count,
+        min_participants=record.min_participants,
         max_participants=record.max_participants,
         private=record.private,
         created_at=created_at,
@@ -207,7 +208,6 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         league, count, is_joined = row
         return LeagueDetailData(
             **_to_data(league, count).model_dump(),
-            min_participants=league.min_participants,
             joined=bool(is_joined),
         )
         

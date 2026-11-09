@@ -5,6 +5,7 @@ from app.domain.team_member import MemberRole
 
 class StarterData(BaseModel):
     player_id: int
+    name: str
     role: MemberRole
     power: int
     agility: int
