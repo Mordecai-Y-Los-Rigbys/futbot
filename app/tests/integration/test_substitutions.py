@@ -76,6 +76,7 @@ def remaining(db):
 
 # --- caso válido ---
 
+
 def test_valid_substitution_in_league_match(db_session, league_match):
     match, teams = league_match
     sub = substitute(db_session, match, teams[1])
@@ -91,6 +92,7 @@ def test_valid_substitution_in_friendly(db_session, friendly_match):
 
 
 # --- una sola por equipo y partido ---
+
 
 def test_requesting_again_replaces_the_previous_substitution(db_session, league_match):
     match, teams = league_match
@@ -146,6 +148,7 @@ def test_the_same_team_can_have_one_in_each_match(db_session, league_match):
 
 # --- el partido debe estar en juego ---
 
+
 @pytest.mark.parametrize("status", [MatchStatus.scheduled, MatchStatus.cancelled])
 def test_match_not_started_is_rejected(db_session, league_match, status):
     match, teams = league_match
@@ -177,6 +180,7 @@ def test_replacing_after_the_match_finished_is_rejected(db_session, league_match
 
 # --- mismo equipo ---
 
+
 def test_members_of_different_teams_are_rejected(db_session, league_match):
     match, teams = league_match
     assert_rejected(db_session, match, teams[2][3], teams[1][0], user_id=1)
@@ -194,6 +198,7 @@ def test_user_id_must_be_the_owner_of_the_members(db_session, league_match):
 
 
 # --- el equipo debe ser del partido ---
+
 
 def test_team_of_another_league_is_rejected(db_session, league_match, make_behaviors):
     match, _ = league_match
@@ -228,6 +233,7 @@ def test_team_of_a_user_not_in_the_match_is_rejected(
 
 # --- cascade ---
 
+
 def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
     match, teams = friendly_match
     substitute(db_session, match, teams[1])
@@ -237,6 +243,7 @@ def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
 
 
 # --- list_by_match ---
+
 
 def test_list_by_match_returns_one_per_team_with_names(db_session, league_match):
     match, teams = league_match
@@ -298,12 +305,11 @@ def test_list_by_match_ignores_other_matches_and_empty_teams(db_session, league_
     substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
     rows = by_user(db_session, match)
     assert set(rows) == {1}  # el equipo 2 no aparece y no se cuelan los del otro partido
-    assert (rows[1].starter_name, rows[1].substitute_name) == names_of(
-        db_session, teams[1], 0, 3
-    )
+    assert (rows[1].starter_name, rows[1].substitute_name) == names_of(db_session, teams[1], 0, 3)
 
 
 # --- apply_pending (empieza cada pausa) ---
+
 
 def applied_by_user(db, match):
     rows = SqlAlchemySubstitutionRepository(db).list_applied_by_match(match.id)
@@ -394,9 +400,7 @@ def test_a_request_made_during_the_pause_stays_pending_for_the_next_one(db_sessi
 
     assert set(by_user(db_session, match)) == {1}  # pendiente
     applied = applied_by_user(db_session, match)[1]  # sigue mostrándose la aplicada
-    assert (applied.starter_name, applied.substitute_name) == names_of(
-        db_session, teams[1], 0, 3
-    )
+    assert (applied.starter_name, applied.substitute_name) == names_of(db_session, teams[1], 0, 3)
 
 
 def test_an_invalid_pending_substitution_is_discarded(db_session, league_match):
@@ -470,4 +474,3 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
     assert r.json()["club1"] == dict(
         zip(("starterName", "substituteName"), names_of(db_session, teams[1], 0, 3))
     )
-

@@ -66,7 +66,9 @@ def test_substitute_rejects_a_player_that_is_not_on_the_field():
 
 def test_substitute_rejects_a_role_different_from_the_starter_s():
     with pytest.raises(ValueError):
-        session().substitute(Team.HOME, 3, incoming(role=MemberRole.defense), compile_behavior("pass"))
+        session().substitute(
+            Team.HOME, 3, incoming(role=MemberRole.defense), compile_behavior("pass")
+        )
 
 
 def test_substitute_only_looks_in_the_given_team():

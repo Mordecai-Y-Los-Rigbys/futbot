@@ -184,4 +184,3 @@ async def get_json_body(
         return json.loads(raw)
     except ValueError:
         return INVALID_JSON
-

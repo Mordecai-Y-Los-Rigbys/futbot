@@ -122,4 +122,3 @@ def reassign_match_behavior(
 ) -> Response:
     service.reassign(user_id, parse_path_id(match_id, "El partido no existe."), body)
     return Response(status_code=204)
-

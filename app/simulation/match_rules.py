@@ -430,4 +430,3 @@ def build_session(
         pause_seconds,
         allow_draws,
     )
-

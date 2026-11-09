@@ -18,9 +18,7 @@ _STARTER_ROLES = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
 
 
 def _same_team(a: TeamMember, b: TeamMember) -> bool:
-    return (
-        a.user_id == b.user_id and a.league_id == b.league_id and a.match_id == b.match_id
-    )
+    return a.user_id == b.user_id and a.league_id == b.league_id and a.match_id == b.match_id
 
 
 class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):

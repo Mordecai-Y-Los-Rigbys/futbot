@@ -138,11 +138,13 @@ class JoinLeagueConflict(BaseModel):
         "behaviorTypeMismatch",
     ]
     message: str
-    
+
+
 class SubstitutionsConflict(BaseModel):
     # Se informa un solo motivo, el primero en este orden.
     code: Literal["matchNotStarted", "matchInPenalties", "noPausesLeft"]
     message: str
+
 
 # --- PUT /matches/{id}/behavior ------------------------------------------------
 
@@ -155,4 +157,3 @@ class MatchBehaviorForbidden(BaseModel):
 class MatchBehaviorConflict(BaseModel):
     code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
-

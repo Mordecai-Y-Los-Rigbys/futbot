@@ -103,4 +103,3 @@ class FakeSubstitutionRepo(AbstractSubstitutionRepository):
         self.pause_starts.append(match_id)
         swaps, self.swaps = self.swaps, []
         return swaps
-
