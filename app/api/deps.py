@@ -57,9 +57,12 @@ def get_behavior_service(db: Session = Depends(get_db)) -> BehaviorService:
 
 def get_behavior_test_connection_service(
     db: Session = Depends(get_db),
-    behaviors: BehaviorService = Depends(get_behavior_service),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+    players: AbstractPlayerRepository = Depends(get_player_repository),
 ) -> BehaviorTestConnectionService:
-    return BehaviorTestConnectionService(behaviors, SqlAlchemyBehaviorTestTokenRepository(db))
+    return BehaviorTestConnectionService(
+        behaviors, players, SqlAlchemyBehaviorTestTokenRepository(db)
+    )
 
 
 def get_friendly_service(

@@ -1,9 +1,12 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     get_behavior_service,
     get_behavior_test_connection_service,
     get_current_user_id,
+    get_json_body,
 )
 from app.api.pagination import parse_page
 from app.helpers.ids import parse_path_id as _parse_id
@@ -12,10 +15,19 @@ from app.schemas.behavior import (
     BehaviorPage,
     BehaviorSummary,
     BehaviorTestConnectionResponse,
+    behavior_test_request_schema,
 )
-from app.schemas.errors import Error, ListPageBadRequest, TestBehaviorConflict
+from app.schemas.errors import (
+    Error,
+    ListPageBadRequest,
+    TestBehaviorConflict,
+    ValidationBadRequest,
+)
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
-from app.services.behavior_test_connection_service import BehaviorTestConnectionService
+from app.services.behavior_test_connection_service import (
+    BEHAVIOR_NOT_FOUND_MESSAGE,
+    BehaviorTestConnectionService,
+)
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
 
@@ -72,7 +84,15 @@ def get_behavior(
     status_code=201,
     operation_id="testBehavior",
     summary="Pedir conexión para probar un comportamiento de jugador",
+    # El body se lee a mano (convención 9), así que FastAPI no lo documenta solo.
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": behavior_test_request_schema()}},
+        }
+    },
     responses={
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         403: {"model": Error},
         404: {"model": Error},
@@ -82,7 +102,8 @@ def get_behavior(
 def test_behavior(
     id: str,
     user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    body: Any = Depends(get_json_body),
     service: BehaviorTestConnectionService = Depends(get_behavior_test_connection_service),
 ) -> BehaviorTestConnectionResponse:
-    token = service.connect(user_id, _parse_id(id, "Comportamiento no encontrado."))
+    token = service.connect(user_id, _parse_id(id, BEHAVIOR_NOT_FOUND_MESSAGE), body)
     return BehaviorTestConnectionResponse(token_ws=token)

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -9,7 +9,8 @@ from app.database import Base
 class BehaviorTestToken(Base):
     """`tokenWs` emitido por POST /behaviors/{id}/test-connections.
 
-    Atado a un único usuario y a un único behavior. Reutilizable hasta que expire.
+    Atado a un único usuario, a un único behavior y a una alineación.
+    Reutilizable hasta que expire.
     """
 
     __tablename__ = "behavior_test_tokens"
@@ -23,3 +24,5 @@ class BehaviorTestToken(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # El WebSocket de prueba arma los dos clubes con esto.
+    members: Mapped[list[dict]] = mapped_column(JSON, nullable=False)

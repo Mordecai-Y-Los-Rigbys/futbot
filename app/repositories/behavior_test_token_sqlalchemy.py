@@ -15,7 +15,12 @@ class SqlAlchemyBehaviorTestTokenRepository(AbstractBehaviorTestTokenRepository)
         self.db = db
 
     def create(self, data: CreateBehaviorTestTokenData) -> None:
-        self.db.add(BehaviorTestToken(**data.model_dump()))
+        self.db.add(
+            BehaviorTestToken(
+                **data.model_dump(exclude={"members"}),
+                members=[m.model_dump(mode="json") for m in data.members],
+            )
+        )
         self.db.commit()
 
     def get_by_token(self, token: str) -> BehaviorTestTokenData | None:
@@ -30,4 +35,5 @@ class SqlAlchemyBehaviorTestTokenRepository(AbstractBehaviorTestTokenRepository)
             user_id=record.user_id,
             behavior_id=record.behavior_id,
             expires_at=expires_at,
+            members=record.members,
         )
