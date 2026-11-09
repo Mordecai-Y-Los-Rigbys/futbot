@@ -2,8 +2,10 @@ from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
 from app.api.ws_league_deps import get_league_fixture_manager, get_league_ranking_manager
+from app.api.ws_notification_deps import get_notifications_manager
 from app.database import SessionLocal
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.repositories.notification_sqlalchemy import SqlAlchemyNotificationRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 from app.repositories.league_match_start_sqlalchemy import SqlAlchemyLeagueMatchStartRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
@@ -106,13 +108,30 @@ def _notify_league_ranking(match_id: int) -> None:
         get_league_ranking_manager().ranking_changed(league_id)
 
 
+def _notify_notifications(match_id: int) -> None:
+    """Al terminar un partido de liga se crearon notificaciones para cada participante."""
+    league_id = _league_of(match_id)
+    if league_id is None:
+        return
+    with SessionLocal() as db:
+        recipients = SqlAlchemyNotificationRepository(db).recipients(league_id)
+    # Un solo aviso por usuario aunque se hayan creado dos notificaciones.
+    get_notifications_manager().notifications_changed(recipients)
+
+
+def _notify_match_finished(match_id: int) -> None:
+    """Callback del runner después de guardar el resultado (ya commiteado)."""
+    _notify_league_ranking(match_id)
+    _notify_notifications(match_id)
+
+
 _match_runner = MatchRunner(
     _connection_manager,
     _load_setup,
     _match_repo_scope,
     _substitution_repo_scope,
     on_match_change=_notify_league_channels,
-    on_match_finished=_notify_league_ranking,
+    on_match_finished=_notify_match_finished,
 )
 
 

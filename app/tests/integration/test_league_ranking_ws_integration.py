@@ -223,9 +223,14 @@ def test_sixth_connection_is_4429(login_as, started_league, viewer, manager):
 # --- avisos del runner --------------------------------------------------------
 
 
-def test_the_runner_notifies_the_ranking_only_when_a_match_finishes():
+def test_the_runner_notifies_the_ranking_only_when_a_match_finishes(monkeypatch):
     runner = ws_deps.get_match_runner()
-    assert runner._on_match_finished is ws_deps._notify_league_ranking
+    assert runner._on_match_finished is ws_deps._notify_match_finished
+    calls = []
+    monkeypatch.setattr(ws_deps, "_notify_league_ranking", calls.append)
+    monkeypatch.setattr(ws_deps, "_notify_notifications", lambda match_id: None)
+    ws_deps._notify_match_finished(5)
+    assert calls == [5]
 
 
 def test_only_league_matches_notify_their_league(

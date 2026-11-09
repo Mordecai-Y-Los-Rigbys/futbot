@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
+from app.api.ws_notification_deps import get_notifications_manager
 from app.config import allowed_origins
 from app.database import SessionLocal
 from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
@@ -130,5 +131,6 @@ def get_ranking_handshake_scope() -> (
 
 
 def get_league_channel_managers() -> list[LeagueChannelManager]:
-    """Managers de todos los canales de liga. El log-out cierra en cada uno las conexiones de la sesión."""
-    return [_participants_manager, _fixture_manager, _ranking_manager]
+    """Managers de los canales que se autentican con la cookie (los de liga y el de
+    notificaciones). El log-out cierra en cada uno las conexiones de la sesión."""
+    return [_participants_manager, _fixture_manager, _ranking_manager, get_notifications_manager()]
