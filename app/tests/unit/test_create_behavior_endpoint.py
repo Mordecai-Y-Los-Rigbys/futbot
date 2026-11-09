@@ -9,7 +9,7 @@ from app.errors import BehaviorConflictError
 from app.main import app
 from app.repositories.behavior_abstract import BehaviorData
 from app.services.behavior_service import BehaviorService
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 from app.services.session_service import SessionService
 
 URL = "/behaviors"
