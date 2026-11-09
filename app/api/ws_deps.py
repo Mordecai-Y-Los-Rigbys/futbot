@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
-from app.api.ws_league_deps import get_league_fixture_manager
+from app.api.ws_league_deps import get_league_fixture_manager, get_league_next_match_manager
 from app.database import SessionLocal
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
@@ -92,6 +92,7 @@ def _notify_league_channels(match_id: int) -> None:
         data = SqlAlchemyMatchRepository(db).get_setup_data(match_id)
     if data is not None and data.league_id is not None:
         get_league_fixture_manager().fixture_changed(data.league_id)
+        get_league_next_match_manager().next_match_changed(data.league_id)
 
 
 _match_runner = MatchRunner(
