@@ -33,6 +33,7 @@ class LeagueChannelSpec:
 
     build_payload: Callable[[Any], dict]
     # Estados en los que se envía el último mensaje y se cierra con 1000 + reason.
+    # Vacío: el canal nunca cierra por estado (y el estado no necesita `status`).
     close_reasons: Mapping[LeagueStatus, str]
 
 
@@ -120,7 +121,11 @@ class LeagueChannelConnection:
                         return
                     payload = self._spec.build_payload(state)
                     await self.websocket.send_text(json.dumps(payload, separators=(",", ":")))
-                    reason = self._spec.close_reasons.get(state.status)
+                    reason = (
+                        self._spec.close_reasons.get(state.status)
+                        if self._spec.close_reasons
+                        else None
+                    )
                     if reason is not None:
                         await self._close(LEAGUE_CLOSED_CODE, reason)
                         return

@@ -26,6 +26,30 @@ class LeagueStatusReader(Protocol):
 RejectStatus = Callable[[LeagueStatus | None], ApiError | None]
 
 
+def authorize_session(
+    allowed_origins: Collection[str],
+    sessions: ValidSessions,
+    origin: str | None,
+    session_id: str | None,
+) -> SessionData:
+    """Primeros pasos del handshake de los canales que usan la cookie de sesión.
+
+    Raises:
+        ApiError 403 originNotAllowed: falta el header Origin o no está permitido.
+        ApiError 401 sessionInvalid: sin cookie o con una sesión inválida o vencida.
+    """
+    # El origen se valida antes que la sesión
+    if not origin or origin not in allowed_origins:
+        raise ApiError(403, "originNotAllowed", "Origen no permitido.")
+
+    session = None
+    if session_id and len(session_id) <= MAX_SESSION_ID_LEN:
+        session = sessions.get_valid(session_id)
+    if session is None:
+        raise ApiError(401, "sessionInvalid", "Sin sesión válida.")
+    return session
+
+
 @dataclass(frozen=True)
 class LeagueChannelGrant:
     """Usuario, liga y sesión de un handshake aceptado."""
@@ -68,16 +92,7 @@ class LeagueChannelHandshakeService:
             ApiError 403 leagueAccessRequired: liga privada sin acceso (convención 11).
             ApiError 409: la liga no está en un estado que el canal admita.
         """
-        # 403: el origen se valida antes que la sesión
-        if not origin or origin not in self.allowed_origins:
-            raise ApiError(403, "originNotAllowed", "Origen no permitido.")
-
-        # 401
-        session = None
-        if session_id and len(session_id) <= MAX_SESSION_ID_LEN:
-            session = self.sessions.get_valid(session_id)
-        if session is None:
-            raise ApiError(401, "sessionInvalid", "Sin sesión válida.")
+        session = authorize_session(self.allowed_origins, self.sessions, origin, session_id)
 
         # 404
         try:
