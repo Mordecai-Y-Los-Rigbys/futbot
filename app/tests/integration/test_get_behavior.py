@@ -74,6 +74,7 @@ def test_returns_own_behavior(login, db_session):
         "name": "atacante",
         "type": "playerBehavior",
         "code": "mover(1, 2)",
+        "deletable": True,
     }
 
 

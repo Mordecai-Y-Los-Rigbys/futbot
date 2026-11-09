@@ -22,3 +22,4 @@ class BehaviorDetail(CamelModel):
     name: str
     type: BehaviorType
     code: str
+    deletable: bool

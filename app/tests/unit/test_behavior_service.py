@@ -21,6 +21,7 @@ def repo():
     mock.list_by_user.return_value = ([], 0)
     mock.get_by_id.return_value = None
     mock.name_taken.return_value = False
+    mock.usage.return_value = None
     return mock
 
 
@@ -132,7 +133,7 @@ def test_create_saves_the_behavior_of_the_user(service, repo):
     request_body = body(code="x = ball_position()", behavior_type="coachBehavior")
     result = service.create_behavior(user_id=1, body=request_body)
 
-    assert result is created
+    assert (result.id, result.name, result.deletable) == (9, "nuevo", True)
     repo.name_taken.assert_called_once_with(1, "nuevo")
     repo.create.assert_called_once_with(
         1,

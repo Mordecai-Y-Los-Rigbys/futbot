@@ -8,6 +8,7 @@ from app.repositories.behavior_abstract import (
     CreateBehaviorData,
     DuplicateBehaviorNameError,
 )
+from app.schemas.behavior import BehaviorDetail
 from app.services.behavior_validation import parse_create_behavior, parse_update_behavior
 from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 from app.simulation.behaviors.validation import (
@@ -53,13 +54,17 @@ class BehaviorService:
             raise ApiError(403, None, NOT_OWNER_MESSAGE)
         return behavior
 
+    def get_behavior(self, user_id: int, behavior_id: int) -> BehaviorDetail:
+        """Detalle de un behavior del usuario, con `deletable`."""
+        return self._detail(self.get_owned_behavior(user_id, behavior_id))
+
     def create_default_behaviors(self, user_id: int) -> list[BehaviorData]:
         """Crea para el usuario una copia propia de los behaviors iniciales."""
         return self.repository.create_many(
             user_id, [CreateBehaviorData(**b) for b in DEFAULT_BEHAVIORS]
         )
 
-    def create_behavior(self, user_id: int, body: Any) -> BehaviorData:
+    def create_behavior(self, user_id: int, body: Any) -> BehaviorDetail:
         """Crea un behavior del usuario.
 
         Raises:
@@ -72,11 +77,12 @@ class BehaviorService:
             raise _duplicate_name()
         _ensure_valid_code(data.code, data.type)
         try:
-            return self.repository.create(user_id, data)
+            created = self.repository.create(user_id, data)
         except DuplicateBehaviorNameError:
             raise _duplicate_name()
+        return self._detail(created)
 
-    def update_behavior(self, user_id: int, behavior_id: int, body: Any) -> BehaviorData:
+    def update_behavior(self, user_id: int, behavior_id: int, body: Any) -> BehaviorDetail:
         """Cambia nombre y código de un behavior del usuario. El tipo no cambia.
 
         Raises:
@@ -104,7 +110,7 @@ class BehaviorService:
             raise _duplicate_name()
         if updated is None:
             raise _deleted_concurrently()
-        return updated
+        return self._detail(updated)
 
     def delete_behavior(self, user_id: int, behavior_id: int) -> None:
         """Elimina (borrado lógico) un behavior del usuario que no está en uso.
@@ -118,6 +124,15 @@ class BehaviorService:
         usage = self.repository.delete_if_unused(behavior_id)
         if usage is not None:
             raise ApiError(409, usage.value, IN_USE_MESSAGES[usage])
+
+    def _detail(self, behavior: BehaviorData) -> BehaviorDetail:
+        return BehaviorDetail(
+            id=behavior.id,
+            name=behavior.name,
+            type=behavior.type,
+            code=behavior.code,
+            deletable=self.repository.usage(behavior.id) is None,
+        )
 
 
 def _deleted_concurrently() -> ApiError:
