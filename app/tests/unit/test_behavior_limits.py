@@ -47,7 +47,16 @@ def test_nested_tuples_cannot_hide_a_loop():
 
 @pytest.mark.parametrize(
     "source",
-    ["x = 2 ** 64", "x = -(2 ** 63) * 2", "x = 'a' * 101", "x = 101 * (1,)", "x = (((1,),),)"],
+    [
+        "x = 2 ** 64",
+        "x = -(2 ** 63) * 2",
+        "x = 'a' * 101",
+        "x = 101 * (1,)",
+        "x = (((1,),),)",
+        "x = b'a' * 101",
+        "x = b'a' * 100 + b'a'",
+        "x = b'%5d' % 1",
+    ],
 )
 def test_one_step_over_the_limits_is_rejected(source):
     with pytest.raises(BehaviorLimitExceeded):

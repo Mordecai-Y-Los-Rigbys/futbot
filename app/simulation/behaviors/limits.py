@@ -38,7 +38,7 @@ def _is_int(value: Any) -> bool:
 
 
 def _is_sequence(value: Any) -> bool:
-    return isinstance(value, (str, tuple))
+    return isinstance(value, (str, bytes, tuple))
 
 
 def _check_int(bits: int) -> None:
@@ -66,8 +66,8 @@ def _check_before(symbol: str, left: Any, right: Any) -> None:
                 _check_length(len(sequence) * max(times, 0))
     if symbol == "Add" and _is_sequence(left) and _is_sequence(right):
         _check_length(len(left) + len(right))
-    if symbol == "Mod" and isinstance(left, str):
-        # "%0999999999d" % 1 arma un string de 1 GB.
+    if symbol == "Mod" and isinstance(left, (str, bytes)):
+        # "%0999999999d" % 1 arma un string de 1 GB (y b"%0999999999d" % 1, 1 GB de bytes).
         raise BehaviorLimitExceeded("no se permite formatear strings con %")
 
 

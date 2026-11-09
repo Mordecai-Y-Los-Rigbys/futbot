@@ -86,8 +86,9 @@ def counting_timer():
 
 
 def test_a_team_shares_its_time_budget_and_does_not_touch_the_other_team(caplog):
-    # Un go_to consulta el reloj unas 30 veces.
-    # 200 asignaciones lo consultan más de 200: se pasan del presupuesto.
+    # El reloj solo se consulta en las líneas del behavior, no adentro de las primitivas:
+    # un go_to lo consulta unas pocas veces, y 200 asignaciones más de 200, así que se
+    # pasan del presupuesto.
     s = state(
         player(HOME, 1, x=20.0),
         player(HOME, 2, x=30.0),
