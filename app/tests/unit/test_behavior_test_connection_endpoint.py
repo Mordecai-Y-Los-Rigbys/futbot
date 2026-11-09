@@ -6,7 +6,7 @@ from app.api.deps import get_behavior_test_connection_service
 from app.errors import ApiError, ValidationApiError
 from app.main import app
 from app.services.behavior_test_connection_service import BehaviorTestConnectionService
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 
 URL = "/behaviors/4/test-connections"
 BODY = {"members": [{"playerId": 1, "club": "club1", "role": "forward", "behaviorId": 4}]}

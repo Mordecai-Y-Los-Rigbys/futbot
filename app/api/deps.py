@@ -32,7 +32,7 @@ from app.services.friendly_service import FriendlyService
 from app.services.league_access_service import LeagueAccessService
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
 from app.services.league_service import LeagueService
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.match_runner import MatchRunner

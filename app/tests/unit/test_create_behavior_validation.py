@@ -3,7 +3,7 @@ import pytest
 from app.domain.behavior import BehaviorType
 from app.errors import ValidationApiError
 from app.services.behavior_validation import MAX_NAME_LEN, parse_create_behavior
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 
 VALID = {"name": "Delantero 2", "code": "go_to(1, 2)", "type": "coachBehavior"}
 

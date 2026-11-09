@@ -3,8 +3,7 @@ from typing import Any
 from app.domain.behavior import BehaviorType
 from app.errors import ValidationApiError
 from app.repositories.behavior_abstract import CreateBehaviorData
-from app.services.field_validation import field_error
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON, field_error
 
 FIELDS = ("name", "code", "type")
 MAX_NAME_LEN = 20

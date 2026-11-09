@@ -18,7 +18,7 @@ from app.repositories.friendly_abstract import CreateFriendlyMemberData, JoinFri
 from app.repositories.friendly_sqlalchemy import SqlAlchemyFriendlyRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
-from app.schemas.errors import Error, JoinFriendlyMatchBadRequest, JoinFriendlyMatchConflict
+from app.schemas.errors import Error, JoinFriendlyMatchConflict, ValidationBadRequest
 from app.services.friendly_start import FriendlyStartService
 
 pytestmark = pytest.mark.integration
@@ -315,36 +315,50 @@ def test_league_match_is_404(
 # --- validación del body (400) ------------------------------------------------
 
 
+MEMBERS_REQUIRED = [{"field": "members", "reason": "required"}]
+
+
 @pytest.mark.parametrize(
-    "kwargs, code",
+    "kwargs, errors",
     [
-        ({}, "incompleteForm"),
-        ({"content": "{", "headers": {"Content-Type": "application/json"}}, "incompleteForm"),
-        ({"json": []}, "incompleteForm"),
-        ({"json": {}}, "incompleteForm"),
-        ({"json": {"members": "x"}}, "invalidFieldType"),
+        ({}, MEMBERS_REQUIRED),
+        ({"content": "{", "headers": {"Content-Type": "application/json"}}, MEMBERS_REQUIRED),
+        ({"json": []}, MEMBERS_REQUIRED),
+        ({"json": {}}, MEMBERS_REQUIRED),
+        ({"json": {"members": "x"}}, [{"field": "members", "reason": "invalidType"}]),
         (
             {"json": {"members": [{"playerId": 0, "role": "forward", "behaviorId": 1}]}},
-            "invalidFieldType",
+            [{"field": "members[0].playerId", "reason": "outOfRange"}],
         ),
-        ({"json": {"members": []}}, "invalidTeam"),
+        (
+            {"json": {"members": [{"role": 1, "behaviorId": "x"}, "x"]}},
+            [
+                {"field": "members[0].playerId", "reason": "required"},
+                {"field": "members[0].role", "reason": "invalidType"},
+                {"field": "members[0].behaviorId", "reason": "invalidType"},
+                {"field": "members[1]", "reason": "invalidType"},
+            ],
+        ),
+        ({"json": {"members": []}}, [{"field": "members", "reason": "invalidTeam"}]),
     ],
 )
 def test_body_errors_are_400_and_persist_nothing(
-    login_as, db_session, joiner, friendly, kwargs, code
+    login_as, db_session, joiner, friendly, kwargs, errors
 ):
     created, _ = friendly
     resp = login_as(joiner).post(url(created["id"]), **kwargs)
     assert resp.status_code == 400
-    assert resp.json()["code"] == code
-    JoinFriendlyMatchBadRequest.model_validate(resp.json())
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == errors
+    ValidationBadRequest.model_validate(resp.json())
     assert_untouched(db_session, created["id"], joiner)
 
 
 def test_400_beats_409_own_match(login_as, creator, friendly):
     created, _ = friendly
     resp = login_as(creator).post(url(created["id"]), json={"members": []})
-    assert resp.status_code == 400 and resp.json()["code"] == "invalidTeam"
+    assert resp.status_code == 400
+    assert resp.json()["errors"] == [{"field": "members", "reason": "invalidTeam"}]
 
 
 # --- conflictos (409) ---------------------------------------------------------

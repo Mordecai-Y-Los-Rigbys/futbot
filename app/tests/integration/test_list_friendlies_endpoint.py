@@ -8,7 +8,7 @@ from app.main import app
 from app.models.match import Match, MatchStatus
 from app.models.player import Player
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
-from app.schemas.errors import Error, ListPageBadRequest
+from app.schemas.errors import Error, ValidationBadRequest
 from app.schemas.friendly import MatchPage
 
 pytestmark = pytest.mark.integration
@@ -443,22 +443,23 @@ def test_401_has_priority_over_400(client, query):
 
 
 @pytest.mark.parametrize(
-    "query, code",
+    "query, reason",
     [
-        ("page=abc", "pageNotAnInteger"),
-        ("page=1.5", "pageNotAnInteger"),
-        ("page=", "pageNotAnInteger"),
-        ("page=0", "pageBelowMinimum"),
-        ("page=-1", "pageBelowMinimum"),
-        ("page=2147483648", "pageTooLarge"),
+        ("page=abc", "invalidType"),
+        ("page=1.5", "invalidType"),
+        ("page=", "invalidType"),
+        ("page=0", "outOfRange"),
+        ("page=-1", "outOfRange"),
+        ("page=2147483648", "outOfRange"),
     ],
 )
-def test_invalid_page_returns_400_never_422(api, query, code):
+def test_invalid_page_returns_400_never_422(api, query, reason):
     resp = api.get(f"/friendlies?{query}")
     assert resp.status_code == 400
-    assert resp.json()["code"] == code
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [{"field": "page", "reason": reason}]
     assert resp.json()["message"]
-    ListPageBadRequest.model_validate(resp.json())
+    ValidationBadRequest.model_validate(resp.json())
 
 
 # --- solo lectura y sin N+1 ---------------------------------------------------

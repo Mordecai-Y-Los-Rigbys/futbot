@@ -173,13 +173,13 @@ class LeagueService:
             body: JSON del request, todavía sin validar.
 
         Raises:
-            ApiError 400: el body no cumple el contrato (ver parse_create_league).
+            ValidationApiError 400: invalidFields (ver parse_create_league).
             ApiError 409: playerOrBehaviorNotOwned.
 
         Returns:
             La liga creada.
         """
-        data = parse_create_league(body)  # todos los 400, en orden
+        data = parse_create_league(body)  # 400
 
         # 409: solo si no falló ningún 400
         ensure_owned_team(self.players, self.behaviors, creator_id, data.members)
@@ -193,6 +193,7 @@ class LeagueService:
                 match_duration=data.match_duration,
                 private=data.private,
                 password=data.password,  # None si es pública
+                allow_draws=data.allow_draws,
                 members=[
                     CreateLeagueMemberData(
                         player_id=m.player_id,

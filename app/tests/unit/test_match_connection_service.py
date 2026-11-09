@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.errors import ApiError
+from app.errors import ApiError, ValidationApiError
 from app.repositories.match_connection_abstract import (
     AbstractMatchConnectionRepository,
     MatchAccessData,
@@ -96,7 +96,11 @@ def test_finished_or_cancelled_is_409_without_token(repo, status, code):
 
 def test_outsider_with_non_string_password_is_400(repo):
     repo.get_access.return_value = private_league()
-    assert error_of(MatchConnectionService(repo), body={"password": 5}) == (400, "invalidFieldType")
+    with pytest.raises(ValidationApiError) as e:
+        MatchConnectionService(repo).connect(7, 5, {"password": 5})
+    assert (e.value.status_code, e.value.code) == (400, "invalidFields")
+    assert e.value.errors == [{"field": "password", "reason": "invalidType"}]
+    repo.create_token.assert_not_called()
 
 
 @pytest.mark.parametrize("body", [{"password": "mala"}, {}, None, {"password": None}])
