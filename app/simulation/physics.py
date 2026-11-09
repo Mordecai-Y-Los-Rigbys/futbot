@@ -66,6 +66,7 @@ class PlayerSetup:
     player_id: int
     role: MemberRole
     stats: Stats
+    name: str = ""
 
 
 def _absolute(team: Team, x: float, y: float) -> Vec:
@@ -97,6 +98,7 @@ def create_initial_state(
                     stats=setup.stats,
                     position=ZERO,
                     facing=_attack_direction(team),
+                    name=setup.name,
                 )
             )
     state = MatchState(players=players, ball=BallState(position=ZERO), seed=seed)
@@ -116,6 +118,24 @@ def reset_positions(state: MatchState) -> MatchState:
         player.regain_blocked_until = NOT_REGAIN_BLOCKED
     new.ball = BallState(position=Vec(*C.KICKOFF_BALL_POSITION))
     return new
+
+
+def penalty_state(state: MatchState, kicker_key: PlayerKey, defender_key: PlayerKey) -> MatchState:
+    """Estado de un penal: solo el pateador, en la posición de delantero y con
+    la pelota, y el defensor rival, en la posición de defensor. Conserva el
+    tick y la semilla."""
+
+    kicker = copy.deepcopy(state.player(kicker_key))
+    defender = copy.deepcopy(state.player(defender_key))
+    for player, role in ((kicker, MemberRole.forward), (defender, MemberRole.defense)):
+        player.position = _absolute(player.team, *C.INITIAL_POSITIONS[role.number])
+        player.facing = _attack_direction(player.team)
+        player.move = None
+        player.next_kick_tick = NO_KICK_COOLDOWN
+        player.regain_blocked_until = NOT_REGAIN_BLOCKED
+    ball_spot = kicker.position + kicker.facing * (C.PLAYER_RADIUS + C.BALL_RADIUS)
+    ball = BallState(position=ball_spot, owner=kicker_key)
+    return MatchState(players=[kicker, defender], ball=ball, seed=state.seed, tick=state.tick)
 
 
 # --- Tick ---------------------------------------------------------------------

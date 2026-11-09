@@ -34,6 +34,7 @@ def teams():
     t.get_starters.return_value = [
         StarterData(
             player_id=3,
+            name="Jugador 3",
             role=MemberRole.forward,
             power=60,
             agility=60,
