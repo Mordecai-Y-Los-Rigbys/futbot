@@ -10,11 +10,19 @@ class CamelModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
-class LeagueCreator(CamelModel):
+class UserClub(CamelModel):
     id: int
     username: str
     name: str
     avatar: int
+
+
+class LeagueCreator(UserClub):
+    pass
+
+
+class LeagueParticipant(UserClub):
+    """Participante inscripto, sin su equipo."""
 
 
 class LeagueSummary(CamelModel):
@@ -23,6 +31,7 @@ class LeagueSummary(CamelModel):
     creator: LeagueCreator
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
     allow_draws: bool
@@ -36,7 +45,6 @@ class LeagueSummary(CamelModel):
 
 
 class LeagueDetail(LeagueSummary):
-    min_participants: int
     joined: bool
 
 

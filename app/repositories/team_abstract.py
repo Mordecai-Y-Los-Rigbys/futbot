@@ -5,6 +5,7 @@ from app.domain.team_member import MemberRole
 
 class StarterData(BaseModel):
     player_id: int
+    name: str
     role: MemberRole
     power: int
     agility: int
@@ -14,10 +15,23 @@ class StarterData(BaseModel):
     behavior_code: str
 
 
+class LineupPlayerData(BaseModel):
+    player_id: int
+    name: str
+    role: MemberRole
+
+
 class AbstractTeamRepository(ABC):
     @abstractmethod
     def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:
         """Titulares del usuario: del equipo del partido (amistoso) o de la liga."""
+
+    @abstractmethod
+    def get_lineup(
+        self, match_id: int, league_id: int | None, user_id: int
+    ) -> list[LineupPlayerData]:
+        """Id, nombre y rol de los titulares del usuario en el partido, sin orden.
+        Con las sustituciones ya aplicadas, porque cambian el rol en el equipo."""
 
     @abstractmethod
     def set_behavior(

@@ -30,6 +30,11 @@ class CreateLeagueBadRequest(BaseModel):
     message: str
 
 
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
+    message: str
+
+
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str
@@ -143,8 +148,14 @@ class JoinLeagueConflict(BaseModel):
     message: str
 
 
-class NextSubstitutionsConflict(BaseModel):
-    code: Literal["matchNotStarted"]
+class SubstitutionsConflict(BaseModel):
+    # Se informa un solo motivo, el primero en este orden.
+    code: Literal["matchNotStarted", "matchInPenalties", "noPausesLeft"]
+    message: str
+
+
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
     message: str
 
 
@@ -158,6 +169,11 @@ class MatchBehaviorForbidden(BaseModel):
 
 class MatchBehaviorConflict(BaseModel):
     code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
+    message: str
+
+
+class TestBehaviorConflict(BaseModel):
+    code: Literal["notPlayerBehavior", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
     message: str
 
 
