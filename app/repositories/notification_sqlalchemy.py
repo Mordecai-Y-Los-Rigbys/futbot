@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, aliased
 
 from app.models.league import League
@@ -80,3 +80,23 @@ class SqlAlchemyNotificationRepository(NotificationRepository):
                 select(LeagueParticipant.user_id).where(LeagueParticipant.league_id == league_id)
             )
         )
+
+    def mark_seen_up_to(self, user_id: int, notification_id: int) -> bool:
+        owned = self.db.scalar(
+            select(Notification.id).where(
+                Notification.id == notification_id, Notification.user_id == user_id
+            )
+        )
+        if owned is None:
+            return False
+        self.db.execute(
+            update(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.id <= notification_id,
+                Notification.seen.is_(False),
+            )
+            .values(seen=True)
+        )
+        self.db.commit()
+        return True
