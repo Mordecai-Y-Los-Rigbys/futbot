@@ -70,3 +70,12 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
+    
+    def get_start_state(self, data):
+        raise NotImplementedError
+    
+    def list_participants(self, data):
+        raise NotImplementedError
+    
+    def start(self, data):
+        raise NotImplementedError
