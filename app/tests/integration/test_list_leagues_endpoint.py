@@ -19,6 +19,7 @@ ITEM_FIELDS = {
     "creator",
     "status",
     "participantsCount",
+    "minParticipants",
     "maxParticipants",
     "private",
     "allowDraws",
@@ -51,6 +52,12 @@ def test_contract_with_leagues(api, owner, make_league):
     assert resp.headers["content-type"].startswith("application/json")
     page = LeaguePage.model_validate(resp.json())
     assert page.total == 1
+
+
+def test_min_participants_is_the_one_the_league_was_created_with(api, owner, make_league):
+    make_league(owner, min_participants=4)
+    item = api.get("/leagues").json()["items"][0]
+    assert item["minParticipants"] == 4
 
 
 def test_empty_database(api):

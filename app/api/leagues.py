@@ -9,6 +9,7 @@ from app.api.deps import (
     get_current_session,
     get_current_user_id,
     get_json_body,
+    get_league_access_service,
     get_league_service,
 )
 from app.api.league_access import router as league_access_router
@@ -24,7 +25,9 @@ from app.schemas.errors import (
     StartLeagueConflict,
     ValidationBadRequest,
 )
-from app.schemas.league import LeagueDetail, LeaguePage, LeagueSummary
+from app.schemas.league_access import LeagueAccessForbidden
+from app.schemas.league import LeagueDetail, LeaguePage, LeagueParticipant, LeagueSummary
+from app.services.league_access_service import LeagueAccessService
 from app.services.league_match_start import LeagueMatchStartService
 from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
 
@@ -135,6 +138,28 @@ def join_league(
 ) -> Response:
     service.join_league(user_id=session.user_id, session_id=session.id, raw_league_id=id, body=body)
     return Response(status_code=201)
+
+
+@router.get(
+    "/{id}/participants",
+    response_model=list[LeagueParticipant],
+    operation_id="listLeagueParticipants",
+    summary="Listar los participantes inscriptos en una liga",
+    responses={
+        401: {"model": Error},
+        403: {"model": LeagueAccessForbidden},
+        404: {"model": Error},
+    },
+)
+def list_league_participants(
+    id: str,
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    access: LeagueAccessService = Depends(get_league_access_service),
+    service: LeagueService = Depends(get_league_service),
+) -> list[LeagueParticipant]:
+    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
+    access.require_access(session.id, session.user_id, league)  # 403
+    return service.list_participants(league.id)
 
 
 @router.post(

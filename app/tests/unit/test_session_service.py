@@ -162,3 +162,27 @@ def test_delete_does_not_read_or_create(service, repo):
 
     repo.get_by_id.assert_not_called()
     repo.create.assert_not_called()
+
+
+# --- get_valid ----------------------------------------------------------------
+
+
+def test_get_valid_returns_the_session_if_not_expired(service, repo):
+    session = stored_session(NOW + timedelta(seconds=1), user_id=5)
+    repo.get_by_id.return_value = session
+
+    assert service.get_valid("sid") == session
+    repo.delete.assert_not_called()
+
+
+def test_get_valid_returns_none_if_missing(service, repo):
+    repo.get_by_id.return_value = None
+
+    assert service.get_valid("sid") is None
+
+
+def test_get_valid_returns_none_and_deletes_an_expired_session(service, repo):
+    repo.get_by_id.return_value = stored_session(NOW)
+
+    assert service.get_valid("sid") is None
+    repo.delete.assert_called_once_with("sid")

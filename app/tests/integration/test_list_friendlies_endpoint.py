@@ -128,7 +128,12 @@ def test_club1_has_username_club_name_and_avatar(api, create_user, make_friendly
     boss = create_user("mgonzalez", "Boca Juniors FC", avatar=3)
     make_friendly(boss)
     item = api.get("/friendlies").json()["items"][0]
-    assert item["club1"] == {"id": boss.id, "username": "mgonzalez", "name": "Boca Juniors FC", "avatar": 3}
+    assert item["club1"] == {
+        "id": boss.id,
+        "username": "mgonzalez",
+        "name": "Boca Juniors FC",
+        "avatar": 3,
+    }
     assert item["club2"] is None
 
 

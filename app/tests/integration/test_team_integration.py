@@ -15,6 +15,7 @@ from app.models.match import Match
 from app.models.player import Player
 from app.models.team_member import MemberRole, TeamMember
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
+from app.repositories.match_abstract import PenaltyShootoutData
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
 
@@ -185,6 +186,46 @@ def test_setup_data_has_both_club_names(db_session, league_match):
 
     assert (data.club_1_name, data.club_2_name) == ("club1", "club2")
     assert (data.user_1_id, data.user_2_id, data.league_id) == (1, 2, match.league_id)
+
+
+def test_starters_come_with_the_player_name(db_session, league_match):
+    match, teams = league_match
+    rows = SqlAlchemyTeamRepository(db_session).get_starters(match.id, match.league_id, 1)
+    names = {m.player_id: db_session.get(Player, m.player_id).name for m in teams[1]}
+
+    assert all(r.name == names[r.player_id] for r in rows)
+
+
+@pytest.mark.parametrize("allow_draws", [True, False])
+def test_setup_data_has_the_league_mode(db_session, league_match, allow_draws):
+    match, _ = league_match
+    match.league.allow_draws = allow_draws
+    db_session.commit()
+
+    data = SqlAlchemyMatchRepository(db_session).get_setup_data(match.id)
+    assert data.allow_draws is allow_draws
+
+
+def test_setup_data_of_a_friendly_allows_draws(db_session, make_user):
+    make_user(1), make_user(2)
+    match = Match(user_1_id=1, user_2_id=2)
+    db_session.add(match)
+    db_session.commit()
+
+    assert SqlAlchemyMatchRepository(db_session).get_setup_data(match.id).allow_draws is True
+
+
+def test_finish_saves_the_shootout(db_session, league_match):
+    match, _ = league_match
+    kick = {"club": "club1", "kickerId": 1, "kickerName": "p10", "round": 1, "scored": True}
+    shootout = PenaltyShootoutData(score_1=1, score_2=0, winner=1, kicks=[kick])
+
+    SqlAlchemyMatchRepository(db_session).finish(match.id, 2, 2, shootout)
+    db_session.refresh(match)
+
+    assert (match.score_1, match.score_2) == (2, 2)
+    assert (match.penalty_score_1, match.penalty_score_2, match.penalty_winner) == (1, 0, 1)
+    assert match.penalty_kicks == [kick]
 
 
 def test_setup_data_of_a_match_without_rival_has_no_second_club(db_session, make_user):

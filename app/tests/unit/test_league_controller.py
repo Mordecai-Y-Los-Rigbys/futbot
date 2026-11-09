@@ -10,6 +10,7 @@ ITEM_FIELDS = {
     "creator",
     "status",
     "participantsCount",
+    "minParticipants",
     "maxParticipants",
     "private",
     "createdAt",
@@ -110,7 +111,8 @@ def test_response_shape(auth_api, fake_repo, make_item):
     assert body["items"][0]["creator"] == {
         "id": 7,
         "username": "mgonzalez",
-        "name": "Boca Juniors FC", "avatar": 1,
+        "name": "Boca Juniors FC",
+        "avatar": 1,
     }
     assert body["items"][0]["createdAt"] == "2026-01-01T00:00:00Z"
     assert [i["status"] for i in body["items"]] == ["preparation", "cancelled"]

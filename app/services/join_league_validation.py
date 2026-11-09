@@ -22,16 +22,16 @@ from app.services.field_validation import (
 
 @dataclass(frozen=True)
 class JoinLeagueInput:
-    password: str | None  # None si la liga es pública (se ignora, convención 7)
+    password: str | None  # None si la liga es pública
     members: list[MemberInput]
     coach_behavior_id: int | None  # None: el equipo no tiene DT
     
 
 def _password_errors(body: dict, private: bool) -> FieldErrors:
     if not private:
-        return []  # liga pública: se ignora por completo, incluido el tipo
+        return []
     password = body.get("password")
-    if password is None:  # falta o es null
+    if password is None:
         return [field_error("password", "required")]
     if not isinstance(password, str):
         return [field_error("password", "invalidType")]

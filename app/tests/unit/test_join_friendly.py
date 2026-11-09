@@ -20,7 +20,6 @@ from app.services.league_validation import INVALID_JSON, MemberInput
 from app.tests.unit.member_cases import MEMBERS_IDS, MEMBERS_PARAMS, MISSING, err
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
 
-
 ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
 NOW = datetime(2026, 10, 4, 13, 0, tzinfo=timezone.utc)
 URL = "/friendlies/100/members"
@@ -186,8 +185,18 @@ def test_service_success_returns_the_match_schema(repo):
     assert dumped["id"] == 100
     assert dumped["name"] == "Partido amistoso 1"
     assert dumped["status"] == "scheduled"
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 3}
-    assert dumped["club2"] == {"id": 2, "username": "usuario2", "name": "Club Visitante", "avatar": 5}
+    assert dumped["club1"] == {
+        "id": 1,
+        "username": "usuario1",
+        "name": "Club Atletico",
+        "avatar": 3,
+    }
+    assert dumped["club2"] == {
+        "id": 2,
+        "username": "usuario2",
+        "name": "Club Visitante",
+        "avatar": 5,
+    }
     for k in ("leagueId", "scheduledAt", "result"):
         assert dumped[k] is None
     assert "2026-10-04T13:00:00Z" in out.model_dump_json(by_alias=True)

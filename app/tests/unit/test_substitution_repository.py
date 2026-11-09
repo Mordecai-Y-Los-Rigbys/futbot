@@ -21,33 +21,31 @@ def repo(db):
     return SqlAlchemySubstitutionRepository(db)
 
 
-def test_delete_first_per_team_deletes_the_min_id_of_each_team(repo, db):
-    db.scalars.return_value = [4, 9]
+def test_apply_pending_locks_the_match_row(repo, db):
+    db.execute.return_value.one_or_none.return_value = (1,)
 
-    assert repo.delete_first_per_team(1) == 2
+    repo.apply_pending(7)
 
-    stmt = db.execute.call_args.args[0]
-    sql = literal_sql(stmt)
-    assert "DELETE FROM substitutions" in sql
-    assert "IN (4, 9)" in sql
-    db.commit.assert_called_once()
+    assert "FOR UPDATE" in literal_sql(db.execute.call_args_list[0].args[0])
 
 
-def test_first_substitution_of_each_team_is_selected_by_min_id_per_user(repo, db):
-    db.scalars.return_value = []
+def test_list_applied_by_match_reads_the_applied_table(repo, db):
+    db.execute.return_value.all.return_value = []
 
-    repo.delete_first_per_team(7)
+    assert repo.list_applied_by_match(7) == []
 
-    sql = literal_sql(db.scalars.call_args.args[0])
-    assert "min(substitutions.id)" in sql
-    assert "JOIN team_members" in sql
-    assert "substitutions.match_id = 7" in sql  # solo ese partido
-    assert "GROUP BY team_members.user_id" in sql  # uno por equipo
+    sql = literal_sql(db.execute.call_args.args[0])
+    assert "FROM applied_substitutions" in sql
+    assert "applied_substitutions.match_id = 7" in sql
+    assert "ORDER BY applied_substitutions.user_id ASC" in sql
 
 
-def test_nothing_to_delete_skips_the_delete(repo, db):
-    db.scalars.return_value = []
+def test_list_by_match_filters_by_match_and_orders_by_team(repo, db):
+    db.execute.return_value.all.return_value = []
 
-    assert repo.delete_first_per_team(1) == 0
+    assert repo.list_by_match(7) == []
 
-    db.execute.assert_not_called()
+    sql = literal_sql(db.execute.call_args.args[0])
+    assert "substitutions.match_id = 7" in sql
+    assert "ORDER BY substitutions.user_id ASC" in sql
+
