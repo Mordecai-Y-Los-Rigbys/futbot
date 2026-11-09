@@ -91,7 +91,12 @@ class MatchSetupService:
     def _build_team(self, match: MatchSetupData, user_id: int) -> TeamSetup:
         # El repo ya resuelve de dónde sale el equipo (liga o partido) y
         # devuelve solo los titulares.
-        return build_team(self.teams.get_starters(match.id, match.league_id, user_id))
+        rows = self.teams.get_starters(match.id, match.league_id, user_id)
+        try:
+            return build_team(rows)
+        except ValueError as error:
+            # El runner loguea el id del partido: acá se suma de quién es el equipo.
+            raise ValueError(f"equipo del usuario {user_id}: {error}") from error
 
 
 def build_team(rows: list[StarterData]) -> TeamSetup:
