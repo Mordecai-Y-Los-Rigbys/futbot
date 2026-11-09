@@ -19,7 +19,6 @@ from app.services.friendly_expiry import FriendlyExpiryService
 from app.services.friendly_service import FriendlyService
 from app.services.friendly_start import FriendlyStartService
 
-
 router = APIRouter(prefix="/friendlies", tags=["friendlies"])
 
 

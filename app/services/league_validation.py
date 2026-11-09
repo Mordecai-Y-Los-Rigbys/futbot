@@ -5,7 +5,6 @@ from typing import Any, NoReturn
 from app.errors import ApiError
 from app.helpers.ids import MAX_ID
 
-
 INVALID_JSON = object()  # sentinel: el body no se pudo parsear
 
 MIN_PARTICIPANTS = 3

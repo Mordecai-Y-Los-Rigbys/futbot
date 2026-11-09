@@ -1,6 +1,7 @@
 """Loop en tiempo real: una tarea asyncio por partido, a 20 ticks por segundo."""
 
 import asyncio
+import dataclasses
 import logging
 import secrets
 import threading
@@ -12,7 +13,7 @@ from contextlib import AbstractContextManager
 from starlette.concurrency import run_in_threadpool
 
 from app.repositories.match_abstract import PenaltyShootoutData
-from app.repositories.substitution_abstract import AbstractSubstitutionRepository
+from app.repositories.substitution_abstract import AbstractSubstitutionRepository, AppliedSwap
 from app.services.match_broadcast import (
     SEND_TIMEOUT,
     TickContext,
@@ -20,10 +21,12 @@ from app.services.match_broadcast import (
     build_tick_payload,
     penalty_kick_record,
 )
-from app.simulation.behaviors.sandbox import CompiledBehavior
+from app.services.match_progress import MatchProgress
+from app.simulation.behaviors.sandbox import CompiledBehavior, compile_behavior
 from app.simulation import constants as C
-from app.simulation.match_rules import MatchSession, Phase, TickResult, build_session
-from app.simulation.state import Team
+from app.simulation.match_rules import Event, MatchSession, Phase, TickResult, build_session
+from app.simulation.physics import PlayerSetup
+from app.simulation.state import Stats, Team
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,7 @@ class MatchRunner:
         self._pending: dict[int, dict[int, CompiledBehavior]] = {}
         self._pending_lock = threading.Lock()
         self._on_match_finished = on_match_finished
+        self._progress: dict[int, MatchProgress] = {}
 
     def start(self, match_id: int) -> asyncio.Task:
         """Arranca el partido (idempotente). Hay que llamarlo con el event loop corriendo."""
@@ -98,6 +102,13 @@ class MatchRunner:
         task = self._tasks.get(match_id)
         return task is not None and not task.done()
 
+    def progress(self, match_id: int) -> MatchProgress | None:
+        """Fase y período del último tick emitido. None si el partido no se está
+        jugando en este proceso. Lo lee la API (ver MatchProgressReader)."""
+        if not self.is_running(match_id):
+            return None
+        return self._progress.get(match_id)
+
     async def shutdown(self) -> None:
         """Cancela los partidos en curso y apaga el pool de threads. Se llama al apagar la app."""
         tasks = list(self._tasks.values())
@@ -111,6 +122,7 @@ class MatchRunner:
             del self._tasks[match_id]
             with self._pending_lock:
                 self._pending.pop(match_id, None)
+            self._progress.pop(match_id, None)
 
     async def _run(self, match_id: int) -> None:
         try:
@@ -158,7 +170,6 @@ class MatchRunner:
     async def _play(self, match_id: int, session: MatchSession, context: TickContext) -> None:
         loop = asyncio.get_running_loop()
         started = False
-        previous_phase: Phase | None = None
         start = self._monotonic()
         while True:
             began = self._monotonic()
@@ -174,10 +185,12 @@ class MatchRunner:
                 await run_in_threadpool(self._mark_started, match_id)
                 started = True
 
-            if previous_phase is Phase.PAUSED and result.phase is not Phase.PAUSED:
-                # Terminó una pausa: se consume el cambio más antiguo de cada equipo.
-                await run_in_threadpool(self._end_pause, match_id)
-            previous_phase = result.phase
+            if result.event is Event.PAUSE:
+                # Empieza una pausa: se aplica la sustitución pendiente de cada equipo.
+                swaps = await run_in_threadpool(self._start_pause, match_id)
+                result = self._put_on_field(match_id, session, result, swaps)
+            # Después de aplicar los cambios: quien ve `paused` ya ve lo aplicado.
+            self._progress[match_id] = MatchProgress(result.phase, result.period, session.periods)
 
             finished = result.phase is Phase.FINISHED
             if finished:
@@ -199,12 +212,48 @@ class MatchRunner:
             repo.mark_started(match_id)
         self._notify(self._on_match_change, match_id)
 
-    def _end_pause(self, match_id: int) -> None:
+    def _start_pause(self, match_id: int) -> list[AppliedSwap]:
+        """Aplica en la base las sustituciones pendientes. Si falla, el partido sigue
+        sin cambios."""
         try:
             with self._substitution_scope() as repo:
-                repo.delete_first_per_team(match_id)
+                return repo.apply_pending(match_id)
         except Exception:
-            logger.exception("No se pudieron borrar los cambios del partido %s", match_id)
+            logger.exception("No se pudieron aplicar los cambios del partido %s", match_id)
+            return []
+
+    def _put_on_field(
+        self, match_id: int, session: MatchSession, result: TickResult, swaps: list[AppliedSwap]
+    ) -> TickResult:
+        """Pone en cancha a los suplentes que entran. Devuelve el tick con el estado
+        actualizado, así el primer tick de la pausa ya muestra a los que entraron."""
+        if not swaps:
+            return result
+        for swap in swaps:
+            incoming = swap.incoming
+            try:
+                session.substitute(
+                    Team.HOME if swap.club == "club1" else Team.AWAY,
+                    swap.out_player_id,
+                    PlayerSetup(
+                        incoming.player_id,
+                        incoming.role,
+                        Stats(
+                            power=incoming.power,
+                            agility=incoming.agility,
+                            control=incoming.control,
+                            strength=incoming.strength,
+                            speed=incoming.speed,
+                        ),
+                        incoming.name,
+                    ),
+                    compile_behavior(incoming.behavior_code),
+                )
+            except Exception:
+                logger.exception(
+                    "Partido %s: no se pudo poner en cancha a %s", match_id, incoming.player_id
+                )
+        return dataclasses.replace(result, state=session.state)
 
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
@@ -244,3 +293,4 @@ def _penalties_data(result: TickResult) -> PenaltyShootoutData | None:
         winner=1 if shootout.winner is Team.HOME else 2,
         kicks=[penalty_kick_record(kick) for kick in shootout.kicks],
     )
+

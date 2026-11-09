@@ -17,7 +17,6 @@ from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_timing import WS_TOKEN_TTL
 from app.services.friendly_expiry import FriendlyExpiryService
 
-
 pytestmark = pytest.mark.integration
 
 

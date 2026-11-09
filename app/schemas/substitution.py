@@ -1,11 +1,11 @@
 from app.schemas.base import CamelModel
 
 
-class SubstitutionResponse(CamelModel):
+class Substitution(CamelModel):
     starter_name: str
     substitute_name: str
 
 
-class NextSubstitutions(CamelModel):
-    club1: SubstitutionResponse | None
-    club2: SubstitutionResponse | None
+class Substitutions(CamelModel):
+    club1: Substitution | None
+    club2: Substitution | None
