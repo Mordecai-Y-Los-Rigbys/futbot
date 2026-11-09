@@ -19,6 +19,7 @@ def parse_create_behavior(body: Any) -> CreateBehaviorData:
     """
     if body is INVALID_JSON or not isinstance(body, dict):
         raise ValidationApiError([field_error(field, "required") for field in FIELDS])
+    body = _strip_name(body)
 
     reasons = {"name": _name_reason(body), "code": _string_reason(body, "code")}
     reasons["type"] = _type_reason(body)
@@ -27,6 +28,16 @@ def parse_create_behavior(body: Any) -> CreateBehaviorData:
         raise ValidationApiError(errors)
 
     return CreateBehaviorData(name=body["name"], code=body["code"], type=BehaviorType(body["type"]))
+
+
+def _strip_name(body: dict) -> dict:
+    """Saca los espacios de los extremos del nombre, como en los otros nombres del sistema.
+
+    Se recorta una sola vez: el largo, el nombre repetido y lo que se guarda usan este valor.
+    """
+    if isinstance(body.get("name"), str):
+        return {**body, "name": body["name"].strip()}
+    return body
 
 
 def _string_reason(body: dict, key: str) -> str | None:
@@ -41,7 +52,7 @@ def _name_reason(body: dict) -> str | None:
     reason = _string_reason(body, "name")
     if reason:
         return reason
-    if not body["name"].strip():
+    if not body["name"]:
         return "required"
     if len(body["name"]) > MAX_NAME_LEN:
         return "tooLong"
