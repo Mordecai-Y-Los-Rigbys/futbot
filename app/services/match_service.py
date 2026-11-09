@@ -1,6 +1,10 @@
 from app.domain.match import MatchStatus
 from app.errors import ApiError
-from app.repositories.match_abstract import AbstractMatchRepository, MatchDetailData
+from app.repositories.match_abstract import (
+    AbstractMatchRepository,
+    MatchDetailData,
+    PenaltyShootoutData,
+)
 from app.schemas.friendly import MatchResponse
 from app.services.friendly_service import to_match_club
 from app.services.league_access_service import LeagueAccessService
@@ -8,11 +12,25 @@ from app.services.league_access_service import LeagueAccessService
 MATCH_NOT_FOUND_MESSAGE = "El partido no existe."
 
 
+def _penalties(shootout: PenaltyShootoutData | None) -> dict | None:
+    if shootout is None:
+        return None
+    return {
+        "score1": shootout.score_1,
+        "score2": shootout.score_2,
+        "winner": "club1" if shootout.winner == 1 else "club2",
+        "kicks": shootout.kicks,
+    }
+
+
 def _result(match: MatchDetailData) -> dict | None:
     if match.status != MatchStatus.finished:
         return None
-    # TODO: penalties cuando el modelo Match guarde la tanda de penales.
-    return {"score1": match.score_1, "score2": match.score_2, "penalties": None}
+    return {
+        "score1": match.score_1,
+        "score2": match.score_2,
+        "penalties": _penalties(match.penalties),
+    }
 
 
 def _to_response(match: MatchDetailData) -> MatchResponse:
