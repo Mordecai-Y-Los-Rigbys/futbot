@@ -25,4 +25,5 @@ def get_global_ranking(
     _user_id: int = Depends(get_current_user_id),  # 401 antes que cualquier 400
     service: RankingService = Depends(get_ranking_service),
 ) -> GlobalRankingPage:
-    return service.get_global_ranking(page=parse_page_field(page), name=name or None)
+    return service.get_global_ranking(page=parse_page_field(page), name=name)
+

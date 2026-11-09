@@ -11,7 +11,6 @@ from sqlalchemy import (
     JSON,
     SmallInteger,
     String,
-    BigInteger,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -128,3 +127,4 @@ class Match(Base):
     penalty_score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_winner: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     penalty_kicks: Mapped[list | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+
