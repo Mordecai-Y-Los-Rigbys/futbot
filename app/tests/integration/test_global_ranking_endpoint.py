@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.domain.match import MatchStatus
 from app.models.match import Match
@@ -228,3 +229,21 @@ def test_endpoint_is_read_only(login_as, creator, public_league, add_match, user
     before = db_session.query(Match).count()
     get(login_as(creator))
     assert db_session.query(Match).count() == before
+
+
+# --- constraints de penales ----------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        dict(status=F, score_1=1, score_2=1, penalty_winner=1),  # falta el resultado de la tanda
+        dict(status=F, score_1=2, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=1, penalty_kicks=[]),  # no empató
+        dict(status=F, score_1=1, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=3, penalty_kicks=[]),
+    ],
+)
+def test_invalid_penalty_combinations_are_rejected(db_session, users, fields):
+    db_session.add(Match(user_1_id=users[0].id, user_2_id=users[1].id, **fields))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()

@@ -2,31 +2,8 @@ import pytest
 
 from app.api.deps import get_ranking_service
 from app.main import app
-from app.repositories.ranking_abstract import AbstractRankingRepository, ClubRankingData
 from app.services.ranking_service import PAGE_SIZE, RankingService
-
-
-class FakeRankingRepo(AbstractRankingRepository):
-    def __init__(self, clubs=None):
-        self.clubs = clubs or []
-
-    def list_club_totals(self):
-        return list(self.clubs)
-
-
-def club(id, name=None, wr=0, wp=0, d=0, l=0, gf=0, ga=0, avatar=1):
-    return ClubRankingData(
-        club_id=id,
-        name=name or f"Club {id}",
-        avatar=avatar,
-        won_regular=wr,
-        won_penalties=wp,
-        drawn=d,
-        lost=l,
-        goals_for=gf,
-        goals_against=ga,
-    )
-
+from app.tests.unit.repo_fakes import FakeRankingRepo, ranking_club as club
 
 def ranking(clubs, page=1, name=None):
     return RankingService(FakeRankingRepo(clubs)).get_global_ranking(page, name)

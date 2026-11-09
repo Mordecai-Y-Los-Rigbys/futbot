@@ -24,3 +24,11 @@ def id_reason(container: dict, key: str) -> str | None:
     if not 1 <= value <= MAX_ID:
         return "outOfRange"
     return None
+
+
+def string_reason(container: dict, key: str) -> str | None:
+    if key not in container:
+        return "required"
+    if not isinstance(container[key], str):  # incluye null
+        return "invalidType"
+    return None

@@ -13,7 +13,7 @@ from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
 )
-from app.repositories.substitution_abstract import AbstractSubstitutionRepository
+from app.repositories.substitution_abstract import AbstractSubstitutionRepository, AppliedSwap
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -90,11 +90,16 @@ class FakeMatchRepo(AbstractMatchRepository):
 
 class FakeSubstitutionRepo(AbstractSubstitutionRepository):
     def __init__(self):
-        self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
+        self.pause_starts: list[int] = []  # un elemento por cada pausa que empezó
+        self.swaps: list[AppliedSwap] = []  # lo que devuelve la próxima apply_pending
 
-    def list_first_per_team(self, match_id):
+    def list_by_match(self, match_id):
         return []
 
-    def delete_first_per_team(self, match_id):
-        self.pause_ends.append(match_id)
-        return 0
+    def list_applied_by_match(self, match_id):
+        return []
+
+    def apply_pending(self, match_id):
+        self.pause_starts.append(match_id)
+        swaps, self.swaps = self.swaps, []
+        return swaps

@@ -13,6 +13,7 @@ from app.repositories.league_abstract import (
     LeagueDetailData,
     LeagueListItemData,
     LeaguePageData,
+    LeagueFixtureData,
     LeagueParticipantData,
 )
 from app.services.league_service import LeagueService
@@ -32,6 +33,8 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         self.removed: list[tuple[int, int]] = []
         self.details: dict[int, LeagueDetailData] = {}
         self.detail_calls: list[tuple[int, int]] = []
+        self.fixtures: dict[int, LeagueFixtureData] = {}
+        self.fixture_calls: list[int] = []
         self.participant_lists: dict[int, list[LeagueParticipantData]] = {}
         self.participants_calls: list[int] = []
 
@@ -82,6 +85,10 @@ class FakeLeagueRepository(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
+    
+    def get_fixture(self, league_id):
+        self.fixture_calls.append(league_id)
+        return self.fixtures.get(league_id)
 
     def get_start_state(self, league_id):
         raise NotImplementedError
