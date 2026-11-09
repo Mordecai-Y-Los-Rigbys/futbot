@@ -64,6 +64,20 @@ def test_public_league_ignores_password_entirely(auth_api, fake_repo, pw):
     assert fake_repo.created[0].password is None
 
 
+def test_league_without_allow_draws_is_created_in_normal_mode(auth_api, fake_repo):
+    resp = post(auth_api, payload())
+    assert resp.status_code == 201
+    assert fake_repo.created[0].allow_draws is True
+    assert resp.json()["allowDraws"] is True
+
+
+def test_league_with_allow_draws_false_is_created_in_penalties_mode(auth_api, fake_repo):
+    resp = post(auth_api, payload(allowDraws=False))
+    assert resp.status_code == 201
+    assert fake_repo.created[0].allow_draws is False
+    assert resp.json()["allowDraws"] is False
+
+
 def test_boundaries_are_valid(auth_api):
     ok = payload(name="x" * 20, minParticipants=3, maxParticipants=3, matchDuration=10)
     assert post(auth_api, ok).status_code == 201
@@ -107,6 +121,9 @@ FIELD_CASES = [
     ({"private": True, "password": ""}, [err("password", "required")]),
     ({"private": True, "password": 123}, [err("password", "invalidType")]),
     ({"private": True, "password": "x" * 73}, [err("password", "tooLong")]),
+    ({"allowDraws": None}, [err("allowDraws", "invalidType")]),
+    ({"allowDraws": "false"}, [err("allowDraws", "invalidType")]),
+    ({"allowDraws": 0}, [err("allowDraws", "invalidType")]),
 ]
 
 
@@ -152,6 +169,7 @@ def test_all_failures_are_reported_in_schema_order(auth_api):
         matchDuration=99,
         private=True,
         password="",
+        allowDraws="si",
         members=TEAM[:5],
     )
     assert_errors(
@@ -162,6 +180,7 @@ def test_all_failures_are_reported_in_schema_order(auth_api):
             err("maxParticipants", "invalidType"),
             err("matchDuration", "outOfRange"),
             err("password", "required"),
+            err("allowDraws", "invalidType"),
             err("members", "invalidTeam"),
         ],
     )

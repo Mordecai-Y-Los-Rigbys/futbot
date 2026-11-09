@@ -193,6 +193,7 @@ class LeagueService:
                 match_duration=data.match_duration,
                 private=data.private,
                 password=data.password,  # None si es pública
+                allow_draws=data.allow_draws,
                 members=[
                     CreateLeagueMemberData(
                         player_id=m.player_id,
