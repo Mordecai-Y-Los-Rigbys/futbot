@@ -27,6 +27,7 @@ class CreateLeagueBadRequest(BaseModel):
     message: str
 
 
+
 class CreateLeagueConflict(BaseModel):
     code: Literal["playerOrBehaviorNotOwned"]
     message: str

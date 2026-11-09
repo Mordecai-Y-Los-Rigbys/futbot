@@ -19,6 +19,7 @@ from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnecti
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
+from app.repositories.ranking_sqlalchemy import SqlAlchemyRankingRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
@@ -36,6 +37,7 @@ from app.services.match_connection_service import MatchConnectionService
 from app.services.match_runner import MatchRunner
 from app.services.match_service import MatchService
 from app.services.player_service import PlayerService
+from app.services.ranking_service import RankingService
 from app.services.session_service import SessionService
 from app.services.substitution_service import SubstitutionService
 from app.services.user_service import UserService
@@ -91,6 +93,9 @@ def get_match_service(db: Session = Depends(get_db)) -> MatchService:
 
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
     return PlayerService(SqlAlchemyPlayerRepository(db))
+
+def get_ranking_service(db: Session = Depends(get_db)) -> RankingService:
+    return RankingService(SqlAlchemyRankingRepository(db))
 
 
 def get_session_service(db: Session = Depends(get_db)) -> SessionService:
