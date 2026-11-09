@@ -69,6 +69,7 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
         return [
             StarterData(
                 player_id=player.id,
+                name=player.name,
                 role=role,
                 power=player.power,
                 agility=player.agility,

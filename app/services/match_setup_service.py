@@ -36,6 +36,7 @@ class MatchSetup:
     # Dueños de cada equipo: el runner los usa para ubicar las sustituciones.
     user_1_id: int | None = None
     user_2_id: int | None = None
+    allow_draws: bool = True
 
 
 def to_player_setup(row: StarterData) -> PlayerSetup:
@@ -47,7 +48,7 @@ def to_player_setup(row: StarterData) -> PlayerSetup:
         strength=row.strength,
         speed=row.speed,
     )
-    return PlayerSetup(row.player_id, row.role, stats)
+    return PlayerSetup(row.player_id, row.role, stats, row.name)
 
 
 class MatchSetupService:
@@ -91,6 +92,7 @@ class MatchSetupService:
             pause_seconds=PAUSE_SECONDS,
             user_1_id=match.user_1_id,
             user_2_id=match.user_2_id,
+            allow_draws=match.allow_draws,
         )
 
     def _duration_minutes(self, match: MatchSetupData) -> int:

@@ -14,6 +14,7 @@ from app.tests.unit.repo_fakes import FakeLeagues, FakeTeams
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
     return StarterData(
         player_id=player_id,
+        name=f"Jugador {player_id}",
         role=role,
         power=60,
         agility=60,
@@ -36,6 +37,7 @@ def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData
         user_2_id=user_2_id,
         club_1_name="Club Uno",
         club_2_name=club_2,
+        allow_draws=allow_draws,
     )
 
 
@@ -56,6 +58,14 @@ def test_league_match_uses_the_league_duration_and_league_teams():
     assert leagues.calls == [5]
     assert teams.calls == [(1, 5, 1), (1, 5, 2)]
     assert (setup.club_1_name, setup.club_2_name) == ("Club Uno", "Club Dos")
+
+
+def test_league_mode_and_player_names_reach_the_setup():
+    service, _, _ = build(setup_data(league_id=5, allow_draws=False), durations={5: 2})
+    setup = service.load_match_setup(1)
+
+    assert setup.allow_draws is False
+    assert {p.name for p in setup.team_1.players} == {"Jugador 10", "Jugador 11", "Jugador 12"}
 
 
 def test_friendly_uses_the_fixed_duration_and_never_asks_the_league():
