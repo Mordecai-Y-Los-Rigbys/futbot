@@ -10,7 +10,7 @@ from app.services.league_validation import INVALID_JSON, REQUIRED_ROLES, TEAM_SI
 
 @dataclass(frozen=True)
 class JoinLeagueInput:
-    password: str | None  # None si la liga es pública 
+    password: str | None  # None si la liga es pública
     members: list[MemberInput]
     coach_behavior_id: int | None  # None: el equipo no tiene DT
 
@@ -25,9 +25,9 @@ def _role_reason(member: dict) -> str | None:
 
 def _password_errors(body: dict, private: bool) -> list[dict[str, str]]:
     if not private:
-        return [] 
+        return []
     password = body.get("password")
-    if password is None: 
+    if password is None:
         return [field_error("password", "required")]
     if not isinstance(password, str):
         return [field_error("password", "invalidType")]
@@ -94,7 +94,7 @@ def parse_join_league(body: Any, private: bool) -> JoinLeagueInput:
         ValidationApiError: 400 `invalidFields` con todos los campos que fallan.
     """
 
-    if body is INVALID_JSON or not isinstance(body, dict): 
+    if body is INVALID_JSON or not isinstance(body, dict):
         raise ValidationApiError(_unreadable_body_errors(private))
 
     errors = [

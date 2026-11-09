@@ -12,7 +12,6 @@ from app.repositories.match_expiry_abstract import (
 )
 from app.services.match_timing import MAX_FRIENDLY_WAIT
 
-
 EXPIRY_RETRIES = 3
 EXPIRY_RETRY_DELAY = 2.0  # segundos
 

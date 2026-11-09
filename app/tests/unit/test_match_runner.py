@@ -6,6 +6,9 @@ import threading
 from contextlib import contextmanager
 
 from app.services.match_broadcast import TickContext, build_tick_payload, _closing
+from app.repositories.substitution_abstract import AppliedSwap
+from app.repositories.team_abstract import StarterData
+from app.domain.team_member import MemberRole
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup
 from app.simulation import match_rules
@@ -292,35 +295,105 @@ def test_the_clock_does_not_advance_during_pauses_and_countdowns():
     assert ws.received[-1]["elapsedTime"] == 2  # 2 s de juego, sin contar las pausas
 
 
-def test_substitutions_are_consumed_when_each_pause_ends_before_the_next_countdown():
+def test_substitutions_are_applied_when_each_pause_starts_before_the_next_countdown():
     repo = FakeMatchRepo()
     substitutions = FakeSubstitutionRepo()
     seen = []
     ws = FakeWs(
         probe=lambda t: (
-            seen.append((t["event"]["periodNumber"], len(substitutions.pause_ends)))
-            if t["event"] and t["event"]["type"] == "periodStart"
+            seen.append((t["event"]["type"], len(substitutions.pause_starts)))
+            if t["event"] and t["event"]["type"] in ("pause", "periodStart")
             else None
         )
     )
     run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
-    assert substitutions.pause_ends == [1, 1, 1]
-    assert seen == [(1, 0), (2, 1), (3, 2), (4, 3)]
+    assert substitutions.pause_starts == [1, 1, 1]
+    # El cambio ya está aplicado en el primer tick de cada pausa (antes de transmitirlo).
+    assert seen == [
+        ("periodStart", 0),
+        ("pause", 1),
+        ("periodStart", 1),
+        ("pause", 2),
+        ("periodStart", 2),
+        ("pause", 3),
+        ("periodStart", 3),
+    ]
 
 
-def test_failure_deleting_substitutions_does_not_stop_the_match(caplog):
+def test_failure_applying_substitutions_does_not_stop_the_match(caplog):
     repo = FakeMatchRepo()
     substitutions = FakeSubstitutionRepo()
 
     def boom(match_id):
         raise RuntimeError("base caída")
 
-    substitutions.delete_first_per_team = boom
+    substitutions.apply_pending = boom
     ws = FakeWs()
     run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
     assert len(ws.received) == PAUSED_TOTAL
     assert ws.received[-1]["phase"] == "finished"
-    assert "No se pudieron borrar los cambios" in caplog.text
+    assert "No se pudieron aplicar los cambios" in caplog.text
+
+
+def swap_for_home_forward(player_id=99, out_player_id=HOME_FORWARD_ID):
+    return AppliedSwap(
+        club="club1",
+        out_player_id=out_player_id,
+        incoming=StarterData(
+            player_id=player_id,
+            name=f"Jugador {player_id}",
+            role=MemberRole.forward,
+            power=60,
+            agility=60,
+            control=60,
+            strength=60,
+            speed=60,
+            behavior_code="pass",
+        ),
+    )
+
+
+def test_the_substitute_is_on_the_field_from_the_first_tick_of_the_pause():
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward()]
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    ids = lambda t: {p["playerId"] for p in t["players"]}  # noqa: E731
+    pause_ticks = [t for t in ws.received if t["phase"] == "paused"]
+    assert HOME_FORWARD_ID in ids(ws.received[0])  # antes de la pausa juega el titular
+    assert 99 in ids(pause_ticks[0]) and HOME_FORWARD_ID not in ids(pause_ticks[0])
+    assert 99 in ids(ws.received[-1])  # sigue jugando hasta el final
+
+
+def test_a_substitution_that_cannot_be_put_on_the_field_is_logged_and_the_match_goes_on(caplog):
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward(out_player_id=12345)]  # no está en cancha
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+    assert ws.received[-1]["phase"] == "finished"
+    assert "no se pudo poner en cancha" in caplog.text
+
+
+def test_progress_reports_the_phase_and_period_of_the_last_tick():
+    runner = build(FakeManager([FakeWs()]), FakeMatchRepo(), **PAUSED)
+    seen = []
+
+    async def main():
+        task = runner.start(1)
+        while not task.done():
+            progress = runner.progress(1)
+            if progress is not None and (not seen or seen[-1] != progress):
+                seen.append(progress)
+            await asyncio.sleep(0)
+        await asyncio.gather(*list(_closing))
+
+    asyncio.run(main())
+    assert runner.progress(1) is None  # terminó: ya no se juega en este proceso
+    assert {p.periods for p in seen} == {4}
+    paused = [p for p in seen if p.phase is Phase.PAUSED]
+    # en una pausa, el período que terminó (nunca el último: no hay pausa después)
+    assert paused and {p.period for p in paused} <= {1, 2, 3}
 
 
 def test_late_subscriber_gets_the_current_pause_then_the_restarted_countdown_then_play():

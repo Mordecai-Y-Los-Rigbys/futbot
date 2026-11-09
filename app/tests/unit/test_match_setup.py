@@ -61,6 +61,12 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
+    
+    def get_fixture(self, league_id):
+        raise NotImplementedError
+
+    def list_participants(self, league_id):
+        raise NotImplementedError
 
     def get_start_state(self, league_id):
         raise NotImplementedError
@@ -77,6 +83,9 @@ class FakeTeams(AbstractTeamRepository):
     def get_starters(self, match_id, league_id, user_id):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
+
+    def get_lineup(self, match_id, league_id, user_id):
+        raise NotImplementedError
 
     def set_behavior(self, match_id, league_id, player_id, behavior_id):
         raise NotImplementedError
@@ -166,7 +175,7 @@ def test_league_that_does_not_exist_is_a_lookup_error():
 
 def test_team_without_starters_is_an_error():
     service, _, _ = build(setup_data(), starters={1: full_team(10), 2: []})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="equipo del usuario 2"):
         service.load_match_setup(1)
 
 

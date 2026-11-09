@@ -1,6 +1,6 @@
 """Revisar un partido sin levantar el servidor.
 
-    python -m app.simulation.run --seed 7 --duration 60
+python -m app.simulation.run --seed 7 --duration 60
 """
 
 import argparse
