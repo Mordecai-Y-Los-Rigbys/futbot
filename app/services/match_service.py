@@ -87,7 +87,7 @@ class MatchService:
         """
         return _to_response(self._get_visible(match_id, session_id, user_id))
 
-    def get_lineups(self, match_id: int, session_id: int, user_id: int) -> MatchLineups:
+    def get_lineups(self, match_id: int, session_id: str, user_id: int) -> MatchLineups:
         """Titulares de ambos clubes.
 
         Raises:
