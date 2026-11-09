@@ -28,10 +28,14 @@ def unlocked(db_session, api, league):
 
 def allowed(db_session, api, user, league):
     repo = SqlAlchemyLeagueAccessRepository(db_session)
-    return has_league_access(api.cookies.get("session_id"), user.id, repo.get_league(league.id), repo)
+    return has_league_access(
+        api.cookies.get("session_id"), user.id, repo.get_league(league.id), repo
+    )
 
 
-@pytest.mark.parametrize("raw", ["", "{", "null", "[]", "123", '"secret"', '{}', '{"password":null}', '{"other":1}'])
+@pytest.mark.parametrize(
+    "raw", ["", "{", "null", "[]", "123", '"secret"', "{}", '{"password":null}', '{"other":1}']
+)
 def test_required(access_case, raw, db_session):
     league, _, api = access_case
     response = api.post(f"/leagues/{league.id}/access", content=raw)
@@ -74,7 +78,9 @@ def test_401_before_id_and_body(client, cookie):
     assert client.post("/leagues/abc/access", content="{").status_code == 401
 
 
-def test_unlock_is_idempotent_and_isolated(access_case, db_session, login_as, make_league, create_user):
+def test_unlock_is_idempotent_and_isolated(
+    access_case, db_session, login_as, make_league, create_user
+):
     league, user, api = access_case
     another_session = login_as(user)
     another_league = make_league(create_user("owner2"), private=True)
@@ -85,7 +91,7 @@ def test_unlock_is_idempotent_and_isolated(access_case, db_session, login_as, ma
     assert allowed(db_session, api, user, league)
     assert not allowed(db_session, another_session, user, league)
     assert not allowed(db_session, api, user, another_league)
-    for raw in ['{"password":"secret"}', '{"password":"wrong"}', '{', '']:
+    for raw in ['{"password":"secret"}', '{"password":"wrong"}', "{", ""]:
         assert api.post(f"/leagues/{league.id}/access", content=raw).status_code == 204
     assert db_session.scalar(select(func.count()).select_from(SessionLeagueUnlock)) == 1
 
@@ -106,7 +112,9 @@ def test_body_ignored(role, raw, create_user, make_league, add_participant, logi
 
 
 @pytest.mark.parametrize("unlock_first", [False, True])
-def test_leave_preserves_only_existing_unlock(access_case, db_session, add_participant, unlock_first):
+def test_leave_preserves_only_existing_unlock(
+    access_case, db_session, add_participant, unlock_first
+):
     league, user, api = access_case
     add_participant(league, user)
     assert allowed(db_session, api, user, league)
@@ -261,6 +269,7 @@ def test_leaving_from_another_session_loses_access(
 
 def test_access_openapi_contract():
     from app.main import app
+
     operation = app.openapi()["paths"]["/leagues/{id}/access"]["post"]
     assert operation["operationId"] == "unlockLeague"
     assert {"204", "400", "401", "403", "404"} <= operation["responses"].keys()

@@ -140,8 +140,9 @@ class JoinLeagueConflict(BaseModel):
     message: str
 
 
-class NextSubstitutionsConflict(BaseModel):
-    code: Literal["matchNotStarted"]
+class SubstitutionsConflict(BaseModel):
+    # Se informa un solo motivo, el primero en este orden.
+    code: Literal["matchNotStarted", "matchInPenalties", "noPausesLeft"]
     message: str
 
 
