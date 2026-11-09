@@ -6,7 +6,9 @@ from app.repositories.match_abstract import AbstractMatchRepository
 from app.repositories.substitution_abstract import AbstractSubstitutionRepository
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.schemas.substitution import Substitution, Substitutions
+from app.services.match_progress import MatchProgressReader
 from app.services.substitution_validation import parse_substitute
+from app.simulation.match_rules import Phase
 
 CHECK_VIOLATION = "23514"
 
@@ -25,47 +27,73 @@ class SubstitutionService:
         matches: AbstractMatchRepository,
         teams: AbstractTeamRepository,
         substitutions: AbstractSubstitutionRepository,
-        runtime=None,
+        progress: MatchProgressReader,
     ) -> None:
         self.matches = matches
         self.teams = teams
         self.substitutions = substitutions
-        self.runtime = runtime
+        self.progress = progress
 
-    def _ensure_substitutable(self, match, match_id: int, *, allow_current_pause: bool = False):
+    def _ensure_substitutable(self, match, match_id: int, *, for_request: bool = False):
         """409 en este orden: matchNotStarted > matchInPenalties > noPausesLeft.
 
-        `pauses_left` cuenta las pausas que todavía NO empezaron. Con
-        `allow_current_pause` (el GET) estar dentro de una pausa alcanza: tiene
-        que poder mostrar lo aplicado en la última pausa. El PUT no lo pasa:
-        durante la última pausa no hay una siguiente donde aplicar el cambio.
-        Devuelve el estado de runtime.
+        Las pausas que todavía NO empezaron son `periods - period`, menos la
+        actual si el partido está en pausa. El GET (`for_request=False`) dentro
+        de una pausa siempre pasa: tiene que mostrar lo aplicado, incluso en la
+        última. El PUT necesita una pausa por empezar donde aplicar el cambio, y
+        un partido que no se juega en este proceso no la tiene: nadie lo aplicaría.
+
+        Devuelve el progreso del partido (None si no se juega en este proceso).
         """
         if match.status != MatchStatus.started:
             raise ApiError(409, "matchNotStarted", "El partido no está en juego.")
 
-        runtime = self.runtime.get_runtime_state(match_id) if self.runtime else None
-        if runtime is not None and runtime.in_penalties:
-            raise ApiError(409, "matchInPenalties", "El partido está en tanda de penales.")
+        progress = self.progress.progress(match_id)
+        if progress is None:
+            if for_request:
+                raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
+            return None
 
-        in_current_pause = allow_current_pause and runtime is not None and runtime.in_pause
-        if not in_current_pause and (runtime is None or runtime.pauses_left <= 0):
-            raise ApiError(409, "noPausesLeft", "No queda ninguna pausa por empezar.")
-        return runtime
+        paused = progress.phase is Phase.PAUSED
+        if progress.in_penalties:
+            raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
+
+        pauses_left = progress.periods - progress.period - (1 if paused else 0)
+        if pauses_left <= 0 and not (paused and not for_request):
+            raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
+        return progress
 
     def get_substitutions(self, user_id: int, match_id: int) -> Substitutions:
+        """Sustitución de cada equipo: la APLICADA si el partido está en pausa, la
+        PENDIENTE (la que se aplica en la próxima pausa) si no lo está.
+
+        Orden: 404 > 403 > 409, y dentro del 409:
+        matchNotStarted > matchInPenalties > noPausesLeft.
+
+        Raises:
+            ApiError 404: el partido no existe.
+            ApiError 403: el usuario no es uno de los dos jugadores.
+            ApiError 409: matchNotStarted (el partido no está `started`),
+                matchInPenalties (tanda de penales) o noPausesLeft (fuera de una
+                pausa y en el último período: no puede haber una pendiente;
+                durante la última pausa se responde 200 con la aplicada).
+        """
         match = self.matches.get_players(match_id)
         if match is None:
             raise ApiError(404, None, "El partido no existe.")
         if user_id not in (match.user_1_id, match.user_2_id):
             raise ApiError(403, None, "El partido no te pertenece.")
-        runtime = self._ensure_substitutable(match, match_id, allow_current_pause=True)
+        progress = self._ensure_substitutable(match, match_id)
 
-        # Durante una pausa: lo que se aplicó al empezarla. Fuera de pausa: lo pendiente.
-        by_user = {
-            i.user_id: i
-            for i in self.substitutions.list_by_match(match_id, applied=runtime.in_pause)
-        }
+        # progress None: el partido no se juega en este proceso. No sabemos la fase,
+        # así que se responde la pendiente y no se evalúa noPausesLeft.
+        paused = progress is not None and progress.phase is Phase.PAUSED
+        rows = (
+            self.substitutions.list_applied_by_match(match_id)
+            if paused
+            else self.substitutions.list_by_match(match_id)
+        )
+        by_user = {i.user_id: i for i in rows}
         return Substitutions(
             club1=_to_response(by_user.get(match.user_1_id)),
             club2=_to_response(by_user.get(match.user_2_id)),
@@ -117,7 +145,7 @@ class SubstitutionService:
         if not is_player:
             raise ApiError(403, None, "El usuario no juega este partido.")
 
-        self._ensure_substitutable(match, match_id)
+        self._ensure_substitutable(match, match_id, for_request=True)
 
         try:
             self.substitutions.upsert(

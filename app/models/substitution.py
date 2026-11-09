@@ -1,22 +1,17 @@
-from sqlalchemy import Boolean, CheckConstraint, DDL, ForeignKey, Integer, event, false
+from sqlalchemy import CheckConstraint, DDL, ForeignKey, Integer, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 
 class Substitution(Base):
-    """Una sustitución de un equipo en un partido.
+    """La sustitución PENDIENTE: la que un equipo pidió para la próxima pausa.
 
-    Cada equipo (usuario) tiene como máximo DOS por partido:
-    - una pendiente (`applied = False`): la que pidió para la próxima pausa.
-      Pedir otra antes de la pausa la reemplaza.
-    - una aplicada (`applied = True`): la que se aplicó al empezar la pausa en
-      curso. Se conserva hasta que termina la pausa, para que
-      GET /matches/{id}/substitutions muestre el cambio que ocurrió. Un PUT
-      hecho durante la pausa no la toca: queda como pendiente.
-
-    La PK (match_id, user_id, applied) hace cumplir "una de cada tipo por
-    equipo y partido".
+    Cada equipo (usuario) tiene como máximo UNA por partido: pedir otra antes
+    de la pausa reemplaza a la anterior. Al empezar la pausa se aplica: se
+    intercambian los roles en `team_members`, pasa a `applied_substitutions` y esta
+    fila se borra (un pedido hecho durante la pausa queda pendiente para la siguiente).
+    La PK (match_id, user_id) hace cumplir "una por equipo y partido".
 
     `member_in_id` es el integrante (fila de `team_members`) que entra y
     `member_out_id` el que sale. Los dos tienen que ser del equipo `user_id`.
@@ -32,9 +27,8 @@ class Substitution(Base):
         * `user_id` no es el dueño de los integrantes;
         * el equipo no es de ese partido (el usuario no es uno de los dos
           clubes, o el equipo es de otra liga/otro amistoso);
-        * los roles no corresponden al estado: una pendiente tiene al que
-          entra como `substitute` y al que sale como titular; una aplicada, al
-          revés (los roles ya se intercambiaron).
+        * los roles no corresponden a una pendiente: el que entra tiene que
+          ser `substitute` y el que sale, titular.
     """
 
     __tablename__ = "substitutions"
@@ -51,8 +45,36 @@ class Substitution(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
     )
-    applied: Mapped[bool] = mapped_column(
-        Boolean, primary_key=True, default=False, server_default=false()
+    member_in_id: Mapped[int] = mapped_column(
+        ForeignKey("team_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    member_out_id: Mapped[int] = mapped_column(
+        ForeignKey("team_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class AppliedSubstitution(Base):
+    """La sustitución APLICADA al empezar la última pausa de un partido.
+
+    Es lo que GET /matches/{id}/substitutions muestra mientras dura la pausa.
+    Al empezar la pausa siguiente se reemplaza por completo (un equipo sin
+    cambio pendiente queda sin fila). No necesita trigger: solo la escribe el
+    runner, copiando una `Substitution` ya validada.
+    """
+
+    __tablename__ = "applied_substitutions"
+    __table_args__ = (
+        CheckConstraint(
+            "member_in_id <> member_out_id",
+            name="ck_applied_substitutions_distinct_members",
+        ),
+    )
+
+    match_id: Mapped[int] = mapped_column(
+        ForeignKey("matches.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
     )
     member_in_id: Mapped[int] = mapped_column(
         ForeignKey("team_members.id", ondelete="CASCADE"), nullable=False, index=True
@@ -71,7 +93,7 @@ DECLARE
     t_in team_members%%ROWTYPE;
     t_out team_members%%ROWTYPE;
 BEGIN
-    -- El lock serializa los cambios de un mismo partido (también apply_by_match).
+    -- El lock serializa los cambios de un mismo partido (también apply_pending).
     SELECT * INTO m FROM matches WHERE id = NEW.match_id FOR UPDATE;
     SELECT * INTO t_in FROM team_members WHERE id = NEW.member_in_id;
     SELECT * INTO t_out FROM team_members WHERE id = NEW.member_out_id;
@@ -109,16 +131,9 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
-    IF NEW.applied THEN
-        IF t_in.role = 'substitute' OR t_out.role <> 'substitute' THEN
-            RAISE EXCEPTION 'substitution: los roles no corresponden a una sustitución aplicada'
-                USING ERRCODE = '23514';
-        END IF;
-    ELSE
-        IF t_in.role <> 'substitute' OR t_out.role = 'substitute' THEN
-            RAISE EXCEPTION 'substitution: los roles no corresponden a una sustitución pendiente'
-                USING ERRCODE = '23514';
-        END IF;
+    IF t_in.role <> 'substitute' OR t_out.role = 'substitute' THEN
+        RAISE EXCEPTION 'substitution: los roles no corresponden a una sustitución pendiente'
+            USING ERRCODE = '23514';
     END IF;
 
     RETURN NEW;

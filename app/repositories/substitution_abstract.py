@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -11,44 +12,41 @@ class SubstitutionData(BaseModel):
     substitute_name: str
 
 
-class AppliedSubstitution(BaseModel):
-    user_id: int  # equipo que hizo el cambio
-    incoming: StarterData  # el que entró: con el rol del titular que salió
+class AppliedSwap(BaseModel):
+    """Un cambio que acaba de aplicarse: lo que el motor necesita para ponerlo en cancha."""
+
+    club: Literal["club1", "club2"]
+    out_player_id: int  # el titular que sale
+    incoming: StarterData  # el suplente que entra, ya con el rol del que salió
 
 
 class AbstractSubstitutionRepository(ABC):
     @abstractmethod
-    def list_by_match(self, match_id: int, applied: bool) -> list[SubstitutionData]:
-        """La sustitución de cada equipo en el partido, a lo sumo una por equipo:
-        la aplicada en la pausa en curso (`applied=True`) o la pendiente para
-        la próxima pausa (`applied=False`). Un equipo sin sustitución de ese
-        tipo no aparece."""
+    def list_by_match(self, match_id: int) -> list[SubstitutionData]:
+        """La sustitución PENDIENTE de cada equipo en el partido (a lo sumo una
+        por equipo). Un equipo sin sustitución pendiente no aparece."""
 
     @abstractmethod
-    def apply_by_match(self, match_id: int) -> list[AppliedSubstitution]:
-        """Al empezar una pausa: aplica la sustitución pendiente de cada equipo,
-        o sea intercambia los roles del que sale y del que entra (cada uno
-        conserva su behavior) y la marca como aplicada. La fila aplicada sigue
-        en `substitutions` hasta que termine la pausa, así que un GET todavía
-        la muestra.
-
-        Antes de aplicar toma el lock del partido (serializa con los PUT) y
-        borra las aplicadas que hayan quedado de una pausa anterior.
-
-        Devuelve lo que necesita el motor para poner al suplente en cancha.
-        Es idempotente: una sustitución ya aplicada no se vuelve a aplicar.
-        """
+    def list_applied_by_match(self, match_id: int) -> list[SubstitutionData]:
+        """La sustitución APLICADA al empezar la última pausa (a lo sumo una por
+        equipo). Un equipo al que no se le aplicó ninguna no aparece."""
 
     @abstractmethod
-    def delete_applied_by_match(self, match_id: int) -> int:
-        """Al terminar una pausa: borra las sustituciones aplicadas de este
-        partido. Las pendientes (pedidas durante la pausa) se conservan.
-        Devuelve cuántas borró."""
+    def apply_pending(self, match_id: int) -> list[AppliedSwap]:
+        """Al empezar una pausa, en una sola transacción:
+
+        - descarta las aplicadas de la pausa anterior;
+        - aplica la pendiente de cada equipo: el suplente toma el rol del
+          titular y el titular pasa a suplente (en `team_members`);
+        - guarda lo aplicado y borra las pendientes.
+
+        Una pendiente que ya no es válida (el que sale ya no es titular o el que
+        entra ya no es suplente) se descarta sin aplicarse. Devuelve lo aplicado."""
 
     @abstractmethod
     def upsert(
         self, match_id: int, user_id: int, member_in_id: int, member_out_id: int
     ) -> None:
-        """Reemplaza la única sustitución pendiente de este equipo. No toca la
-        aplicada. Si los integrantes ya no corresponden a una pendiente
-        (cambió la alineación), propaga IntegrityError."""
+        """Reemplaza la única sustitución pendiente de este equipo. Si los
+        integrantes ya no corresponden a una pendiente (cambió la alineación),
+        propaga IntegrityError."""

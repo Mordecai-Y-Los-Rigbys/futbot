@@ -48,8 +48,13 @@ def _utc(created_at: datetime) -> datetime:
     return created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at
 
 
-def _club(user: User) -> FriendlyClubData:
-    return FriendlyClubData(id=user.id, username=user.username, club_name=user.club_name)
+def to_club_data(user: User) -> FriendlyClubData:
+    return FriendlyClubData(
+        id=user.id,
+        username=user.username,
+        club_name=user.club_name,
+        avatar=user.avatar,
+    )
 
 
 class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
@@ -93,7 +98,7 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
             id=match.id,
             name=match.name,
             status=match.status.value,
-            club1=_club(match.user_1),
+            club1=to_club_data(match.user_1),
             created_at=_utc(match.created_at),
         )
 
@@ -123,7 +128,7 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
                 id=m.id,
                 name=m.name,
                 status=m.status.value,
-                club1=_club(m.user_1),
+                club1=to_club_data(m.user_1),
                 created_at=_utc(m.created_at),
             )
             for m in matches
@@ -171,7 +176,7 @@ class SqlAlchemyFriendlyRepository(AbstractFriendlyRepository):
             id=match.id,
             name=match.name,
             status=match.status.value,
-            club1=_club(match.user_1),
-            club2=_club(match.user_2),
+            club1=to_club_data(match.user_1),
+            club2=to_club_data(match.user_2),
             created_at=_utc(match.created_at),
         )

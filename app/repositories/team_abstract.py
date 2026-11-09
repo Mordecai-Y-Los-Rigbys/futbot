@@ -32,3 +32,12 @@ class AbstractTeamRepository(ABC):
         self, match_id: int, league_id: int | None, user_id: int
     ) -> list[StarterData]:
         """Titulares del usuario: del equipo del partido (amistoso) o de la liga."""
+    @abstractmethod
+    def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:
+        """Titulares del usuario: del equipo del partido (amistoso) o de la liga."""
+
+    @abstractmethod
+    def set_behavior(
+        self, match_id: int, league_id: int | None, player_id: int, behavior_id: int
+    ) -> None:
+        """Le asigna el comportamiento al jugador en su equipo: el de la liga o el del amistoso."""

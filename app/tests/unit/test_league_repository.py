@@ -285,3 +285,53 @@ def test_get_detail_does_not_filter_by_status_or_privacy(repo, db):
     where = sql.split("WHERE", 1)[1]
     assert "status" not in where
     assert "private" not in where
+
+# --- list_participants --------------------------------------------------------
+
+
+def participant_row(id, username="mgonzalez", club_name="Boca Juniors FC", avatar=1):
+    return SimpleNamespace(id=id, username=username, club_name=club_name, avatar=avatar)
+
+
+def test_list_participants_maps_the_rows_in_order(repo, db):
+    db.execute.return_value.all.return_value = [
+        participant_row(3, "a", "Club A", 2),
+        participant_row(7, "b", "Club B", 5),
+    ]
+
+    result = repo.list_participants(5)
+
+    assert [(p.id, p.username, p.club_name, p.avatar) for p in result] == [
+        (3, "a", "Club A", 2),
+        (7, "b", "Club B", 5),
+    ]
+
+
+def test_list_participants_returns_empty_list_without_rows(repo, db):
+    assert repo.list_participants(5) == []
+
+
+def test_list_participants_is_a_single_query(repo, db):
+    repo.list_participants(5)
+    assert db.execute.call_count == 1
+
+
+def test_list_participants_filters_by_league_and_orders_by_user_id(repo, db):
+    repo.list_participants(5)
+
+    sql, params = compiled(db.execute.call_args.args[0])
+    assert "JOIN league_participants" in sql
+    assert "league_participants.league_id =" in sql
+    assert 5 in params.values()
+    assert "ORDER BY users.id ASC" in sql
+
+
+def test_list_participants_selects_only_the_user_club_fields(repo, db):
+    repo.list_participants(5)
+
+    sql, _ = compiled(db.execute.call_args.args[0])
+    selected = sql.split("FROM", 1)[0]
+    for column in ("users.id", "users.username", "users.club_name", "users.avatar"):
+        assert column in selected
+    assert "email" not in selected
+    assert "password" not in selected

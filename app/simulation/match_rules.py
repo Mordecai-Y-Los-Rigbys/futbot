@@ -150,6 +150,15 @@ class MatchSession:
         return self._finished
 
     @property
+    def periods(self) -> int:
+        return self._periods
+
+    @property
+    def state(self) -> MatchState:
+        """Estado actual. Cada tick lo reemplaza por uno nuevo: no se muta en el lugar."""
+        return self._state
+
+    @property
     def total_ticks(self) -> int:
         return sum(s.ticks for s in self._segments)
 
@@ -248,6 +257,54 @@ class MatchSession:
             result = self._play(seq, segment)
         self._last_phase = result.phase
         return result
+
+    def replace_behavior(self, player_id: int, behavior: CompiledBehavior) -> None:
+        """Reemplaza el comportamiento de un jugador en tiempo real."""
+        for player in self._state.players:
+            if player.player_id == player_id:
+                self._behaviors = {**self._behaviors, player.key: behavior}
+                return
+        raise ValueError(f"no hay jugador con id {player_id}")
+
+    def substitute(
+        self,
+        team: Team,
+        out_player_id: int,
+        incoming: PlayerSetup,
+        behavior: CompiledBehavior,
+    ) -> None:
+        """Cambia en cancha al titular `out_player_id` por `incoming`, que toma su rol.
+
+        Se llama en la pausa (el estado está congelado). Conserva la posición y
+        reinicia los cooldowns del que entra; el saque posterior a la pausa lo
+        vuelve a ubicar en su posición inicial. El estado se reemplaza por una copia:
+        los ticks ya emitidos no cambian.
+
+        Raises:
+            ValueError: el titular no está en cancha o `incoming` no tiene su rol.
+        """
+        index = next(
+            (
+                i
+                for i, p in enumerate(self._state.players)
+                if p.team is team and p.player_id == out_player_id
+            ),
+            None,
+        )
+        if index is None:
+            raise ValueError(f"no hay jugador con id {out_player_id} en el equipo {team.value}")
+        if incoming.role.number != self._state.players[index].number:
+            raise ValueError("el suplente tiene que tomar el rol del titular que sale")
+
+        state = copy.deepcopy(self._state)
+        player = state.players[index]
+        player.player_id = incoming.player_id
+        player.stats = incoming.stats
+        player.move = None
+        player.next_kick_tick = C.NO_KICK_COOLDOWN
+        player.regain_blocked_until = C.NOT_REGAIN_BLOCKED
+        self._state = state
+        self._behaviors = {**self._behaviors, player.key: behavior}
 
     def _restart(self) -> None:
         """Saque normal: posiciones iniciales, pelota libre y quieta, sin
@@ -384,3 +441,4 @@ def build_session(
         periods,
         pause_seconds,
     )
+
