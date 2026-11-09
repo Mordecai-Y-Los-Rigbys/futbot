@@ -21,6 +21,7 @@ from app.api.ws_deps import (
     get_match_runner,
 )
 from app.api.matches import router as matches_router
+from app.api.notifications import router as notifications_router
 from app.api.ranking import router as ranking_router
 from app.api.users import router as users_router
 
@@ -67,6 +68,7 @@ app.include_router(ws_leagues_router)
 app.include_router(ws_notifications_router)
 app.include_router(friendlies_router)
 app.include_router(matches_router)
+app.include_router(notifications_router)
 app.include_router(ranking_router)
 app.include_router(users_router)
 

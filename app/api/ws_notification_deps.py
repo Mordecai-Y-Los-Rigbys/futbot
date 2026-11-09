@@ -7,6 +7,7 @@ from app.repositories.notification_abstract import NotificationsState
 from app.repositories.notification_sqlalchemy import SqlAlchemyNotificationRepository
 from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 from app.services.notifications_channel import NotificationsHandshakeService, NotificationsManager
+from app.services.notifications_notifier import NotificationsNotifier
 from app.services.session_service import SessionService
 
 
@@ -19,6 +20,10 @@ _notifications_manager = NotificationsManager(_load_notifications_state)
 
 
 def get_notifications_manager() -> NotificationsManager:
+    return _notifications_manager
+
+
+def get_notifications_notifier() -> NotificationsNotifier:
     return _notifications_manager
 
 

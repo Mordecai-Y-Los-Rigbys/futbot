@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.ws_deps import get_match_runner
 from app.api.ws_league_deps import get_league_fixture_notifier, get_league_participants_notifier
+from app.api.ws_notification_deps import get_notifications_notifier
 from app.database import get_db
 from app.errors import ApiError
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
@@ -17,6 +18,7 @@ from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepo
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.match_connection_sqlalchemy import SqlAlchemyMatchConnectionRepository
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
+from app.repositories.notification_sqlalchemy import SqlAlchemyNotificationRepository
 from app.repositories.player_abstract import AbstractPlayerRepository
 from app.repositories.player_sqlalchemy import SqlAlchemyPlayerRepository
 from app.repositories.ranking_sqlalchemy import SqlAlchemyRankingRepository
@@ -36,6 +38,8 @@ from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.match_runner import MatchRunner
 from app.services.match_service import MatchService
+from app.services.notification_service import NotificationService
+from app.services.notifications_notifier import NotificationsNotifier
 from app.services.player_service import PlayerService
 from app.services.ranking_service import RankingService
 from app.services.session_service import SessionService
@@ -127,6 +131,13 @@ def get_match_behavior_service(
     return MatchBehaviorService(
         SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db), behaviors, runner
     )
+
+
+def get_notification_service(
+    db: Session = Depends(get_db),
+    notifier: NotificationsNotifier = Depends(get_notifications_notifier),
+) -> NotificationService:
+    return NotificationService(SqlAlchemyNotificationRepository(db), notifier)
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:
