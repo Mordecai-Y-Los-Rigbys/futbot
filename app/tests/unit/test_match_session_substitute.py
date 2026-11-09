@@ -23,7 +23,7 @@ def first_pause_tick(s):
 
 
 def incoming(player_id=99, role=MemberRole.forward):
-    return PlayerSetup(player_id, role, STATS)
+    return PlayerSetup(player_id, role, STATS, f"Jugador {player_id}")
 
 
 def test_substitute_takes_the_place_stats_and_behavior_of_the_starter():
@@ -35,6 +35,7 @@ def test_substitute_takes_the_place_stats_and_behavior_of_the_starter():
 
     forward = s.state.player((Team.HOME, 3))
     assert forward.player_id == 99 and forward.stats == STATS
+    assert forward.name == "Jugador 99"
     assert forward.role is MemberRole.forward
     assert {p.player_id for p in s.state.players} == {1, 2, 99, 11, 12, 13}
     assert s._behaviors[(Team.HOME, 3)] is behavior
@@ -78,3 +79,4 @@ def test_substitute_only_looks_in_the_given_team():
 
 def test_periods_property():
     assert session().periods == 4
+

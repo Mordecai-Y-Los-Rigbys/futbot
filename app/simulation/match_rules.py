@@ -249,6 +249,7 @@ class MatchSession:
         player = state.players[index]
         player.player_id = incoming.player_id
         player.stats = incoming.stats
+        player.name = incoming.name
         player.move = None
         player.next_kick_tick = C.NO_KICK_COOLDOWN
         player.regain_blocked_until = C.NOT_REGAIN_BLOCKED
@@ -430,3 +431,4 @@ def build_session(
         pause_seconds,
         allow_draws,
     )
+

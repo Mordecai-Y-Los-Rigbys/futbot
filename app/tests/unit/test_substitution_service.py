@@ -149,9 +149,7 @@ def test_a_match_with_a_single_period_has_no_pauses(matches, subs, progress):
 
 
 def test_in_penalties_is_409_and_goes_before_no_pauses_left(matches, subs, progress):
-    progress.progress.return_value = MatchProgress(
-        Phase.PLAYING, period=4, periods=4, in_penalties=True
-    )
+    progress.progress.return_value = MatchProgress(Phase.PENALTIES, period=4, periods=4)
     assert error_of(service(matches, subs, progress)) == (409, "matchInPenalties")
 
 
@@ -171,3 +169,4 @@ def test_without_progress_it_answers_the_pending_one(matches, subs, progress):
     ]
     out = service(matches, subs, progress).get_substitutions(1, 5)
     assert out.club1.starter_name == "P1"
+

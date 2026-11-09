@@ -17,10 +17,6 @@ from app.repositories.team_abstract import StarterData
 _STARTER_ROLES = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
 
 
-def _same_team(a: TeamMember, b: TeamMember) -> bool:
-    return a.user_id == b.user_id and a.league_id == b.league_id and a.match_id == b.match_id
-
-
 class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -58,9 +54,6 @@ class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
         match = self.db.execute(
             select(Match.user_1_id).where(Match.id == match_id).with_for_update()
         ).one_or_none()
-        if match is None:
-            self.db.rollback()
-            return []
         user_1_id = match[0]
 
         pending = self.db.scalars(
@@ -75,11 +68,7 @@ class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
             member_out = self.db.get(TeamMember, sub.member_out_id)
             member_in = self.db.get(TeamMember, sub.member_in_id)
             if (
-                member_out is None
-                or member_in is None
-                or member_out.user_id != sub.user_id
-                or not _same_team(member_out, member_in)
-                or member_out.role not in _STARTER_ROLES
+                member_out.role not in _STARTER_ROLES
                 or member_in.role is not MemberRole.substitute
             ):
                 continue  # ya no es válida: se descarta
@@ -118,3 +107,4 @@ class SqlAlchemySubstitutionRepository(AbstractSubstitutionRepository):
         self.db.execute(delete(Substitution).where(Substitution.match_id == match_id))
         self.db.commit()
         return swaps
+

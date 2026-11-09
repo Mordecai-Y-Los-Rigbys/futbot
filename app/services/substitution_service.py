@@ -57,7 +57,7 @@ class SubstitutionService:
         progress = self.progress.progress(match_id)
         paused = progress is not None and progress.phase is Phase.PAUSED
         if progress is not None:
-            if progress.in_penalties:
+            if progress.phase is Phase.PENALTIES:
                 raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
             if not paused and progress.period >= progress.periods:
                 raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
@@ -72,3 +72,4 @@ class SubstitutionService:
             club1=_to_response(by_user.get(match.user_1_id)),
             club2=_to_response(by_user.get(match.user_2_id)),
         )
+

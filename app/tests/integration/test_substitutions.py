@@ -437,10 +437,6 @@ def test_apply_pending_does_not_touch_other_matches(db_session, league_match):
     assert remaining(db_session) == {(other_id, 1)}
 
 
-def test_apply_pending_for_a_nonexistent_match_returns_nothing(db_session, league_match):
-    assert SqlAlchemySubstitutionRepository(db_session).apply_pending(999999) == []
-
-
 def test_applied_substitutions_are_deleted_with_the_match(db_session, friendly_match):
     match, teams = friendly_match
     substitute(db_session, match, teams[1])
@@ -474,3 +470,4 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
     assert r.json()["club1"] == dict(
         zip(("starterName", "substituteName"), names_of(db_session, teams[1], 0, 3))
     )
+

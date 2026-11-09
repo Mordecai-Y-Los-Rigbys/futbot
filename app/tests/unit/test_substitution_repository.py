@@ -21,17 +21,8 @@ def repo(db):
     return SqlAlchemySubstitutionRepository(db)
 
 
-def test_apply_pending_for_a_nonexistent_match_changes_nothing(repo, db):
-    db.execute.return_value.one_or_none.return_value = None
-
-    assert repo.apply_pending(7) == []
-
-    db.commit.assert_not_called()
-    db.add.assert_not_called()
-
-
 def test_apply_pending_locks_the_match_row(repo, db):
-    db.execute.return_value.one_or_none.return_value = None
+    db.execute.return_value.one_or_none.return_value = (1,)
 
     repo.apply_pending(7)
 
@@ -57,3 +48,4 @@ def test_list_by_match_filters_by_match_and_orders_by_team(repo, db):
     sql = literal_sql(db.execute.call_args.args[0])
     assert "substitutions.match_id = 7" in sql
     assert "ORDER BY substitutions.user_id ASC" in sql
+

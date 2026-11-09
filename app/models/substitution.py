@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, DDL, ForeignKey, Integer, event
+from sqlalchemy import CheckConstraint, DDL, ForeignKey, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -156,3 +156,4 @@ event.listen(
     "after_drop",
     DDL("DROP FUNCTION IF EXISTS validate_substitution()").execute_if(**_postgres),
 )
+
