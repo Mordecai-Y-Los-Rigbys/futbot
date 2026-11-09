@@ -6,6 +6,7 @@ que incumple y su ubicación, para que el cliente lo pueda señalar en el editor
 """
 
 import ast
+import re
 from dataclasses import dataclass
 
 from app.domain.behavior import BehaviorType, CodeRule
@@ -18,6 +19,8 @@ from app.simulation.behaviors.sandbox import ALLOWED_NODES, FORBIDDEN_NAME_PREFI
 
 MAX_CODE_LINES = 250
 MAX_CODE_CHARS = 20000
+# Los mismos saltos de línea que reconoce Python: `\r\n`, `\r` solo y `\n`.
+LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
 # Primitivas que puede llamar cada tipo. El DT todavía no tiene primitivas propias.
 CALLABLE_PRIMITIVES = {
@@ -91,10 +94,10 @@ class CodeViolation:
 def is_code_too_long(code: str) -> bool:
     """Más de MAX_CODE_LINES líneas o más de MAX_CODE_CHARS caracteres.
 
-    Un salto de línea al final no agrega una línea. Un `\r\n` cuenta como un solo
-    salto porque se separa por `\n`.
+    Un salto de línea al final no agrega una línea. Los saltos se cuentan como en
+    Python: `\r\n` es uno solo, y un `\r` solo también es un salto.
     """
-    lines = code.split("\n")
+    lines = LINE_BREAK.split(code)
     if lines[-1] == "":
         lines.pop()
     return len(lines) > MAX_CODE_LINES or len(code) > MAX_CODE_CHARS
@@ -114,7 +117,7 @@ def find_code_violation(code: str, behavior_type: BehaviorType) -> CodeViolation
             CodeRule.syntax_error, 1, 1, "error de sintaxis: Python no puede leer el código"
         )
 
-    lines = code.split("\n")
+    lines = LINE_BREAK.split(code)
     first: tuple[tuple[int, int], CodeRule, str] | None = None
     for node, position, is_decorator in _walk(tree):
         if is_decorator:
@@ -126,9 +129,25 @@ def find_code_violation(code: str, behavior_type: BehaviorType) -> CodeViolation
             first = (position, *found)
 
     if first is None:
-        return None
+        return _compile_violation(tree, lines)
     (line, byte_offset), rule, detail = first
     return _violation(rule, line, _char_column(lines, line, byte_offset), detail)
+
+
+def _compile_violation(tree: ast.Module, lines: list[str]) -> CodeViolation | None:
+    """Errores que Python encuentra recién al compilar.
+
+    `compile` arma el bytecode sin ejecutarlo. Va al final para que los errores que ya
+    tienen su propia regla (por ejemplo, `yield` o `return`) se informen con esa regla.
+    """
+    try:
+        compile(tree, "<behavior>", "exec")
+    except SyntaxError as error:
+        # Al compilar un árbol, el offset viene en bytes (al parsear, en caracteres).
+        line = error.lineno or 1
+        column = _char_column(lines, line, (error.offset or 1) - 1)
+        return _violation(CodeRule.syntax_error, line, column, f"error de sintaxis: {error.msg}")
+    return None
 
 
 def _rule_for(node: ast.AST, behavior_type: BehaviorType) -> tuple[CodeRule, str] | None:
