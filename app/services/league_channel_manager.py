@@ -33,6 +33,8 @@ class LeagueChannelSpec:
 
     # Recibe el estado y el user_id de la conexión
     build_payload: Callable[[Any, int], dict]
+    # Estados en los que se envía el último mensaje y se cierra con 1000 + reason.
+    close_reasons: Mapping[LeagueStatus, str]
 
 
 def _utcnow() -> datetime:
