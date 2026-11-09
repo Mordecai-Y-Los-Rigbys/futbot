@@ -71,7 +71,9 @@ def access():
 
 @pytest.fixture()
 def teams():
-    return create_autospec(AbstractTeamRepository, instance=True)
+    repo = create_autospec(AbstractTeamRepository, instance=True)
+    repo.get_lineup.return_value = []
+    return repo
 
 
 @pytest.fixture()
@@ -79,51 +81,66 @@ def service(matches, access, teams):
     return MatchService(matches, access, teams)
 
 
-def error_of(service, user_id=OUTSIDER):
-    with pytest.raises(ApiError) as e:
-        service.get_match(5, "sid", user_id)
-    return e.value.status_code, e.value.code
+def get_match(service, user_id):
+    return service.get_match(5, "sid", user_id)
 
 
-def test_nonexistent_match_is_404(service, matches, access):
+def get_lineups(service, user_id):
+    return service.get_lineups(5, "sid", user_id)
+
+
+# Las reglas de acceso son las mismas en los dos métodos (pasan por _get_visible).
+BOTH_METHODS = pytest.mark.parametrize(
+    "call", [get_match, get_lineups], ids=["get_match", "get_lineups"]
+)
+
+
+def error_of(call, service, user_id=OUTSIDER):
+    with pytest.raises(ApiError) as error:
+        call(service, user_id)
+    return error.value.status_code, error.value.code
+
+
+@BOTH_METHODS
+def test_nonexistent_match_is_404(call, service, matches, access, teams):
     matches.get_detail.return_value = None
-    assert error_of(service) == (404, None)
+    assert error_of(call, service) == (404, None)
     access.require_access.assert_not_called()
+    teams.get_lineup.assert_not_called()
 
 
+@BOTH_METHODS
 @pytest.mark.parametrize("league", [None, PRIVATE], ids=["amistoso", "liga privada"])
 @pytest.mark.parametrize("user_id", [1, 2])
-def test_players_see_their_match(service, matches, access, league, user_id):
+def test_players_see_their_match(call, service, matches, access, league, user_id):
     matches.get_detail.return_value = detail(league=league)
-    assert service.get_match(5, "sid", user_id).id == 5
+    call(service, user_id)
     access.require_access.assert_not_called()
 
 
-def test_waiting_friendly_creator_sees_it(service, matches):
-    matches.get_detail.return_value = detail(club2=None)
-    out = service.get_match(5, "sid", 1)
-    assert out.club2 is None
-    assert out.result is None
-
-
+@BOTH_METHODS
 @pytest.mark.parametrize("club2", [club(2), None], ids=["con rival", "sin rival"])
-def test_friendly_outsider_is_403_not_a_player(service, matches, access, club2):
+def test_friendly_outsider_is_403_not_a_player(call, service, matches, access, teams, club2):
     matches.get_detail.return_value = detail(club2=club2)
-    assert error_of(service) == (403, "notAPlayerInMatch")
+    assert error_of(call, service) == (403, "notAPlayerInMatch")
     access.require_access.assert_not_called()
+    teams.get_lineup.assert_not_called()
 
 
+@BOTH_METHODS
 @pytest.mark.parametrize("league", [PUBLIC, PRIVATE], ids=["pública", "privada"])
-def test_league_outsider_asks_league_access(service, matches, access, league):
+def test_league_spectator_with_access_sees_it(call, service, matches, access, league):
     matches.get_detail.return_value = detail(league=league)
-    assert service.get_match(5, "sid", OUTSIDER).id == 5
+    call(service, OUTSIDER)
     access.require_access.assert_called_once_with("sid", OUTSIDER, league)
 
 
-def test_league_access_error_passes_through(service, matches, access):
+@BOTH_METHODS
+def test_private_league_without_access_is_403(call, service, matches, access, teams):
     matches.get_detail.return_value = detail(league=PRIVATE)
     access.require_access.side_effect = ApiError(403, "leagueAccessRequired", "x")
-    assert error_of(service) == (403, "leagueAccessRequired")
+    assert error_of(call, service) == (403, "leagueAccessRequired")
+    teams.get_lineup.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -222,9 +239,11 @@ def test_lineups_of_a_waiting_friendly_have_no_second_club(service, matches, tea
     teams.get_lineup.assert_called_once_with(5, None, 1)
 
 
-def test_non_player_cannot_see_friendly_lineups(service, matches, teams):
-    matches.get_detail.return_value = detail()
-    with pytest.raises(ApiError) as error:
-        service.get_lineups(5, "sid", OUTSIDER)
-    assert (error.value.status_code, error.value.code) == (403, "notAPlayerInMatch")
-    teams.get_lineup.assert_not_called()
+@pytest.mark.parametrize("status", list(MatchStatus))
+def test_lineups_do_not_depend_on_match_status(service, matches, teams, status):
+    matches.get_detail.return_value = detail(status=status)
+    teams.get_lineup.side_effect = lambda match_id, league_id, user_id: starters(user_id)
+
+    lineups = service.get_lineups(5, "sid", 1).model_dump()
+
+    assert lineups == {"club1": lineup_of(1), "club2": lineup_of(2)}

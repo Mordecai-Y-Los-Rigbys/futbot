@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_match_service, get_session_service
+from app.errors import ApiError
 from app.main import app
 from app.schemas.lineup import LineupPlayer, MatchLineups
 from app.services.match_service import MatchService
@@ -67,3 +68,20 @@ def test_invalid_id_is_404(client, service, invalid_id):
     response = client.get(f"/matches/{invalid_id}/lineups")
     assert response.status_code == 404 and response.json()["code"] is None
     service.get_lineups.assert_not_called()
+
+
+def test_club2_is_serialized_when_present(client, service):
+    client.cookies.set("session_id", "ok")
+    service.get_lineups.return_value = lineups(
+        club2=[LineupPlayer(player_id=13, name="Rival", role="forward")]
+    )
+    response = client.get("/matches/5/lineups")
+    assert response.json()["club2"] == [{"playerId": 13, "name": "Rival", "role": "forward"}]
+
+
+@pytest.mark.parametrize("code", ["notAPlayerInMatch", "leagueAccessRequired"])
+def test_service_403_passes_through(client, service, code):
+    client.cookies.set("session_id", "ok")
+    service.get_lineups.side_effect = ApiError(403, code, "Sin acceso.")
+    response = client.get("/matches/5/lineups")
+    assert (response.status_code, response.json()["code"]) == (403, code)
