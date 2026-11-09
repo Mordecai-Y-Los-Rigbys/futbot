@@ -22,13 +22,15 @@ from app.schemas.errors import (
     Error,
     JoinLeagueConflict,
     JoinLeagueForbidden,
+    LeagueDataConflict,
     LeaveLeagueConflict,
     ListPageBadRequest,
     StartLeagueConflict,
     ValidationBadRequest,
 )
-from app.schemas.league_access import LeagueAccessForbidden
+from app.schemas.friendly import MatchResponse
 from app.schemas.league import LeagueDetail, LeaguePage, LeagueParticipant, LeagueSummary
+from app.schemas.league_access import LeagueAccessForbidden
 from app.services.league_access_service import LeagueAccessService
 from app.services.league_match_start import LeagueMatchStartService
 from app.services.league_service import LeagueService, LEAGUE_NOT_FOUND_MESSAGE
@@ -162,6 +164,29 @@ def list_league_participants(
     league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
     access.require_access(session.id, session.user_id, league)  # 403
     return service.list_participants(league.id)
+
+
+@router.get(
+    "/{id}/fixture",
+    response_model=list[MatchResponse],
+    operation_id="getLeagueFixture",
+    summary="Obtener el fixture de una liga",
+    responses={
+        401: {"model": Error},
+        403: {"model": LeagueAccessForbidden},
+        404: {"model": Error},
+        409: {"model": LeagueDataConflict},
+    },
+)
+def get_league_fixture(
+    id: str,
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    access: LeagueAccessService = Depends(get_league_access_service),
+    service: LeagueService = Depends(get_league_service),
+) -> list[MatchResponse]:
+    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
+    access.require_access(session.id, session.user_id, league)  # 403
+    return service.get_fixture(league.id)  # 409
 
 
 @router.post(

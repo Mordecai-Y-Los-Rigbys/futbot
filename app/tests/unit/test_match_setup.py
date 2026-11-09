@@ -61,6 +61,9 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
+    
+    def get_fixture(self, league_id):
+        raise NotImplementedError
 
     def list_participants(self, league_id):
         raise NotImplementedError
