@@ -341,6 +341,7 @@ def swap_for_home_forward(player_id=99, out_player_id=HOME_FORWARD_ID):
         out_player_id=out_player_id,
         incoming=StarterData(
             player_id=player_id,
+            name=f"Jugador {player_id}",
             role=MemberRole.forward,
             power=60,
             agility=60,
