@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session
 from app.models.behavior import Behavior
 from app.models.player import Player
 from app.models.team_member import MemberRole, TeamMember
-from app.repositories.team_abstract import AbstractTeamRepository, StarterData
+from app.repositories.team_abstract import (
+    AbstractTeamRepository,
+    LineupPlayerData,
+    StarterData,
+)
 
 
 def _team_owner(match_id: int, league_id: int | None):
@@ -43,6 +47,24 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
                 behavior_code=behavior_code,
             )
             for role, player, behavior_code in rows
+        ]
+
+    def get_lineup(
+        self, match_id: int, league_id: int | None, user_id: int
+    ) -> list[LineupPlayerData]:
+        rows = self.db.execute(
+            select(Player.id, Player.name, TeamMember.role)
+            .join(Player, Player.id == TeamMember.player_id)
+            .where(
+                _team_owner(match_id, league_id),
+                TeamMember.user_id == user_id,
+                TeamMember.role != MemberRole.substitute,
+            )
+        ).all()
+
+        return [
+            LineupPlayerData(player_id=player_id, name=name, role=role)
+            for player_id, name, role in rows
         ]
 
     def set_behavior(
