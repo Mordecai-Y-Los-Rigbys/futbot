@@ -90,32 +90,19 @@ def create_initial_state(
         if sorted(s.role.number for s in setups) != sorted(r.number for r in C.STARTER_ROLES):
             raise ValueError(f"{team.value}: se necesita un defensa, un medio y un delantero")
         for setup in sorted(setups, key=lambda s: s.role.number):
-            players.append(_new_player(team, setup))
+            players.append(
+                PlayerState(
+                    player_id=setup.player_id,
+                    team=team,
+                    role=setup.role,
+                    stats=setup.stats,
+                    position=ZERO,
+                    facing=_attack_direction(team),
+                    name=setup.name,
+                )
+            )
     state = MatchState(players=players, ball=BallState(position=ZERO), seed=seed)
     return reset_positions(state)
-
-
-def single_player_state(setup: PlayerSetup) -> MatchState:
-    """Estado de la prueba de un comportamiento: un único jugador de club1, sin
-    compañeros ni rival, en la posición de su rol, y la pelota libre en el
-    centro. Con un solo jugador nunca hay desempates, así que la semilla no se usa."""
-    state = MatchState(
-        players=[_new_player(Team.HOME, setup)], ball=BallState(position=ZERO), seed=0
-    )
-    return reset_positions(state)
-
-
-def _new_player(team: Team, setup: PlayerSetup) -> PlayerState:
-    """Jugador recién creado. La posición la pone reset_positions."""
-    return PlayerState(
-        player_id=setup.player_id,
-        team=team,
-        role=setup.role,
-        stats=setup.stats,
-        position=ZERO,
-        facing=_attack_direction(team),
-        name=setup.name,
-    )
 
 
 def reset_positions(state: MatchState) -> MatchState:
