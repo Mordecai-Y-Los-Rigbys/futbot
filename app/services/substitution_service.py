@@ -37,10 +37,10 @@ class SubstitutionService:
     def _ensure_substitutable(self, match, match_id: int, *, for_request: bool = False):
         """409 en este orden: matchNotStarted > matchInPenalties > noPausesLeft.
 
-        Las pausas que todavía NO empezaron son `periods - period`, menos la
-        actual si el partido está en pausa. El GET (`for_request=False`) dentro
-        de una pausa siempre pasa: tiene que mostrar lo aplicado, incluso en la
-        última. El PUT necesita una pausa por empezar donde aplicar el cambio, y
+        `noPausesLeft` es `pauses_left == 0`, el mismo valor que viaja como
+        `pausesLeft` en el tick (no cuenta la pausa en curso): una sola regla,
+        sin recalcularla acá. El GET (`for_request=False`) dentro de una pausa
+        siempre pasa: tiene que mostrar lo aplicado, incluso en la última. El PUT necesita una pausa por empezar donde aplicar el cambio, y
         un partido que no se juega en este proceso no la tiene: nadie lo aplicaría.
 
         Devuelve el progreso del partido (None si no se juega en este proceso).
@@ -58,8 +58,7 @@ class SubstitutionService:
         if progress.in_penalties:
             raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
 
-        pauses_left = progress.periods - progress.period - (1 if paused else 0)
-        if pauses_left <= 0 and not (paused and not for_request):
+        if progress.pauses_left == 0 and not (paused and not for_request):
             raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
         return progress
 
