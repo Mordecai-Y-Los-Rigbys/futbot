@@ -11,4 +11,4 @@ class LineupPlayer(CamelModel):
 
 class MatchLineups(CamelModel):
     club1: list[LineupPlayer]
-    club2: list[LineupPlayer] | None = None
+    club2: list[LineupPlayer] | None

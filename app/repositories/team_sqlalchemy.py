@@ -52,7 +52,6 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
     def get_lineup(
         self, match_id: int, league_id: int | None, user_id: int
     ) -> list[LineupPlayerData]:
-
         rows = self.db.execute(
             select(Player.id, Player.name, TeamMember.role)
             .join(Player, Player.id == TeamMember.player_id)
