@@ -28,6 +28,11 @@ def test_a_name_at_the_length_limit_is_valid():
     assert parse_create_behavior({**VALID, "name": "a" * MAX_NAME_LEN}).name == "a" * MAX_NAME_LEN
 
 
+def test_the_spaces_around_the_name_do_not_count_and_are_removed():
+    name = "  " + "a" * MAX_NAME_LEN + " "
+    assert parse_create_behavior({**VALID, "name": name}).name == "a" * MAX_NAME_LEN
+
+
 @pytest.mark.parametrize("body", [INVALID_JSON, None, [], "texto"], ids=repr)
 def test_an_unreadable_body_has_the_three_fields_required(body):
     assert errors_of(body) == [

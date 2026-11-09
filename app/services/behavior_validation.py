@@ -19,6 +19,7 @@ def parse_create_behavior(body: Any) -> CreateBehaviorData:
         ValidationApiError: 400 con todos los campos que fallan, en el orden del schema.
     """
     _ensure_object(body, CREATE_FIELDS)
+    body = _strip_name(body)
     _raise_errors(
         CREATE_FIELDS,
         {
@@ -53,6 +54,16 @@ def _raise_errors(fields: tuple[str, ...], reasons: dict[str, str | None]) -> No
         raise ValidationApiError(errors)
 
 
+def _strip_name(body: dict) -> dict:
+    """Saca los espacios de los extremos del nombre, como en los otros nombres del sistema.
+
+    Se recorta una sola vez: el largo, el nombre repetido y lo que se guarda usan este valor.
+    """
+    if isinstance(body.get("name"), str):
+        return {**body, "name": body["name"].strip()}
+    return body
+
+
 def _string_reason(body: dict, key: str) -> str | None:
     if key not in body:
         return "required"
@@ -65,7 +76,7 @@ def _name_reason(body: dict) -> str | None:
     reason = _string_reason(body, "name")
     if reason:
         return reason
-    if not body["name"].strip():
+    if not body["name"]:
         return "required"
     if len(body["name"]) > MAX_NAME_LEN:
         return "tooLong"

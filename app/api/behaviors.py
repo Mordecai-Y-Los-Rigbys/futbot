@@ -30,8 +30,8 @@ router = APIRouter(prefix="/behaviors", tags=["behaviors"])
     },
 )
 def create_behavior(
-    user_id: int = Depends(get_current_user_id),
-    body: Any = Depends(get_json_body),  # depende de la sesión: 401 antes que 400
+    user_id: int = Depends(get_current_user_id),  # se resuelve antes: 401 gana sobre 400
+    body: Any = Depends(get_json_body),
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
     return BehaviorDetail.model_validate(service.create_behavior(user_id, body))
