@@ -1,4 +1,5 @@
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.behavior import Behavior, BehaviorType
@@ -6,6 +7,7 @@ from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
     CreateBehaviorData,
+    DuplicateBehaviorNameError,
 )
 
 
@@ -42,10 +44,32 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
         return BehaviorData.model_validate(record) if record is not None else None
 
     def create_many(self, user_id: int, behaviors: list[CreateBehaviorData]) -> list[BehaviorData]:
-        records = [Behavior(user_id=user_id, name=b.name, code=b.code) for b in behaviors]
+        records = [
+            Behavior(user_id=user_id, name=b.name, code=b.code, type=b.type) for b in behaviors
+        ]
         self.db.add_all(records)
         self.db.flush()
         return [BehaviorData.model_validate(r) for r in records]
+
+    def name_taken(self, user_id: int, name: str) -> bool:
+        return (
+            self.db.scalar(
+                select(Behavior.id).where(Behavior.user_id == user_id, Behavior.name == name)
+            )
+            is not None
+        )
+
+    def create(self, user_id: int, data: CreateBehaviorData) -> BehaviorData:
+        record = Behavior(user_id=user_id, name=data.name, code=data.code, type=data.type)
+        self.db.add(record)
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            # La restricción única (user_id, name) frena a dos requests simultáneos
+            # que pasaron el chequeo de name_taken con el mismo nombre.
+            self.db.rollback()
+            raise DuplicateBehaviorNameError() from error
+        return BehaviorData.model_validate(record)
 
     def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:
         return set(

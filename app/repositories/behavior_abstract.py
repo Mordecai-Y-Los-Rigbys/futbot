@@ -10,6 +10,7 @@ class BehaviorData(BaseModel):
     user_id: int
     name: str
     code: str
+    type: BehaviorType = BehaviorType.player_behavior
 
     model_config = {"from_attributes": True}
 
@@ -17,6 +18,11 @@ class BehaviorData(BaseModel):
 class CreateBehaviorData(BaseModel):
     name: str
     code: str
+    type: BehaviorType = BehaviorType.player_behavior
+
+
+class DuplicateBehaviorNameError(Exception):
+    """El usuario ya tiene un behavior con ese nombre."""
 
 
 class AbstractBehaviorRepository(ABC):
@@ -36,6 +42,18 @@ class AbstractBehaviorRepository(ABC):
     @abstractmethod
     def create_many(self, user_id: int, behaviors: list[CreateBehaviorData]) -> list[BehaviorData]:
         """Crea los behaviors para el usuario. No confirma la transacción."""
+
+    @abstractmethod
+    def name_taken(self, user_id: int, name: str) -> bool:
+        """True si el usuario ya tiene un behavior con ese nombre, de cualquier tipo."""
+
+    @abstractmethod
+    def create(self, user_id: int, data: CreateBehaviorData) -> BehaviorData:
+        """Crea el behavior y confirma la transacción.
+
+        Raises:
+            DuplicateBehaviorNameError: otro request creó el mismo nombre al mismo tiempo.
+        """
 
     @abstractmethod
     def owned_behavior_ids(self, user_id: int, ids: list[int]) -> set[int]:

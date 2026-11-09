@@ -3,7 +3,6 @@ from typing import Any
 from app.errors import ValidationApiError
 from app.repositories.player_abstract import CreatePlayerData
 from app.services.field_validation import (
-    INVALID_JSON,
     all_required,
     field_error,
     int_reason,

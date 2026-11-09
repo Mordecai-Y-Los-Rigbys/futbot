@@ -31,7 +31,7 @@ def field_error(field: str, reason: str) -> dict[str, str]:
 
 def is_readable(body: Any) -> bool:
     """Convención 9: JSON roto, body vacío o algo que no es un objeto es ilegible."""
-    return body is not INVALID_JSON and isinstance(body, dict)
+    return isinstance(body, dict)
 
 
 def all_required(fields: tuple[str, ...] | list[str]) -> FieldErrors:
@@ -55,6 +55,14 @@ def str_reason(container: dict, key: str, max_len: int, strip: bool = False) -> 
         return "required"
     if len(value) > max_len:
         return "tooLong"
+    return None
+
+
+def string_reason(container: dict, key: str) -> str | None:
+    if key not in container:
+        return "required"
+    if not isinstance(container[key], str):  # incluye null
+        return "invalidType"
     return None
 
 

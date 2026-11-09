@@ -31,7 +31,7 @@ def join_with_team(db_session, add_participant):
             )
             for i in range(6)
         ]
-        behavior = Behavior(user_id=user.id, name="b", code="...")
+        behavior = Behavior(user_id=user.id, name=f"b-{league.id}", code="...")
         db_session.add_all([*players, behavior])
         db_session.commit()
         db_session.add_all(

@@ -95,6 +95,13 @@ def test_penalties_mode_is_persisted(login_as, create_user, team_of, db_session)
     assert listed["allowDraws"] is False
 
 
+def test_response_includes_min_participants(login_as, create_user, team_of):
+    creator = create_user("creator")
+    resp = login_as(creator).post("/leagues", json=body_for(team_of(creator), minParticipants=4))
+    assert resp.status_code == 201
+    assert resp.json()["minParticipants"] == 4
+
+
 def test_response_creator_has_avatar(login_as, create_user, team_of):
     creator = create_user("creator", avatar=3)
 
