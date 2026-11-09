@@ -31,17 +31,17 @@ def _r(value: float) -> float:
     return round(value, 2)
 
 
-def _position(vector: Vec) -> dict:
+def position(vector: Vec) -> dict:
     return {"x": _r(vector.x), "y": _r(vector.y)}
 
 
-def _club(team: Team) -> str:
+def club(team: Team) -> str:
     return "club1" if team is Team.HOME else "club2"
 
 
 def penalty_kick_record(kick: PenaltyKick) -> dict:
     return {
-        "club": _club(kick.team),
+        "club": club(kick.team),
         "kickerId": kick.kicker_id,
         "kickerName": kick.kicker_name,
         "round": kick.round,
@@ -53,7 +53,7 @@ def penalty_shootout(status: ShootoutStatus) -> dict:
     return {
         "score1": status.score_1,
         "score2": status.score_2,
-        "winner": _club(status.winner),
+        "winner": club(status.winner),
         "kicks": [penalty_kick_record(k) for k in status.kicks],
     }
 
@@ -63,7 +63,7 @@ def _penalty_current(result: TickResult) -> dict | None:
         return None
     current = result.shootout.current
     return {
-        "club": _club(current.team),
+        "club": club(current.team),
         "kickerId": current.kicker_id,
         "kickerName": current.kicker_name,
         "defenderId": current.defender_id,
@@ -118,9 +118,9 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
     return {
         "type": "tick",
         "players": [
-            {"playerId": p.player_id, "position": _position(p.position)} for p in state.players
+            {"playerId": p.player_id, "position": position(p.position)} for p in state.players
         ],
-        "ballPosition": _position(state.ball.position),
+        "ballPosition": position(state.ball.position),
         "score1": result.score_1,
         "score2": result.score_2,
         "penaltyScore1": shootout.score_1 if shootout else 0,
