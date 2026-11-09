@@ -2,11 +2,14 @@ import asyncio
 import itertools
 import json
 import logging
+import threading
 from contextlib import contextmanager
 
 from app.services.match_broadcast import TickContext, build_tick_payload, _closing
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup
+from app.simulation import match_rules
+from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.match_rules import Event, Phase, TickResult
 from app.simulation.physics import create_initial_state
 from app.simulation.state import Team
@@ -24,6 +27,10 @@ TICK_KEYS = {
     "score2",
     "penaltyScore1",
     "penaltyScore2",
+    "penaltyKicks",
+    "penaltyCurrent",
+    "penaltyCountdownSeconds",
+    "penaltyRemainingSeconds",
     "elapsedTime",
     "pauseRemainingSeconds",
     "phase",
@@ -35,6 +42,24 @@ PAUSED = dict(periods=4, pause_seconds=1, duration=2)
 PAUSED_TOTAL = 20 + 40 + 3 * (20 + 20)  # cuenta + 2 s de juego + 3 × (pausa + cuenta)
 # Igual, pero con pausas de 2 s (40 ticks): permite entrar "a la mitad" con remaining < duración.
 LATE = dict(periods=4, pause_seconds=2, duration=2)
+
+HOME_FORWARD_ID = 3
+HOME_FORWARD = (Team.HOME, 3)
+# ticks 20 a 39 son de juego
+PLAYING_TICK = 25
+
+
+def spy_forward(monkeypatch):
+    """Anota el behavior del delantero local en cada tick de juego."""
+    used = []
+    real = match_rules.run_behaviors
+
+    def spy(state, behaviors, clock, *args, **kwargs):
+        used.append(behaviors[HOME_FORWARD])
+        return real(state, behaviors, clock, *args, **kwargs)
+
+    monkeypatch.setattr(match_rules, "run_behaviors", spy)
+    return used
 
 
 class FakeWs:
@@ -67,7 +92,16 @@ class FakeManager:
         self.match_closed.append((match_id, code, reason))
 
 
-def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, duration=1, **kwargs):
+def build(
+    manager,
+    repo,
+    substitutions=None,
+    periods=1,
+    pause_seconds=15,
+    duration=1,
+    allow_draws=True,
+    **kwargs,
+):
     substitutions = substitutions if substitutions is not None else FakeSubstitutionRepo()
     setup = MatchSetup(
         make_team(),
@@ -78,6 +112,7 @@ def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, durati
         club_2_name="Club Dos",
         periods=periods,
         pause_seconds=pause_seconds,
+        allow_draws=allow_draws,
     )
 
     @contextmanager
@@ -244,9 +279,7 @@ def test_pause_ticks_follow_the_contract_and_only_they_carry_the_remaining_time(
     assert first["event"] == {"type": "pause", "reason": "hydration", "durationSeconds": 1}
     assert first["pauseRemainingSeconds"] == 1
     reasons = [
-        t["event"]["reason"]
-        for t in ws.received
-        if t["event"] and t["event"]["type"] == "pause"
+        t["event"]["reason"] for t in ws.received if t["event"] and t["event"]["type"] == "pause"
     ]
     assert reasons == ["hydration", "halftime", "hydration"]
 
@@ -343,3 +376,137 @@ def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream(
     assert any(t["phase"] == "countdown" for t in second.received)
     for tick in second.received:
         TickPayload.model_validate(tick)
+
+
+def test_queued_behavior_applies_from_the_next_tick(monkeypatch):
+    used = spy_forward(monkeypatch)
+    new = compile_behavior("pass")
+    ws = FakeWs()
+    runner = build(FakeManager([ws]), FakeMatchRepo())
+    mark = {}
+
+    def probe(_tick):
+        if len(ws.received) == PLAYING_TICK:
+            mark["k"] = len(used)
+            mark["queued"] = runner.queue_behavior(1, HOME_FORWARD_ID, new)
+
+    ws.probe = probe
+    run(runner)
+
+    k = mark["k"]
+    assert mark["queued"] is True
+    assert k > 0 and all(b is not new for b in used[:k])
+    assert used[k:] and all(b is new for b in used[k:])
+
+
+def test_behavior_queued_during_a_pause_applies_on_the_first_play_tick_after_it(monkeypatch):
+    used = spy_forward(monkeypatch)
+    new = compile_behavior("pass")
+    ws = FakeWs()
+    runner = build(FakeManager([ws]), FakeMatchRepo(), **PAUSED)
+    mark = {}
+
+    def probe(tick):
+        if tick["phase"] == "paused" and "k" not in mark:
+            mark["k"] = len(used)
+            runner.queue_behavior(1, HOME_FORWARD_ID, new)
+
+    ws.probe = probe
+    run(runner)
+
+    k = mark["k"]
+    assert all(b is not new for b in used[:k])
+    assert used[k] is new
+
+
+def test_two_queued_changes_keep_the_last_one(monkeypatch):
+    used = spy_forward(monkeypatch)
+    first, second = compile_behavior("pass"), compile_behavior("pass")
+    ws = FakeWs()
+    runner = build(FakeManager([ws]), FakeMatchRepo())
+    mark = {}
+
+    def probe(_tick):
+        if len(ws.received) == PLAYING_TICK:
+            mark["k"] = len(used)
+            runner.queue_behavior(1, HOME_FORWARD_ID, first)
+            runner.queue_behavior(1, HOME_FORWARD_ID, second)
+
+    ws.probe = probe
+    run(runner)
+
+    assert used[mark["k"] :]
+    assert all(b is second for b in used[mark["k"] :])
+
+
+def test_queue_behavior_when_the_match_is_not_running():
+    runner = build(FakeManager([]), FakeMatchRepo())
+    assert runner.queue_behavior(1, HOME_FORWARD_ID, compile_behavior("pass")) is False
+
+
+def test_unknown_player_is_logged_and_the_match_goes_on(caplog):
+    ws = FakeWs()
+    manager = FakeManager([ws])
+    runner = build(manager, FakeMatchRepo())
+
+    def probe(_tick):
+        if len(ws.received) == PLAYING_TICK:
+            runner.queue_behavior(1, 999, compile_behavior("pass"))
+
+    ws.probe = probe
+    with caplog.at_level(logging.WARNING):
+        run(runner)
+
+    assert len(ws.received) == TOTAL
+    assert manager.match_closed == [(1, 1000, "matchEnd")]
+    assert "ya no está en cancha" in caplog.text
+
+
+def test_changes_from_another_thread_never_break_a_tick(monkeypatch):
+    used = spy_forward(monkeypatch)
+    a, b = compile_behavior("pass"), compile_behavior("pass")
+    ws = FakeWs()
+    manager = FakeManager([ws])
+
+    async def tiny_sleep(_):
+        await asyncio.sleep(0.001)
+
+    runner = build(manager, FakeMatchRepo(), sleep=tiny_sleep)
+    stop = threading.Event()
+    accepted = []
+
+    def spam():
+        for behavior in itertools.cycle((a, b)):
+            if stop.is_set():
+                return
+            if runner.queue_behavior(1, HOME_FORWARD_ID, behavior):
+                accepted.append(behavior)
+
+    thread = threading.Thread(target=spam)
+    thread.start()
+    try:
+        run(runner)
+    finally:
+        stop.set()
+        thread.join()
+
+    original = used[0]
+    assert accepted  # el hilo llegó a encolar con el partido corriendo
+    assert all(x in (original, a, b) for x in used)
+    assert manager.match_closed == [(1, 1000, "matchEnd")]
+
+
+# --- penales -------------------------------------------------------------------
+
+
+def test_a_shootout_is_saved_with_the_result_and_sent_in_match_end():
+    ws, repo = FakeWs(), FakeMatchRepo()
+    repo.add(1)
+    run(build(FakeManager([ws]), repo, duration=0.05, allow_draws=False))  # 1 tick: 0 a 0
+
+    saved = repo.penalties[1]
+    sent = ws.received[-1]["event"]["result"]["penalties"]
+    assert repo.results[1] == (0, 0)
+    assert (saved.score_1, saved.score_2) == (sent["score1"], sent["score2"])
+    assert saved.kicks == sent["kicks"]
+    assert saved.winner == (1 if sent["winner"] == "club1" else 2)

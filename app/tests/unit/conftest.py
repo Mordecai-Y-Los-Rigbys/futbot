@@ -13,6 +13,7 @@ from app.repositories.league_abstract import (
     LeagueDetailData,
     LeagueListItemData,
     LeaguePageData,
+    LeagueParticipantData,
 )
 from app.services.league_service import LeagueService
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers, FakeTeams
@@ -31,6 +32,8 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         self.removed: list[tuple[int, int]] = []
         self.details: dict[int, LeagueDetailData] = {}
         self.detail_calls: list[tuple[int, int]] = []
+        self.participant_lists: dict[int, list[LeagueParticipantData]] = {}
+        self.participants_calls: list[int] = []
 
     def list_page(self, name, offset, limit):
         self.calls.append({"name": name, "offset": offset, "limit": limit})
@@ -46,20 +49,24 @@ class FakeLeagueRepository(AbstractLeagueRepository):
             ),
             status="preparation",
             participants_count=1,
+            min_participants=data.min_participants,
             max_participants=data.max_participants,
             private=data.private,
             allow_draws=True,
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
-        
-    
+
     def get_detail(self, league_id, user_id):
         self.detail_calls.append((league_id, user_id))
         return self.details.get(league_id)
 
+    def list_participants(self, league_id):
+        self.participants_calls.append(league_id)
+        return self.participant_lists.get(league_id, [])
+
     def get_match_duration_minutes(self, league_id):
         return self.durations.get(league_id)
-    
+
     def get_leave_info(self, league_id):
         return self.leave_info.get(league_id)
 
@@ -74,6 +81,12 @@ class FakeLeagueRepository(AbstractLeagueRepository):
         raise NotImplementedError
 
     def join(self, data):
+        raise NotImplementedError
+
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
         raise NotImplementedError
 
 
@@ -109,6 +122,7 @@ def make_item():
         name="Liga Argentina",
         status="preparation",
         participants_count=1,
+        min_participants=3,
         max_participants=8,
         private=False,
         allow_draws=True,
@@ -120,11 +134,10 @@ def make_item():
         return LeagueListItemData(
             id=id,
             name=name,
-            creator=LeagueCreatorData(
-                id=7, username=username, club_name=club_name, avatar=avatar
-            ),
+            creator=LeagueCreatorData(id=7, username=username, club_name=club_name, avatar=avatar),
             status=status,
             participants_count=participants_count,
+            min_participants=min_participants,
             max_participants=max_participants,
             private=private,
             allow_draws=allow_draws,
@@ -136,11 +149,9 @@ def make_item():
 
 @pytest.fixture()
 def make_detail(make_item):
-    def _make(min_participants=3, joined=False, **kwargs) -> LeagueDetailData:
+    def _make(joined=False, **kwargs) -> LeagueDetailData:
         item = make_item(**kwargs)
-        return LeagueDetailData(
-            **item.model_dump(), min_participants=min_participants, joined=joined
-        )
+        return LeagueDetailData(**item.model_dump(), joined=joined)
 
     return _make
 

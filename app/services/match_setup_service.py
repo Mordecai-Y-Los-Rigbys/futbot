@@ -33,6 +33,8 @@ class MatchSetup:
     club_2_name: str
     periods: int = PERIODS
     pause_seconds: float = PAUSE_SECONDS
+    allow_draws: bool = True
+
 
 class MatchSetupService:
     """Arma los equipos y la duración de un partido a partir de la base."""
@@ -73,6 +75,7 @@ class MatchSetupService:
             club_2_name=match.club_2_name,
             periods=PERIODS,
             pause_seconds=PAUSE_SECONDS,
+            allow_draws=match.allow_draws,
         )
 
     def _duration_minutes(self, match: MatchSetupData) -> int:
@@ -111,7 +114,7 @@ class MatchSetupService:
                 strength=row.strength,
                 speed=row.speed,
             )
-            players.append(PlayerSetup(row.player_id, role, stats))
+            players.append(PlayerSetup(row.player_id, role, stats, row.name))
             behaviors[role] = compile_behavior(row.behavior_code)
 
         if len(players) != len(STARTER_ROLES):
