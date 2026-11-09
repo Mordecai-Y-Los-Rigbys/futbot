@@ -29,7 +29,9 @@ def full_team(first_id: int) -> list[StarterData]:
     return [starter(first_id + i, r.value) for i, r in enumerate(STARTER_ROLES)]
 
 
-def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
+def setup_data(
+    league_id=None, user_2_id=2, club_2="Club Dos", allow_draws=True
+) -> MatchSetupData:
     return MatchSetupData(
         id=1,
         league_id=league_id,
