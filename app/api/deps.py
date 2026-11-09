@@ -93,6 +93,7 @@ def get_match_service(db: Session = Depends(get_db)) -> MatchService:
 def get_player_service(db: Session = Depends(get_db)) -> PlayerService:
     return PlayerService(SqlAlchemyPlayerRepository(db))
 
+
 def get_ranking_service(db: Session = Depends(get_db)) -> RankingService:
     return RankingService(SqlAlchemyRankingRepository(db))
 

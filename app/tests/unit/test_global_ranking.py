@@ -86,7 +86,9 @@ def test_won_penalties_break_won_regular_ties():
 
 
 def test_lost_is_ascending():
-    r = ranking([club(1, "perdio2", d=3, l=2, gf=2, ga=2), club(2, "perdio0", d=3, l=0, gf=2, ga=2)])
+    r = ranking(
+        [club(1, "perdio2", d=3, l=2, gf=2, ga=2), club(2, "perdio0", d=3, l=0, gf=2, ga=2)]
+    )
     assert ids_by_name(r) == ["perdio0", "perdio2"]
 
 
@@ -208,8 +210,15 @@ def test_success_shape(auth_ranking_api):
     assert set(body) == {"items", "page", "pageSize", "total"}
     assert (body["page"], body["pageSize"], body["total"]) == (1, 50, 2)
     assert set(body["items"][0]) == {
-        "position", "name", "avatar", "score", "goalDifference",
-        "goals", "wonRegular", "wonPenalties", "lost",
+        "position",
+        "name",
+        "avatar",
+        "score",
+        "goalDifference",
+        "goals",
+        "wonRegular",
+        "wonPenalties",
+        "lost",
     }
 
 

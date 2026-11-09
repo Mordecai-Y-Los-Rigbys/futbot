@@ -28,9 +28,7 @@ def _side(me: int):
             _flag(mine > theirs).label("won_regular"),
             _flag(and_(tied, Match.penalty_winner == me)).label("won_penalties"),
             _flag(and_(tied, Match.penalty_winner.is_(None))).label("drawn"),
-            _flag(
-                or_(mine < theirs, and_(tied, Match.penalty_winner == opponent))
-            ).label("lost"),
+            _flag(or_(mine < theirs, and_(tied, Match.penalty_winner == opponent))).label("lost"),
         )
         .select_from(Match)
         .join(League, League.id == Match.league_id)

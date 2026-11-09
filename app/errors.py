@@ -29,6 +29,7 @@ class ApiError(Exception):
             content={"code": self.code, "message": self.message},
         )
 
+
 class ValidationApiError(ApiError):
     """400 de validación del contrato (convención 6).
 

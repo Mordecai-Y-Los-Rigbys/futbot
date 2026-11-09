@@ -115,11 +115,6 @@ class Match(Base):
     score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     league: Mapped[League | None] = relationship(League)
-    # Tanda de penales (solo si el partido se definió por penales).
-    # penalty_winner: 1 = club1, 2 = club2. Los goles de la tanda NO son score_1/score_2.
-    penalty_score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    penalty_score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    penalty_winner: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     user_1: Mapped[User] = relationship(User, foreign_keys=[user_1_id])
     user_2: Mapped[User | None] = relationship(User, foreign_keys=[user_2_id])
     created_at: Mapped[datetime] = mapped_column(
@@ -127,7 +122,8 @@ class Match(Base):
     )
     seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    # Tanda de penales, solo si el partido se definió por penales.
+    # Tanda de penales (solo si el partido se definió por penales).
+    # penalty_winner: 1 = club1, 2 = club2. Los goles de la tanda NO son score_1/score_2.
     penalty_score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_winner: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
