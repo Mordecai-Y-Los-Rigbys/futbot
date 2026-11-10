@@ -121,10 +121,8 @@ class Match(Base):
     )
     seed: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    # Tanda de penales (solo si el partido se definió por penales).
-    # penalty_winner: 1 = club1, 2 = club2. Los goles de la tanda NO son score_1/score_2.
+    # Tanda de penales, solo si el partido se definió por penales.
     penalty_score_1: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_score_2: Mapped[int | None] = mapped_column(Integer, nullable=True)
     penalty_winner: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     penalty_kicks: Mapped[list | None] = mapped_column(JSON(none_as_null=True), nullable=True)
-

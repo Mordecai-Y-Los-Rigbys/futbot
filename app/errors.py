@@ -50,26 +50,6 @@ class ValidationApiError(ApiError):
         )
 
 
-class ValidationApiError(ApiError):
-    """400 de validación del contrato (convención 6).
-
-    `code` fijo `invalidFields` y `errors` con un `{field, reason}` por cada
-    campo que falló, en el orden del schema del request.
-    """
-
-    MESSAGE = "Revisá los campos marcados."
-
-    def __init__(self, errors: List[Dict[str, str]]) -> None:
-        super().__init__(400, "invalidFields", self.MESSAGE)
-        self.errors = errors
-
-    def to_response(self) -> JSONResponse:
-        return JSONResponse(
-            status_code=self.status_code,
-            content={"code": self.code, "message": self.message, "errors": self.errors},
-        )
-
-
 class BehaviorConflictError(ApiError):
     """409 de POST y PUT /behaviors: además de `code` y `message`, lleva
     `codeError`, que es null salvo con `invalidCode`."""

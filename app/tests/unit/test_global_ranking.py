@@ -5,11 +5,12 @@ from app.main import app
 from app.services.ranking_service import PAGE_SIZE, RankingService
 from app.tests.unit.repo_fakes import FakeRankingRepo, ranking_club as club
 
+
 def ranking(clubs, page=1, name=None):
     return RankingService(FakeRankingRepo(clubs)).get_global_ranking(page, name)
 
 
-def ids_by_name(result):
+def names(result):
     return [e.name for e in result.items]
 
 
@@ -33,40 +34,40 @@ def test_entry_fields():
 
 def test_orders_by_score_first():
     r = ranking([club(1, "bajo", d=1, gf=50), club(2, "alto", wr=1)])
-    assert ids_by_name(r) == ["alto", "bajo"]
+    assert names(r) == ["alto", "bajo"]
 
 
 def test_goal_difference_breaks_score_ties():
     r = ranking([club(1, "A", d=3, gf=3, ga=3), club(2, "B", wr=1, d=0, gf=2, ga=0, l=0)])
     # B: 3 pts, DG +2; A: 3 pts, DG 0
-    assert ids_by_name(r) == ["B", "A"]
+    assert names(r) == ["B", "A"]
 
 
 def test_goals_break_goal_difference_ties():
     # Mismo puntaje y DG +1; B convirtió más goles.
     r = ranking([club(1, "A", wr=1, gf=1, ga=0), club(2, "B", wr=1, gf=4, ga=3)])
-    assert ids_by_name(r) == ["B", "A"]
+    assert names(r) == ["B", "A"]
 
 
 def test_won_regular_breaks_goals_ties():
     # A: 3 pts (1 ganado). B: 3 pts (3 empates). Mismo DG (0) y goles (3).
     r = ranking([club(1, "B", d=3, gf=3, ga=3), club(2, "A", wr=1, d=0, gf=3, ga=3)])
     assert r.items[0].score == r.items[1].score == 3
-    assert ids_by_name(r) == ["A", "B"]
+    assert names(r) == ["A", "B"]
 
 
 def test_won_penalties_break_won_regular_ties():
     # A: 1 ganado por penales + 1 empate = 3 pts. B: 3 empates = 3 pts.
     r = ranking([club(1, "B", d=3, gf=3, ga=3), club(2, "A", wp=1, d=1, gf=3, ga=3)])
     assert r.items[0].score == r.items[1].score == 3
-    assert ids_by_name(r) == ["A", "B"]
+    assert names(r) == ["A", "B"]
 
 
 def test_lost_is_ascending():
     r = ranking(
         [club(1, "perdio2", d=3, l=2, gf=2, ga=2), club(2, "perdio0", d=3, l=0, gf=2, ga=2)]
     )
-    assert ids_by_name(r) == ["perdio0", "perdio2"]
+    assert names(r) == ["perdio0", "perdio2"]
 
 
 # --- position y desempates -----------------------------------------------------
@@ -79,7 +80,7 @@ def test_ties_share_position_and_next_is_skipped():
 
 def test_clubs_tied_in_everything_are_ordered_by_club_id():
     r = ranking([club(30, "C", d=1), club(10, "A", d=1), club(20, "B", d=1)])
-    assert ids_by_name(r) == ["A", "B", "C"]
+    assert names(r) == ["A", "B", "C"]
     assert {e.position for e in r.items} == {1}
 
 
@@ -98,7 +99,7 @@ def clubs_40():
 
 def test_name_filter_is_partial_and_case_insensitive():
     r = ranking([club(1, "Boca Juniors", wr=2), club(2, "River", wr=1)], name="BOCA")
-    assert ids_by_name(r) == ["Boca Juniors"]
+    assert names(r) == ["Boca Juniors"]
     assert r.total == 1
 
 
@@ -130,7 +131,7 @@ def test_pages_split_without_repeating_or_skipping():
     p1, p2 = ranking(clubs, page=1), ranking(clubs, page=2)
     assert len(p1.items) == 50 and len(p2.items) == 5
     assert p1.total == p2.total == 55
-    assert ids_by_name(p1) + ids_by_name(p2) == [f"Club {i}" for i in range(1, 56)]
+    assert names(p1) + names(p2) == [f"Club {i}" for i in range(1, 56)]
     assert p2.items[0].position == 1  # el empate cruza el corte de página
 
 

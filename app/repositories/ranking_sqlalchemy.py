@@ -15,6 +15,7 @@ _TOTALS = ("won_regular", "won_penalties", "drawn", "lost", "goals_for", "goals_
 def _flag(condition):
     return case((condition, 1), else_=0)
 
+
 def _side(me: int):
     """Los partidos vistos desde el club `me` (1 o 2): una fila por partido y por club."""
     club = Match.user_1_id if me == 1 else Match.user_2_id
@@ -35,14 +36,17 @@ def _side(me: int):
         .join(League, League.id == Match.league_id)
     )
 
+
 def _sides(*conditions):
     """Partidos finalizados que cumplen `conditions`, vistos desde ambos clubes."""
     return union_all(
         *(_side(me).where(Match.status == MatchStatus.finished, *conditions) for me in (1, 2))
     ).subquery("sides")
 
+
 def _totals(sides):
     return [func.coalesce(func.sum(sides.c[name]), 0) for name in _TOTALS]
+
 
 def _to_data(row) -> ClubRankingData:
     club_id, name, avatar, *totals = row
@@ -52,8 +56,8 @@ def _to_data(row) -> ClubRankingData:
         avatar=avatar,
         **{field: int(value) for field, value in zip(_TOTALS, totals)},
     )
-    
-    
+
+
 class SqlAlchemyRankingRepository(AbstractRankingRepository):
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -66,7 +70,7 @@ class SqlAlchemyRankingRepository(AbstractRankingRepository):
             .join(User, User.id == sides.c.club_id)
             .group_by(User.id, User.club_name, User.avatar)
         ).all()
-        return [_to_data(r) for r in rows]
+        return [_to_data(row) for row in rows]
 
     def list_league_club_totals(self, league_id: int) -> list[ClubRankingData]:
         sides = _sides(Match.league_id == league_id)
@@ -78,7 +82,7 @@ class SqlAlchemyRankingRepository(AbstractRankingRepository):
             .where(LeagueParticipant.league_id == league_id)
             .group_by(User.id, User.club_name, User.avatar)
         ).all()
-        return [_to_data(r) for r in rows]
+        return [_to_data(row) for row in rows]
 
     def get_league_status(self, league_id: int) -> LeagueStatus | None:
         return self.db.scalar(select(League.status).where(League.id == league_id))
