@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
-from app.schemas.errors import Error, ListPageBadRequest
+from app.schemas.errors import Error, ValidationBadRequest
 from app.schemas.league import LeaguePage
 
 pytestmark = pytest.mark.integration
@@ -19,6 +19,7 @@ ITEM_FIELDS = {
     "creator",
     "status",
     "participantsCount",
+    "minParticipants",
     "maxParticipants",
     "private",
     "allowDraws",
@@ -51,6 +52,12 @@ def test_contract_with_leagues(api, owner, make_league):
     assert resp.headers["content-type"].startswith("application/json")
     page = LeaguePage.model_validate(resp.json())
     assert page.total == 1
+
+
+def test_min_participants_is_the_one_the_league_was_created_with(api, owner, make_league):
+    make_league(owner, min_participants=4)
+    item = api.get("/leagues").json()["items"][0]
+    assert item["minParticipants"] == 4
 
 
 def test_empty_database(api):
@@ -136,22 +143,23 @@ def test_two_users_get_the_same_listing(login_as, create_user, owner, make_leagu
 
 
 @pytest.mark.parametrize(
-    "query, code",
+    "query, reason",
     [
-        ("page=abc", "pageNotAnInteger"),
-        ("page=1.5", "pageNotAnInteger"),
-        ("page=", "pageNotAnInteger"),
-        ("page=0", "pageBelowMinimum"),
-        ("page=-1", "pageBelowMinimum"),
-        ("page=2147483648", "pageTooLarge"),
+        ("page=abc", "invalidType"),
+        ("page=1.5", "invalidType"),
+        ("page=", "invalidType"),
+        ("page=0", "outOfRange"),
+        ("page=-1", "outOfRange"),
+        ("page=2147483648", "outOfRange"),
     ],
 )
-def test_invalid_page_returns_400_never_422(api, query, code):
+def test_invalid_page_returns_400_never_422(api, query, reason):
     resp = api.get(f"/leagues?{query}")
     assert resp.status_code == 400
-    assert resp.json()["code"] == code
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [{"field": "page", "reason": reason}]
     assert resp.json()["message"]
-    ListPageBadRequest.model_validate(resp.json())
+    ValidationBadRequest.model_validate(resp.json())
 
 
 def test_page_upper_limit_is_valid_and_empty(api):
@@ -329,7 +337,7 @@ def test_query_count_does_not_grow_with_leagues(
             assert api.get("/leagues").status_code == 200
         return len(statements)
 
-    first = make_league(create_user("c0"), "L0")
+    make_league(create_user("c0"), "L0")
     one = measure()
 
     for i in range(1, 50):

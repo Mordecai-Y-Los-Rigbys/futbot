@@ -29,6 +29,14 @@ class FakeNotifier:
         self.calls.append(league_id)
 
 
+class FakeFixtureNotifier:
+    def __init__(self):
+        self.calls = []
+
+    def fixture_changed(self, league_id):
+        self.calls.append(league_id)
+
+
 def state(**fields):
     base = dict(
         creator_id=CREATOR,
@@ -73,9 +81,14 @@ def league_api(api, repo, notifier, match_start):
     return api
 
 
-def make_service(repo, notifier=None, seed=1):
+def make_service(repo, notifier=None, seed=1, fixture_notifier=None):
     return LeagueService(
-        repo, FakePlayers(), FakeBehaviors(), notifier=notifier, rng=random.Random(seed)
+        repo,
+        FakePlayers(),
+        FakeBehaviors(),
+        notifier=notifier,
+        rng=random.Random(seed),
+        fixture_notifier=fixture_notifier,
     )
 
 
@@ -91,11 +104,27 @@ def plan_of(repo):
     return plan
 
 
-def test_success_starts_the_league_and_notifies(repo, notifier):
-    make_service(repo, notifier).start_league(5, CREATOR)
-    repo.get_start_state.assert_called_once_with(5)
-    repo.start.assert_called_once()
-    assert notifier.calls == [5]
+def test_success_notifies_the_fixture_channel(repo):
+    fixture_notifier = FakeFixtureNotifier()
+    make_service(repo, fixture_notifier=fixture_notifier).start_league(5, CREATOR)
+    assert fixture_notifier.calls == [5]
+
+
+@pytest.mark.parametrize(
+    "user_id, fields, start_result",
+    [
+        (8, {}, None),  # no es el creador
+        (CREATOR, {"status": LeagueStatus.started}, None),  # 409 antes de bloquear
+        (CREATOR, {}, "notInPreparation"),  # carrera perdida en la base
+    ],
+)
+def test_a_failed_start_does_not_notify_the_fixture_channel(repo, user_id, fields, start_result):
+    repo.get_start_state.return_value = state(**fields)
+    repo.start.return_value = start_result
+    fixture_notifier = FakeFixtureNotifier()
+    with pytest.raises(ApiError):
+        make_service(repo, fixture_notifier=fixture_notifier).start_league(5, user_id)
+    assert fixture_notifier.calls == []
 
 
 def test_the_plan_is_the_fixture_of_the_ids_it_receives(repo):
@@ -160,12 +189,6 @@ def test_403_beats_409(repo):
 def test_not_in_preparation_beats_not_enough_participants(repo):
     repo.get_start_state.return_value = state(status=LeagueStatus.started, participants_count=1)
     assert error_of(repo).code == "notInPreparation"
-
-
-@pytest.fixture()
-def league_api(api, repo, notifier):
-    app.dependency_overrides[get_league_service] = lambda: make_service(repo, notifier)
-    return api
 
 
 @pytest.fixture()

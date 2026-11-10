@@ -2,8 +2,8 @@ import pytest
 
 from app.errors import ApiError
 
-
 # ---------- service ----------
+
 
 def test_get_league_devuelve_el_detalle(service, fake_repo, make_detail):
     fake_repo.details[5] = make_detail(
@@ -30,6 +30,7 @@ def test_get_league_inexistente_lanza_404(service):
 
 
 # ---------- endpoint ----------
+
 
 def test_sin_sesion_devuelve_401_con_cualquier_id(api, fake_repo, make_detail):
     fake_repo.details[1] = make_detail(id=1)

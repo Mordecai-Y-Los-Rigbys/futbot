@@ -5,20 +5,20 @@ from fastapi import APIRouter, Depends, WebSocket
 from starlette.concurrency import run_in_threadpool
 
 from app.api.ws_league_deps import (
+    get_fixture_handshake_scope,
+    get_league_fixture_manager,
     get_league_participants_manager,
+    get_league_ranking_manager,
     get_participants_handshake_scope,
+    get_ranking_handshake_scope,
 )
 from app.errors import ApiError
-from app.services.league_participants_handshake import (
-    LeagueParticipantsHandshakeService,
-    ParticipantsGrant,
-)
-from app.services.league_participants_manager import (
-    LeagueParticipantsManager,
-    ParticipantsConnection,
-)
+from app.services.league_channel_handshake import LeagueChannelGrant, LeagueChannelHandshakeService
+from app.services.league_channel_manager import LeagueChannelConnection, LeagueChannelManager
 
 router = APIRouter(tags=["leagues"])
+
+HandshakeScope = Callable[[], ContextManager[LeagueChannelHandshakeService]]
 
 
 async def _reject(websocket: WebSocket, error: ApiError) -> None:
@@ -26,19 +26,16 @@ async def _reject(websocket: WebSocket, error: ApiError) -> None:
     await websocket.close(code=4000 + error.status_code, reason=error.code or "")
 
 
-@router.websocket("/ws/leagues/{league_id}/participants")
-async def league_participants_stream(
+async def _stream(
     websocket: WebSocket,
     league_id: str,
-    handshake_scope: Callable[[], ContextManager[LeagueParticipantsHandshakeService]] = Depends(
-        get_participants_handshake_scope
-    ),
-    manager: LeagueParticipantsManager = Depends(get_league_participants_manager),
+    handshake_scope: HandshakeScope,
+    manager: LeagueChannelManager,
 ) -> None:
     origin = websocket.headers.get("origin")
     session_id = websocket.cookies.get("session_id")
 
-    def authorize() -> ParticipantsGrant:
+    def authorize() -> LeagueChannelGrant:
         with handshake_scope() as service:
             return service.authorize(origin, session_id, league_id)
 
@@ -49,7 +46,7 @@ async def league_participants_stream(
         await _reject(websocket, error)
         return
 
-    connection: ParticipantsConnection | None = None
+    connection: LeagueChannelConnection | None = None
     sender: asyncio.Task | None = None
     try:
         await websocket.accept()
@@ -70,3 +67,33 @@ async def league_participants_stream(
         if sender is not None:
             sender.cancel()
         manager.release(grant.league_id, grant.user_id, connection)
+
+
+@router.websocket("/ws/leagues/{league_id}/participants")
+async def league_participants_stream(
+    websocket: WebSocket,
+    league_id: str,
+    handshake_scope: HandshakeScope = Depends(get_participants_handshake_scope),
+    manager: LeagueChannelManager = Depends(get_league_participants_manager),
+) -> None:
+    await _stream(websocket, league_id, handshake_scope, manager)
+
+
+@router.websocket("/ws/leagues/{league_id}/fixture")
+async def league_fixture_stream(
+    websocket: WebSocket,
+    league_id: str,
+    handshake_scope: HandshakeScope = Depends(get_fixture_handshake_scope),
+    manager: LeagueChannelManager = Depends(get_league_fixture_manager),
+) -> None:
+    await _stream(websocket, league_id, handshake_scope, manager)
+
+
+@router.websocket("/ws/leagues/{league_id}/ranking")
+async def league_ranking_stream(
+    websocket: WebSocket,
+    league_id: str,
+    handshake_scope: HandshakeScope = Depends(get_ranking_handshake_scope),
+    manager: LeagueChannelManager = Depends(get_league_ranking_manager),
+) -> None:
+    await _stream(websocket, league_id, handshake_scope, manager)

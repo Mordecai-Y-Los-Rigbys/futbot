@@ -7,6 +7,7 @@ import pytest
 from app.simulation.behaviors.sandbox import (
     BehaviorCompileError,
     BehaviorTimeout,
+    CompiledBehavior,
     compile_behavior,
     run_behavior,
 )
@@ -164,3 +165,49 @@ def test_the_time_limit_works_with_the_real_clock():
         run_behavior(behavior, {}, time_limit=0.005)
     # Se corta cerca del límite, no al terminar el código.
     assert time.perf_counter() - started < 0.1
+
+
+# --- código que no pasó por compile_behavior ----------------------------------
+
+
+def unchecked(source):
+    """El código compilado sin las validaciones de compile_behavior."""
+    return CompiledBehavior(compile(source, "<behavior>", "exec"))
+
+
+@pytest.mark.parametrize(
+    "source", ["x = ().__class__", "f = lambda: ().__class__", "x = __builtins__"]
+)
+def test_names_with_underscores_are_rejected_before_running(source):
+    namespace = {}
+    with pytest.raises(BehaviorCompileError):
+        run_behavior(unchecked(source), namespace, GENEROUS)
+    assert "x" not in namespace and "f" not in namespace
+
+
+def test_an_import_that_gets_to_run_fails_without_effects():
+    namespace = {}
+    with pytest.raises(ImportError):
+        run_behavior(unchecked("import os\nx = os"), namespace, GENEROUS)
+    assert "os" not in namespace and "x" not in namespace
+
+
+def test_the_time_limit_only_counts_the_lines_of_the_behavior():
+    def helper():
+        total = 0
+        total += 1
+        total += 2
+        total += 3
+        total += 4
+        total += 5
+        total += 6
+        total += 7
+        total += 8
+        total += 9
+        return total
+
+    namespace = {"helper": helper}
+    # Cada consulta del reloj "tarda" 0.1 s. Si se mirara en cada línea de `helper`,
+    # se pasaría del segundo.
+    run_behavior(compile_behavior("x = helper()"), namespace, time_limit=1.0, timer=fake_timer(0.1))
+    assert namespace["x"] == 45
