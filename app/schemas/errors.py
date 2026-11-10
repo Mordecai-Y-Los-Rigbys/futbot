@@ -145,3 +145,11 @@ class CreateBehaviorConflict(CamelModel):
     code: Literal["duplicateName", "codeTooLong", "invalidCode"]
     message: str
     code_error: CodeError | None
+
+
+# --- PUT /behaviors/{id} ------------------------------------------------------
+
+
+class UpdateBehaviorNotFound(BaseModel):
+    code: Literal["notFound", "deletedConcurrently"]
+    message: str
