@@ -171,7 +171,6 @@ class LeagueService:
         self.behaviors = behaviors
         self.notifier = notifier
         self.rng = rng or random.Random()
-        self.rng = rng or random.Random()
         self.fixture_notifier = fixture_notifier
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:

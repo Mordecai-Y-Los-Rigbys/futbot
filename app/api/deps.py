@@ -84,8 +84,11 @@ def get_league_service(
     players: AbstractPlayerRepository = Depends(get_player_repository),
     behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
     notifier: LeagueParticipantsNotifier = Depends(get_league_participants_notifier),
+    fixture_notifier: LeagueFixtureNotifier = Depends(get_league_fixture_notifier),
 ) -> LeagueService:
-    return LeagueService(leagues, players, behaviors, notifier=notifier)
+    return LeagueService(
+        leagues, players, behaviors, notifier=notifier, fixture_notifier=fixture_notifier
+    )
 
 
 def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessService:
@@ -207,15 +210,3 @@ async def get_json_body(
         return json.loads(raw)
     except ValueError:
         return INVALID_JSON
-    
-
-def get_league_service(
-    leagues: AbstractLeagueRepository = Depends(get_league_repository),
-    players: AbstractPlayerRepository = Depends(get_player_repository),
-    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
-    notifier: LeagueParticipantsNotifier = Depends(get_league_participants_notifier),
-    fixture_notifier: LeagueFixtureNotifier = Depends(get_league_fixture_notifier),
-) -> LeagueService:
-    return LeagueService(
-        leagues, players, behaviors, notifier=notifier, fixture_notifier=fixture_notifier
-    )
