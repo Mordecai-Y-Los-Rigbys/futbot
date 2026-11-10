@@ -4,6 +4,7 @@ from unittest.mock import create_autospec
 
 from app.api import ws_league_deps
 from app.api.ws_league_deps import get_league_channel_managers
+from app.api.ws_notification_deps import get_notifications_manager
 from app.main import app
 from app.api.auth import user_logout
 from app.api.deps import CurrentSession
@@ -115,9 +116,11 @@ def test_a_rejected_logout_does_not_touch_the_league_channels(api):
     assert ended == []
 
 
-def test_the_league_channels_are_participants_fixture_and_ranking():
+def test_the_session_channels_are_the_league_ones_and_notifications():
     assert ws_league_deps.get_league_channel_managers() == [
         ws_league_deps.get_league_participants_manager(),
         ws_league_deps.get_league_fixture_manager(),
         ws_league_deps.get_league_ranking_manager(),
+        ws_league_deps.get_league_next_match_manager(),
+        get_notifications_manager(),
     ]

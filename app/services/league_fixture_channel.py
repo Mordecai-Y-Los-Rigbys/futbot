@@ -37,7 +37,7 @@ def build_fixture_payload(state: LeagueFixtureState) -> dict:
 
 
 FIXTURE_CHANNEL = LeagueChannelSpec(
-    build_payload=build_fixture_payload,
+    build_payload=lambda state, _user_id: build_fixture_payload(state),
     close_reasons={
         LeagueStatus.finished: "leagueFinished",
         LeagueStatus.cancelled: "leagueCancelled",

@@ -12,6 +12,7 @@ from app.models.match_ws_token import MatchWsToken  # noqa: F401
 from app.models.behavior_test_token import BehaviorTestToken  # noqa: F401
 from app.models.session_league_unlock import SessionLeagueUnlock  # noqa: F401
 from app.models.substitution import AppliedSubstitution, Substitution  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
 
 __all__ = [
     "UserSession",
@@ -28,4 +29,5 @@ __all__ = [
     "SessionLeagueUnlock",
     "Substitution",
     "AppliedSubstitution",
+    "Notification",
 ]

@@ -17,7 +17,7 @@ MATCH_NOT_FOUND_MESSAGE = "El partido no existe."
 LINEUP_ORDER = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
 
 
-def _penalties(shootout: PenaltyShootoutData | None) -> dict | None:
+def penalties_payload(shootout: PenaltyShootoutData | None) -> dict | None:
     if shootout is None:
         return None
     return {
@@ -34,7 +34,7 @@ def _result(match: MatchDetailData) -> dict | None:
     return {
         "score1": match.score_1,
         "score2": match.score_2,
-        "penalties": _penalties(match.penalties),
+        "penalties": penalties_payload(match.penalties),
     }
 
 

@@ -31,8 +31,10 @@ LoadState = Callable[[int], Any]
 class LeagueChannelSpec:
     """Lo que cambia entre canales de liga."""
 
-    build_payload: Callable[[Any], dict]
+    # Recibe el estado y el user_id de la conexión
+    build_payload: Callable[[Any, int], dict]
     # Estados en los que se envía el último mensaje y se cierra con 1000 + reason.
+    # Vacío: el canal nunca cierra por estado (y el estado no necesita `status`).
     close_reasons: Mapping[LeagueStatus, str]
 
 
@@ -118,9 +120,13 @@ class LeagueChannelConnection:
                     if state is None:
                         await self._close(LEAGUE_NOT_FOUND_CODE, LEAGUE_NOT_FOUND_REASON)
                         return
-                    payload = self._spec.build_payload(state)
+                    payload = self._spec.build_payload(state, self.user_id)
                     await self.websocket.send_text(json.dumps(payload, separators=(",", ":")))
-                    reason = self._spec.close_reasons.get(state.status)
+                    reason = (
+                        self._spec.close_reasons.get(state.status)
+                        if self._spec.close_reasons
+                        else None
+                    )
                     if reason is not None:
                         await self._close(LEAGUE_CLOSED_CODE, reason)
                         return
@@ -181,8 +187,13 @@ class LeagueChannelManager:
         session_expires_at: datetime | None = None,
     ) -> LeagueChannelConnection:
         connection = LeagueChannelConnection(
-            league_id, user_id, session_id, websocket,
-            self._load_state, self._spec, session_expires_at,
+            league_id,
+            user_id,
+            session_id,
+            websocket,
+            self._load_state,
+            self._spec,
+            session_expires_at,
         )
         with self._lock:
             self._subscribers.setdefault(league_id, set()).add(connection)

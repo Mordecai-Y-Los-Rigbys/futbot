@@ -1,10 +1,12 @@
-from sqlalchemy import func, select, true, update
+from sqlalchemy import func, insert, literal, null, select, true, update
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.domain.league import LeagueStatus
 from app.domain.match import MatchStatus
 from app.models.league import League
+from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
+from app.models.notification import Notification
 from app.models.user import User
 from app.repositories.friendly_sqlalchemy import to_club_data
 from app.repositories.league_access_abstract import LeagueAccessInfo
@@ -18,7 +20,7 @@ from app.repositories.match_abstract import (
 )
 
 
-def _penalties(match: Match) -> PenaltyShootoutData | None:
+def to_penalty_data(match: Match) -> PenaltyShootoutData | None:
     if match.penalty_winner is None:
         return None
     return PenaltyShootoutData(
@@ -62,7 +64,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 if league is not None
                 else None
             ),
-            penalties=_penalties(match),
+            penalties=to_penalty_data(match),
         )
 
     def get_state(self, match_id: int) -> MatchStateData | None:
@@ -140,6 +142,11 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2, **shootout)
             )
             league_finished = league_id is not None and self._finish_league_if_done(league_id)
+            if league_id is not None:
+                self._add_notifications(league_id, match_id)
+                if league_finished:
+                    # Después de la del partido: a igual created_at, queda primera.
+                    self._add_notifications(league_id, None)
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -158,6 +165,19 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             .values(status=LeagueStatus.finished)
         )
         return result.rowcount == 1
+
+    def _add_notifications(self, league_id: int, league_match_id: int | None) -> None:
+        """Una notificación sin ver por participante de la liga. Sin commit: va en
+        la transacción que pasa el partido (o la liga, con league_match_id None) a finished."""
+        match_id = null() if league_match_id is None else literal(league_match_id)
+        self.db.execute(
+            insert(Notification).from_select(
+                ["user_id", "league_id", "league_match_id"],
+                select(LeagueParticipant.user_id, literal(league_id), match_id).where(
+                    LeagueParticipant.league_id == league_id
+                ),
+            )
+        )
 
     def save_seed(self, match_id: int, seed: int) -> None:
         self.db.execute(update(Match).where(Match.id == match_id).values(seed=seed))
