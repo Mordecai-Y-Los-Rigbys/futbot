@@ -257,3 +257,9 @@ class AbstractLeagueRepository(ABC):
             None si la inició; el código del conflicto si, al bloquear la liga,
             ya no se podía iniciar (en ese caso no persiste nada).
         """
+    @abstractmethod
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        """Estado de la liga y sus partidos, por scheduled_at y después id.
+
+        Devuelve None si la liga no existe.
+        """

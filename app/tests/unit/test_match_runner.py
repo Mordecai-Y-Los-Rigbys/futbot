@@ -475,6 +475,33 @@ def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream(
     for tick in second.received:
         TickPayload.model_validate(tick)
 
+# --- aviso de cambios -----------------------------------------------------------
+
+
+def test_match_changes_are_notified_after_being_saved():
+    repo = FakeMatchRepo()
+    repo.add(1)
+    seen = []
+    runner = build(
+        FakeManager([FakeWs()]),
+        repo,
+        on_match_change=lambda match_id: seen.append((match_id, repo.states[1].status)),
+    )
+    run(runner)
+    # Cuando se avisa, el cambio ya está guardado.
+    assert seen == [(1, "started"), (1, "finished")]
+
+
+def test_a_failing_notification_does_not_stop_the_match(caplog):
+    def boom(match_id):
+        raise RuntimeError("canal caído")
+
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), on_match_change=boom))
+    assert len(ws.received) == TOTAL
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudo avisar el cambio del partido" in caplog.text
+
 
 def test_queued_behavior_applies_from_the_next_tick(monkeypatch):
     used = spy_forward(monkeypatch)

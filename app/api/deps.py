@@ -6,7 +6,7 @@ from fastapi import Cookie, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.api.ws_deps import get_match_runner
-from app.api.ws_league_deps import get_league_participants_notifier
+from app.api.ws_league_deps import get_league_fixture_notifier, get_league_participants_notifier
 from app.database import get_db
 from app.errors import ApiError
 from app.repositories.behavior_abstract import AbstractBehaviorRepository
@@ -28,6 +28,7 @@ from app.repositories.behavior_test_token_sqlalchemy import SqlAlchemyBehaviorTe
 from app.services.behavior_test_connection_service import BehaviorTestConnectionService
 from app.services.auth_service import AuthService
 from app.services.behavior_service import BehaviorService
+from app.services.league_fixture_notifier import LeagueFixtureNotifier
 from app.services.friendly_service import FriendlyService
 from app.services.league_access_service import LeagueAccessService
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
@@ -84,8 +85,11 @@ def get_league_service(
     players: AbstractPlayerRepository = Depends(get_player_repository),
     behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
     notifier: LeagueParticipantsNotifier = Depends(get_league_participants_notifier),
+    fixture_notifier: LeagueFixtureNotifier = Depends(get_league_fixture_notifier),
 ) -> LeagueService:
-    return LeagueService(leagues, players, behaviors, notifier=notifier)
+    return LeagueService(
+        leagues, players, behaviors, notifier=notifier, fixture_notifier=fixture_notifier
+    )
 
 
 def get_league_access_service(db: Session = Depends(get_db)) -> LeagueAccessService:

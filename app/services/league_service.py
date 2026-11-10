@@ -32,6 +32,7 @@ from app.schemas.league import (
 from app.services.join_league_validation import parse_join_league
 from app.services.league_access_service import verify_league_password
 from app.services.league_fixture import build_fixture, match_slot
+from app.services.league_fixture_notifier import LeagueFixtureNotifier
 from app.services.league_validation import parse_create_league
 from app.services.team_ownership import ensure_owned_team, ensure_owned_typed_team
 
@@ -65,6 +66,11 @@ def _raise_start_conflict(conflict: StartLeagueConflict | None) -> None:
     if conflict is not None:
         raise ApiError(409, conflict, _START_CONFLICT_MESSAGES[conflict])
 
+_FIXTURE_CONFLICTS: dict[LeagueStatus, tuple[str, str]] = {
+    LeagueStatus.preparation: ("leagueNotStarted", "La liga todavía no fue iniciada."),
+    LeagueStatus.cancelled: ("leagueCancelled", "La liga fue cancelada y no tiene fixture."),
+}
+
 
 def _password_matches(given: str, stored: str | None) -> bool:
     return stored is not None and verify_league_password(given, stored)
@@ -92,6 +98,28 @@ def _to_summary(item: LeagueListItemData) -> LeagueSummary:
         private=item.private,
         allow_draws=item.allow_draws,
         created_at=item.created_at,
+    )
+
+
+def _to_match_club(data: LeagueFixtureClubData) -> MatchClub:
+    return MatchClub(id=data.id, username=data.username, name=data.club_name, avatar=data.avatar)
+
+
+def to_fixture_match(league_id: int, match: LeagueFixtureMatchData) -> MatchResponse:
+    result = None
+    if match.status == MatchStatus.finished:
+        # Todavía no se persisten penales
+        result = {"score1": match.score_1, "score2": match.score_2, "penalties": None}
+    return MatchResponse(
+        id=match.id,
+        league_id=league_id,
+        name=None,
+        status=match.status.value,
+        club1=_to_match_club(match.club_1),
+        club2=_to_match_club(match.club_2),
+        scheduled_at=match.scheduled_at,
+        created_at=match.created_at,
+        result=result,
     )
 
 
@@ -136,12 +164,14 @@ class LeagueService:
         behaviors: AbstractBehaviorRepository,
         notifier: LeagueParticipantsNotifier | None = None,
         rng: random.Random | None = None,
+        fixture_notifier: LeagueFixtureNotifier | None = None,
     ) -> None:
         self.repo = repo
         self.players = players
         self.behaviors = behaviors
         self.notifier = notifier
         self.rng = rng or random.Random()
+        self.fixture_notifier = fixture_notifier
 
     def list_leagues(self, name: str | None, page: int) -> LeaguePage:
         """Lista paginada de las ligas.
@@ -367,6 +397,26 @@ class LeagueService:
         _raise_start_conflict(
             self.repo.start(league_id, lambda ids: build_fixture(ids, started_at, slot, self.rng))
         )
-
         if self.notifier is not None:
             self.notifier.participants_changed(league_id)
+        if self.fixture_notifier is not None:
+            self.fixture_notifier.fixture_changed(league_id)
+            
+    def get_fixture(self, league_id: int) -> list[MatchResponse]:
+        """Partidos de la liga en cualquier estado, ordenados por fecha.
+
+        El 404 y el acceso a ligas privadas se resuelven antes de llamarlo.
+
+        Raises:
+            ApiError 404: la liga no existe.
+            ApiError 409: leagueNotStarted o leagueCancelled.
+        """
+        data = self.repo.get_fixture(league_id)
+        if data is None:
+            raise ApiError(404, None, LEAGUE_NOT_FOUND_MESSAGE)
+
+        conflict = _FIXTURE_CONFLICTS.get(data.status)
+        if conflict is not None:
+            raise ApiError(409, *conflict)
+
+        return [to_fixture_match(league_id, m) for m in data.matches]

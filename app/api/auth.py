@@ -6,6 +6,7 @@ from app.api.deps import (
     get_current_session,
     get_session_service,
 )
+from app.api.ws_league_deps import get_league_channel_managers
 from app.schemas.auth import (
     LogInRequest,
     RegisterUserRequest,
@@ -15,6 +16,7 @@ from app.schemas.auth import (
     RegisterUserBadRequest,
 )
 from app.services.auth_service import AuthService
+from app.services.league_channel_manager import LeagueChannelManager
 from app.services.session_service import SessionService
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -89,8 +91,12 @@ def user_login(
 def user_logout(
     session: CurrentSession = Depends(get_current_session),
     service: SessionService = Depends(get_session_service),
+    channels: list[LeagueChannelManager] = Depends(get_league_channel_managers),
 ) -> Response:
     service.delete(session.id)
+    # Cierra con 4401 sessionEnded los WebSockets de liga abiertos con esta sesión
+    for manager in channels:
+        manager.session_ended(session.id)
 
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie("session_id", httponly=True, samesite="lax")
