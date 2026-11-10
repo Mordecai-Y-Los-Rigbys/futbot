@@ -40,9 +40,13 @@ def test_out_of_range_page_returns_empty_items_with_total(service, fake_repo):
     assert result.total == 120
 
 
-def test_maps_the_eight_fields(service, make_item, fake_repo):
+def test_maps_all_league_fields(service, make_item, fake_repo):
     fake_repo.page = LeaguePageData(
-        items=[make_item(id=5, name="Copa", participants_count=3, max_participants=8)],
+        items=[
+            make_item(
+                id=5, name="Copa", participants_count=3, min_participants=4, max_participants=8
+            )
+        ],
         total=1,
     )
     item = service.list_leagues(name=None, page=1).model_dump(mode="json", by_alias=True)["items"][
@@ -51,9 +55,11 @@ def test_maps_the_eight_fields(service, make_item, fake_repo):
     assert item == {
         "id": 5,
         "name": "Copa",
-        "creator": {"id": 7, "username": "mgonzalez", "name": "Boca Juniors FC"},
+        "allowDraws": True,
+        "creator": {"id": 7, "username": "mgonzalez", "name": "Boca Juniors FC", "avatar": 1},
         "status": "preparation",
         "participantsCount": 3,
+        "minParticipants": 4,
         "maxParticipants": 8,
         "private": False,
         "createdAt": "2026-01-01T00:00:00Z",

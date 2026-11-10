@@ -7,12 +7,14 @@ from dataclasses import dataclass
 
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData
-from app.repositories.team_abstract import AbstractTeamRepository
+from app.repositories.team_abstract import AbstractTeamRepository, StarterData
 from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.constants import (
     STARTER_ROLES,
     COUNTDOWN_SECONDS,
     FRIENDLY_MATCH_DURATION,
+    PAUSE_SECONDS,
+    PERIODS,
 )
 from app.simulation.match_rules import TeamSetup
 from app.simulation.physics import PlayerSetup
@@ -23,12 +25,15 @@ from app.simulation.state import Stats
 class MatchSetup:
     """Todo lo que necesita el runner para jugar un partido."""
 
-    team_1: TeamSetup  # club1 = user_1
-    team_2: TeamSetup  # club2 = user_2
+    team_1: TeamSetup
+    team_2: TeamSetup
     duration_seconds: float
     countdown_seconds: float
     club_1_name: str
     club_2_name: str
+    periods: int = PERIODS
+    pause_seconds: float = PAUSE_SECONDS
+    allow_draws: bool = True
 
 
 class MatchSetupService:
@@ -68,6 +73,9 @@ class MatchSetupService:
             countdown_seconds=COUNTDOWN_SECONDS,
             club_1_name=match.club_1_name,
             club_2_name=match.club_2_name,
+            periods=PERIODS,
+            pause_seconds=PAUSE_SECONDS,
+            allow_draws=match.allow_draws,
         )
 
     def _duration_minutes(self, match: MatchSetupData) -> int:
@@ -84,34 +92,38 @@ class MatchSetupService:
         # El repo ya resuelve de dónde sale el equipo (liga o partido) y
         # devuelve solo los titulares.
         rows = self.teams.get_starters(match.id, match.league_id, user_id)
+        try:
+            return build_team(rows)
+        except ValueError as error:
+            # El runner loguea el id del partido: acá se suma de quién es el equipo.
+            raise ValueError(f"equipo del usuario {user_id}: {error}") from error
 
-        players: list[PlayerSetup] = []
-        behaviors = {}
-        for row in rows:
-            role = row.role
-            if role not in STARTER_ROLES:
-                raise ValueError(
-                    f"el usuario {user_id} tiene un {role.value} entre los "
-                    f"titulares del partido {match.id}"
-                )
-            if role in behaviors:
-                raise ValueError(
-                    f"el usuario {user_id} tiene el rol {role.value} repetido "
-                    f"en el partido {match.id}"
-                )
-            stats = Stats(
-                power=row.power,
-                agility=row.agility,
-                control=row.control,
-                strength=row.strength,
-                speed=row.speed,
-            )
-            players.append(PlayerSetup(row.player_id, role, stats))
-            behaviors[role] = compile_behavior(row.behavior_code)
 
-        if len(players) != len(STARTER_ROLES):
-            raise ValueError(
-                f"el usuario {user_id} no tiene {len(STARTER_ROLES)} titulares "
-                f"en el partido {match.id}"
-            )
-        return TeamSetup(players=players, behaviors=behaviors)
+def build_team(rows: list[StarterData]) -> TeamSetup:
+    """Arma un equipo con sus titulares y el behavior ya compilado de cada uno.
+    Lo usan el partido y la prueba de un comportamiento.
+
+    Raises:
+        ValueError: no hay exactamente un titular por rol.
+    """
+    players: list[PlayerSetup] = []
+    behaviors = {}
+    for row in rows:
+        role = row.role
+        if role not in STARTER_ROLES:
+            raise ValueError(f"hay un {role.value} entre los titulares")
+        if role in behaviors:
+            raise ValueError(f"el rol {role.value} está repetido entre los titulares")
+        stats = Stats(
+            power=row.power,
+            agility=row.agility,
+            control=row.control,
+            strength=row.strength,
+            speed=row.speed,
+        )
+        players.append(PlayerSetup(row.player_id, role, stats, row.name))
+        behaviors[role] = compile_behavior(row.behavior_code)
+
+    if len(players) != len(STARTER_ROLES):
+        raise ValueError(f"se necesitan {len(STARTER_ROLES)} titulares y hay {len(players)}")
+    return TeamSetup(players=players, behaviors=behaviors)

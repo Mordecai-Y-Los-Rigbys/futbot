@@ -6,6 +6,7 @@ from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
     CreateFriendlyData,
     CreateFriendlyMemberData,
+    FriendlyClubData,
     FriendlyMatchData,
     JoinFriendlyData,
 )
@@ -18,18 +19,18 @@ from app.services.team_ownership import ensure_owned_team
 PAGE_SIZE = 50
 
 
+def to_match_club(c: FriendlyClubData) -> MatchClub:
+    return MatchClub(id=c.id, username=c.username, name=c.club_name, avatar=c.avatar)
+
+
 def _to_response(m: FriendlyMatchData) -> MatchResponse:
     return MatchResponse(
         id=m.id,
         league_id=None,
         name=m.name,
         status=m.status,
-        club1=MatchClub(id=m.club1.id, username=m.club1.username, name=m.club1.club_name),
-        club2=(
-            MatchClub(id=m.club2.id, username=m.club2.username, name=m.club2.club_name)
-            if m.club2
-            else None
-        ),
+        club1=to_match_club(m.club1),
+        club2=to_match_club(m.club2) if m.club2 else None,
         scheduled_at=None,
         created_at=m.created_at,
         result=None,
@@ -61,14 +62,14 @@ class FriendlyService:
             body: JSON del request, todavía sin validar.
 
         Raises:
-            ApiError 400: el body no cumple el contrato (en el orden de la convención 6).
+            ValidationApiError 400: invalidFields (convención 6).
             ApiError 409: alreadyPlaying o playerOrBehaviorNotOwned.
 
         Returns:
             El amistoso creado, todavía sin rival.
         """
 
-        data = parse_create_friendly(body)  # todos los 400, en orden
+        data = parse_create_friendly(body)  # 400
 
         # 409: solo si no falló ningún 400
         if self.repo.user_is_playing(creator_id):
@@ -125,7 +126,7 @@ class FriendlyService:
 
         Raises:
             ApiError 404: el id no es válido o el amistoso no existe.
-            ApiError 400: el body no cumple el contrato (en el orden de la convención 6).
+            ValidationApiError 400: invalidFields (convención 6).
             ApiError 409: notJoinable, isOwnMatch, alreadyPlaying o playerOrBehaviorNotOwned.
 
         Returns:
@@ -136,7 +137,7 @@ class FriendlyService:
         state = self.repo.get_friendly_state(match_id)
         if state is None:
             raise _not_found()
-        data = parse_join_friendly(body)  # 400, en orden
+        data = parse_join_friendly(body)  # 400
 
         # 409: en el orden del enum del contrato
         if state.status != "scheduled" or state.rival_id is not None:

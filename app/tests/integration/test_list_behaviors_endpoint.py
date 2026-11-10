@@ -16,7 +16,7 @@ def test_list_without_filters_and_response_shape(login, make_behaviors):
 
     assert r.status_code == 200
     assert names(r) == ["a", "b", "c"]
-    assert set(r.json()["items"][0].keys()) == {"id", "name"}
+    assert set(r.json()["items"][0].keys()) == {"id", "name", "type"}
     assert r.json()["total"] == 3
     assert r.json()["page"] == 1
     assert r.json()["pageSize"] == 50
@@ -79,7 +79,7 @@ def test_order_is_stable_after_update(login, db_session, make_behaviors):
 
 
 def test_filter_and_pagination_combined(login, make_behaviors):
-    make_behaviors(1, [f"match-{i:02d}" for i in range(55)] + ["other"] * 10)
+    make_behaviors(1, [f"match-{i:02d}" for i in range(55)] + [f"other-{i}" for i in range(10)])
     api = login(1)
 
     p1 = api.get(URL, params={"name": "MATCH", "page": 1}).json()
@@ -114,3 +114,29 @@ def test_max_page_offset_does_not_overflow(login, make_behaviors):
     assert r.status_code == 200
     assert r.json()["items"] == []
     assert r.json()["total"] == 1
+
+
+@pytest.mark.parametrize(
+    "page, reason",
+    [
+        ("abc", "invalidType"),
+        ("", "invalidType"),
+        ("0", "outOfRange"),
+        ("2147483648", "outOfRange"),
+    ],
+)
+def test_invalid_page_is_400_invalid_fields(login, make_behaviors, page, reason):
+    make_behaviors(1, ["a"])
+
+    r = login(1).get(URL, params={"page": page})
+
+    assert r.status_code == 400
+    assert r.json()["code"] == "invalidFields"
+    assert r.json()["errors"] == [{"field": "page", "reason": reason}]
+
+
+def test_invalid_page_without_session_is_401(client):
+    r = client.get(URL, params={"page": "abc"})
+
+    assert r.status_code == 401
+    assert r.json()["code"] is None

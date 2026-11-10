@@ -19,6 +19,36 @@ from app.simulation.state import MatchState, PlayerKey, PlayerState, Team
 
 STATS = ("power", "agility", "control", "strength", "speed")
 PLAYER_NUMBERS = frozenset(role.number for role in C.STARTER_ROLES)
+# Nombres de las primitivas que se pueden llamar, según la API de comportamientos.
+# Las generales son de cualquier tipo de comportamiento; las de jugador, solo de
+# playerBehavior. Tienen que coincidir con lo que arma build_primitives.
+GENERAL_PRIMITIVES = frozenset(
+    {
+        "teammate_position",
+        "opponent_position",
+        "teammate_stat",
+        "opponent_stat",
+        "ball_position",
+        "teammate_has_ball",
+        "opponent_has_ball",
+        "nobody_has_ball",
+        "distance",
+        "elapsed_time",
+        "remaining_time",
+        "current_period",
+    }
+)
+PLAYER_PRIMITIVES = frozenset(
+    {
+        "move_in_direction",
+        "go_to",
+        "kick",
+        "kick_to",
+        "my_position",
+        "my_number",
+        "i_have_ball",
+    }
+)
 
 
 class BehaviorError(Exception):

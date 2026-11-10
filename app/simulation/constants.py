@@ -85,11 +85,22 @@ KICKOFF_BALL_POSITION = (FIELD_LENGTH / 2, FIELD_WIDTH / 2)
 
 STARTER_ROLES = (MemberRole.defense, MemberRole.midfield, MemberRole.forward)
 
-# Estructura de períodos: hoy 1. Con 4 tiempos + pausas solo cambia esto y la
-# lógica de la pausa dentro de MatchSession.advance(); el reloj ya trabaja por período.
-PERIODS = 1
+# Estructura de períodos: 4 tiempos con 3 pausas entre ellos (a 1/4, 1/2 y 3/4
+# de la duración).
+PERIODS = 4
+PAUSE_SECONDS = 15
 COUNTDOWN_SECONDS = 5
 FRIENDLY_MATCH_DURATION = 3  # minutos
+
+# Tanda de penales (penal australiano), solo en ligas con allowDraws: false.
+PENALTY_KICKS_PER_CLUB = 5
+PENALTY_COUNTDOWN_SECONDS = 3
+PENALTY_SECONDS = 8  # tiempo de juego del pateador para convertir
+# Orden en que patean los titulares, en ciclo: delantero, medio, defensor.
+PENALTY_KICKER_ORDER = (MemberRole.forward, MemberRole.midfield, MemberRole.defense)
+
+# Prueba de un comportamiento: segundos de cuenta regresiva antes de empezar.
+BEHAVIOR_TEST_COUNTDOWN_SECONDS = 3
 
 # Estructura de estado de jugador.
 NO_KICK_COOLDOWN = 0  # puede patear desde el primer tick

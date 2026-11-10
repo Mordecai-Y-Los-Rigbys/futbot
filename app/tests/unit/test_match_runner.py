@@ -1,20 +1,70 @@
 import asyncio
+import itertools
 import json
+import logging
+import threading
 from contextlib import contextmanager
 
 from app.services.match_broadcast import TickContext, build_tick_payload, _closing
+from app.repositories.substitution_abstract import AppliedSwap
+from app.repositories.team_abstract import StarterData
+from app.domain.team_member import MemberRole
+from app.services import match_runner
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup
+from app.simulation import match_rules
+from app.simulation.behaviors.sandbox import compile_behavior
 from app.simulation.match_rules import Event, Phase, TickResult
 from app.simulation.physics import create_initial_state
 from app.simulation.state import Team
-from app.tests.unit.match_ws_fakes import FakeMatchRepo
+from app.tests.unit.match_ws_fakes import FakeMatchRepo, FakeSubstitutionRepo
+from app.tests.unit.tick_schema import TickPayload
 from app.simulation.run import default_team as make_team
-import logging
 
-TOTAL = 40  # 1 s de cuenta regresiva (20 ticks) + 1 s de juego (20 ticks)
+TOTAL = 40  # 1 s de cuenta regresiva (20 ticks) + 1 s de juego (20 ticks), un solo período
 CTX = TickContext(club_1="Club Uno", club_2="Club Dos", countdown_seconds=1)
-TICK_KEYS = {"type", "players", "ballPosition", "score1", "score2", "elapsedTime", "phase", "event"}
+TICK_KEYS = {
+    "type",
+    "players",
+    "ballPosition",
+    "score1",
+    "score2",
+    "penaltyScore1",
+    "penaltyScore2",
+    "penaltyKicks",
+    "penaltyCurrent",
+    "penaltyCountdownSeconds",
+    "penaltyRemainingSeconds",
+    "elapsedTime",
+    "pauseRemainingSeconds",
+    "pausesLeft",
+    "phase",
+    "event",
+}
+
+# 4 períodos, 2 s de juego (10 ticks por período), cuentas de 1 s y pausas de 1 s (20 ticks).
+PAUSED = dict(periods=4, pause_seconds=1, duration=2)
+PAUSED_TOTAL = 20 + 40 + 3 * (20 + 20)  # cuenta + 2 s de juego + 3 × (pausa + cuenta)
+# Igual, pero con pausas de 2 s (40 ticks): permite entrar "a la mitad" con remaining < duración.
+LATE = dict(periods=4, pause_seconds=2, duration=2)
+
+HOME_FORWARD_ID = 3
+HOME_FORWARD = (Team.HOME, 3)
+# ticks 20 a 39 son de juego
+PLAYING_TICK = 25
+
+
+def spy_forward(monkeypatch):
+    """Anota el behavior del delantero local en cada tick de juego."""
+    used = []
+    real = match_rules.run_behaviors
+
+    def spy(state, behaviors, clock, *args, **kwargs):
+        used.append(behaviors[HOME_FORWARD])
+        return real(state, behaviors, clock, *args, **kwargs)
+
+    monkeypatch.setattr(match_rules, "run_behaviors", spy)
+    return used
 
 
 class FakeWs:
@@ -47,25 +97,49 @@ class FakeManager:
         self.match_closed.append((match_id, code, reason))
 
 
-def build(manager, repo, **kwargs):
+def build(
+    manager,
+    repo,
+    substitutions=None,
+    periods=1,
+    pause_seconds=15,
+    duration=1,
+    allow_draws=True,
+    **kwargs,
+):
+    substitutions = substitutions if substitutions is not None else FakeSubstitutionRepo()
     setup = MatchSetup(
         make_team(),
         make_team(first_id=10),
-        1,
+        duration,
         countdown_seconds=1,
         club_1_name="Club Uno",
         club_2_name="Club Dos",
+        periods=periods,
+        pause_seconds=pause_seconds,
+        allow_draws=allow_draws,
     )
 
     @contextmanager
     def scope():
         yield repo
 
+    @contextmanager
+    def substitution_scope():
+        yield substitutions
+
     async def no_sleep(_):
         pass
 
     kwargs.setdefault("sleep", no_sleep)
-    return MatchRunner(manager, lambda _id: setup, scope, seed_factory=lambda: 42, **kwargs)
+    return MatchRunner(
+        manager,
+        lambda _id: setup,
+        scope,
+        substitution_scope,
+        seed_factory=lambda: 42,
+        **kwargs,
+    )
 
 
 def run(runner):
@@ -93,7 +167,11 @@ def test_subscriber_gets_every_tick_in_order_and_the_match_ends():
     assert last["phase"] == "finished"
     assert last["event"] == {
         "type": "matchEnd",
-        "result": {"score1": repo.results[1][0], "score2": repo.results[1][1]},
+        "result": {
+            "score1": repo.results[1][0],
+            "score2": repo.results[1][1],
+            "penalties": None,
+        },
     }
     assert manager.match_closed == [(1, 1000, "matchEnd")]
 
@@ -117,6 +195,8 @@ def test_payload_matches_the_asyncapi_and_has_no_behaviors():
     for tick in ws.received:
         assert set(tick) == TICK_KEYS and tick["type"] == "tick"
         assert isinstance(tick["elapsedTime"], int)
+        assert (tick["penaltyScore1"], tick["penaltyScore2"]) == (0, 0)
+        assert tick["pauseRemainingSeconds"] is None  # sin pausas con un solo período
         text = json.dumps(tick).lower()
         assert "behavior" not in text and "code" not in text
         assert len(tick["players"]) == 6
@@ -188,3 +268,396 @@ def test_if_saving_the_seed_fails_the_match_is_still_played(caplog):
     assert len(ws.received) == TOTAL  # el partido se jugó completo
     assert "No se pudo guardar la seed" in caplog.text
     assert "seed=42" in caplog.text  # igual quedó en el log
+
+
+# --- pausas -------------------------------------------------------------------
+
+
+def test_pause_ticks_follow_the_contract_and_only_they_carry_the_remaining_time():
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), **PAUSED))
+    assert len(ws.received) == PAUSED_TOTAL
+    for tick in ws.received:
+        TickPayload.model_validate(tick)
+        assert (tick["pauseRemainingSeconds"] is not None) == (tick["phase"] == "paused")
+    first = next(t for t in ws.received if t["phase"] == "paused")
+    assert first["event"] == {"type": "pause", "reason": "hydration", "durationSeconds": 1}
+    assert first["pauseRemainingSeconds"] == 1
+    reasons = [
+        t["event"]["reason"] for t in ws.received if t["event"] and t["event"]["type"] == "pause"
+    ]
+    assert reasons == ["hydration", "halftime", "hydration"]
+
+
+def test_the_clock_does_not_advance_during_pauses_and_countdowns():
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), **PAUSED))
+    frozen = [t["elapsedTime"] for t in ws.received if t["phase"] in ("paused", "countdown")]
+    assert frozen and all(isinstance(v, int) for v in frozen)
+    assert ws.received[-1]["elapsedTime"] == 2  # 2 s de juego, sin contar las pausas
+
+
+def test_substitutions_are_applied_when_each_pause_starts_before_the_next_countdown():
+    repo = FakeMatchRepo()
+    substitutions = FakeSubstitutionRepo()
+    seen = []
+    ws = FakeWs(
+        probe=lambda t: (
+            seen.append((t["event"]["type"], len(substitutions.pause_starts)))
+            if t["event"] and t["event"]["type"] in ("pause", "periodStart")
+            else None
+        )
+    )
+    run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
+    assert substitutions.pause_starts == [1, 1, 1]
+    # El cambio ya está aplicado en el primer tick de cada pausa (antes de transmitirlo).
+    assert seen == [
+        ("periodStart", 0),
+        ("pause", 1),
+        ("periodStart", 1),
+        ("pause", 2),
+        ("periodStart", 2),
+        ("pause", 3),
+        ("periodStart", 3),
+    ]
+
+
+def test_failure_applying_substitutions_does_not_stop_the_match(caplog):
+    repo = FakeMatchRepo()
+    substitutions = FakeSubstitutionRepo()
+
+    def boom(match_id):
+        raise RuntimeError("base caída")
+
+    substitutions.apply_pending = boom
+    ws = FakeWs()
+    run(build(FakeManager([ws]), repo, substitutions, **PAUSED))
+    assert len(ws.received) == PAUSED_TOTAL
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudieron aplicar los cambios" in caplog.text
+
+
+def swap_for_home_forward(player_id=99, out_player_id=HOME_FORWARD_ID):
+    return AppliedSwap(
+        club="club1",
+        out_player_id=out_player_id,
+        incoming=StarterData(
+            player_id=player_id,
+            name=f"Jugador {player_id}",
+            role=MemberRole.forward,
+            power=60,
+            agility=60,
+            control=60,
+            strength=60,
+            speed=60,
+            behavior_code="pass",
+        ),
+    )
+
+
+def test_the_substitute_is_on_the_field_from_the_first_tick_of_the_pause():
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward()]
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    ids = lambda t: {p["playerId"] for p in t["players"]}  # noqa: E731
+    pause_ticks = [t for t in ws.received if t["phase"] == "paused"]
+    assert HOME_FORWARD_ID in ids(ws.received[0])  # antes de la pausa juega el titular
+    assert 99 in ids(pause_ticks[0]) and HOME_FORWARD_ID not in ids(pause_ticks[0])
+    assert 99 in ids(ws.received[-1])  # sigue jugando hasta el final
+
+
+def test_the_substitute_plays_with_its_behavior_from_the_first_play_tick_after_the_pause(
+    monkeypatch,
+):
+    used = spy_forward(monkeypatch)
+    incoming_behavior = compile_behavior("pass")
+    monkeypatch.setattr(match_runner, "compile_behavior", lambda code: incoming_behavior)
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward()]
+    ws = FakeWs()
+    mark = {}
+
+    def probe(tick):
+        if tick["phase"] == "paused" and "before_pause" not in mark:
+            mark["before_pause"] = len(used)
+
+    ws.probe = probe
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    before_pause = mark["before_pause"]
+    assert before_pause > 0
+    assert all(behavior is not incoming_behavior for behavior in used[:before_pause])
+    assert used[before_pause] is incoming_behavior
+
+
+def test_a_substitution_that_cannot_be_put_on_the_field_is_logged_and_the_match_goes_on(caplog):
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward(out_player_id=12345)]  # no está en cancha
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+    assert ws.received[-1]["phase"] == "finished"
+    assert "no se pudo poner en cancha" in caplog.text
+
+
+def test_progress_reports_the_phase_and_pauses_left_of_the_last_tick():
+    runner = build(FakeManager([FakeWs()]), FakeMatchRepo(), **PAUSED)
+    seen = []
+
+    async def main():
+        task = runner.start(1)
+        while not task.done():
+            progress = runner.progress(1)
+            if progress is not None and (not seen or seen[-1] != progress):
+                seen.append(progress)
+            await asyncio.sleep(0)
+        await asyncio.gather(*list(_closing))
+
+    asyncio.run(main())
+    assert runner.progress(1) is None  # terminó: ya no se juega en este proceso
+    assert {progress.pauses_left for progress in seen} == {0, 1, 2, 3}
+    paused = [progress for progress in seen if progress.phase is Phase.PAUSED]
+    # la pausa en curso no se cuenta: en la 1.ª quedan 2, en la 2.ª 1 y en la 3.ª 0
+    assert {progress.pauses_left for progress in paused} == {0, 1, 2}
+
+
+def test_late_subscriber_gets_the_current_pause_then_the_restarted_countdown_then_play():
+    early, late = FakeWs(), FakeWs()
+    manager = FakeManager([early])
+    count = {"paused": 0}
+
+    def join_mid_pause(tick):
+        if tick["phase"] == "paused":
+            count["paused"] += 1
+            if count["paused"] == 25 and late not in manager.sockets:
+                manager.sockets.append(late)
+
+    early.probe = join_mid_pause
+    run(build(manager, FakeMatchRepo(), **LATE))
+
+    first = late.received[0]
+    assert first["phase"] == "paused" and first["event"] is None
+    assert first["pauseRemainingSeconds"] < 2  # menor a la duración: entró a la mitad
+    assert late.received == early.received[-len(late.received) :]  # sin replay
+
+    head = late.received[:15]  # lo que queda de la primera pausa
+    assert [t["phase"] for t in head] == ["paused"] * 15
+    assert [t["pauseRemainingSeconds"] for t in head] == [1] * 15
+
+    phases = [k for k, _ in itertools.groupby(t["phase"] for t in late.received)]
+    assert phases[:3] == ["paused", "countdown", "playing"]
+
+    initial = early.received[0]  # tick 0: posiciones iniciales
+    countdown = [t for t in late.received if t["phase"] == "countdown"][:20]
+    assert len(countdown) == 20
+    assert all(t["players"] == initial["players"] for t in countdown)
+    assert all(t["ballPosition"] == initial["ballPosition"] for t in countdown)
+
+
+def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream():
+    first, second = FakeWs(), FakeWs()
+    manager = FakeManager([first])
+    count = {"n": 0}
+
+    def reconnect(tick):
+        if tick["phase"] == "paused":
+            count["n"] += 1
+            if count["n"] == 3:
+                manager.sockets.remove(first)  # se cae
+                manager.sockets.append(second)  # reconecta con el mismo token
+
+    first.probe = reconnect
+    run(build(manager, FakeMatchRepo(), **PAUSED))
+    assert second.received[0]["phase"] == "paused"
+    assert second.received[0]["pauseRemainingSeconds"] is not None
+    assert second.received[-1]["phase"] == "finished"
+    assert any(t["phase"] == "countdown" for t in second.received)
+    for tick in second.received:
+        TickPayload.model_validate(tick)
+
+
+# --- aviso de cambios -----------------------------------------------------------
+
+
+def test_match_changes_are_notified_after_being_saved():
+    repo = FakeMatchRepo()
+    repo.add(1)
+    seen = []
+    runner = build(
+        FakeManager([FakeWs()]),
+        repo,
+        on_match_change=lambda match_id: seen.append((match_id, repo.states[1].status)),
+    )
+    run(runner)
+    # Cuando se avisa, el cambio ya está guardado.
+    assert seen == [(1, "started"), (1, "finished")]
+
+
+def test_a_failing_notification_does_not_stop_the_match(caplog):
+    def boom(match_id):
+        raise RuntimeError("canal caído")
+
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), on_match_change=boom))
+    assert len(ws.received) == TOTAL
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudo avisar el cambio del partido" in caplog.text
+
+
+def test_queued_behavior_applies_from_the_next_tick(monkeypatch):
+    used = spy_forward(monkeypatch)
+    new = compile_behavior("pass")
+    ws = FakeWs()
+    runner = build(FakeManager([ws]), FakeMatchRepo())
+    mark = {}
+
+    def probe(_tick):
+        if len(ws.received) == PLAYING_TICK:
+            mark["k"] = len(used)
+            mark["queued"] = runner.queue_behavior(1, HOME_FORWARD_ID, new)
+
+    ws.probe = probe
+    run(runner)
+
+    k = mark["k"]
+    assert mark["queued"] is True
+    assert k > 0 and all(b is not new for b in used[:k])
+    assert used[k:] and all(b is new for b in used[k:])
+
+
+def test_behavior_queued_during_a_pause_applies_on_the_first_play_tick_after_it(monkeypatch):
+    used = spy_forward(monkeypatch)
+    new = compile_behavior("pass")
+    ws = FakeWs()
+    runner = build(FakeManager([ws]), FakeMatchRepo(), **PAUSED)
+    mark = {}
+
+    def probe(tick):
+        if tick["phase"] == "paused" and "k" not in mark:
+            mark["k"] = len(used)
+            runner.queue_behavior(1, HOME_FORWARD_ID, new)
+
+    ws.probe = probe
+    run(runner)
+
+    k = mark["k"]
+    assert all(b is not new for b in used[:k])
+    assert used[k] is new
+
+
+def test_two_queued_changes_keep_the_last_one(monkeypatch):
+    used = spy_forward(monkeypatch)
+    first, second = compile_behavior("pass"), compile_behavior("pass")
+    ws = FakeWs()
+    runner = build(FakeManager([ws]), FakeMatchRepo())
+    mark = {}
+
+    def probe(_tick):
+        if len(ws.received) == PLAYING_TICK:
+            mark["k"] = len(used)
+            runner.queue_behavior(1, HOME_FORWARD_ID, first)
+            runner.queue_behavior(1, HOME_FORWARD_ID, second)
+
+    ws.probe = probe
+    run(runner)
+
+    assert used[mark["k"] :]
+    assert all(b is second for b in used[mark["k"] :])
+
+
+def test_queue_behavior_when_the_match_is_not_running():
+    runner = build(FakeManager([]), FakeMatchRepo())
+    assert runner.queue_behavior(1, HOME_FORWARD_ID, compile_behavior("pass")) is False
+
+
+def test_unknown_player_is_logged_and_the_match_goes_on(caplog):
+    ws = FakeWs()
+    manager = FakeManager([ws])
+    runner = build(manager, FakeMatchRepo())
+
+    def probe(_tick):
+        if len(ws.received) == PLAYING_TICK:
+            runner.queue_behavior(1, 999, compile_behavior("pass"))
+
+    ws.probe = probe
+    with caplog.at_level(logging.WARNING):
+        run(runner)
+
+    assert len(ws.received) == TOTAL
+    assert manager.match_closed == [(1, 1000, "matchEnd")]
+    assert "ya no está en cancha" in caplog.text
+
+
+def test_changes_from_another_thread_never_break_a_tick(monkeypatch):
+    used = spy_forward(monkeypatch)
+    a, b = compile_behavior("pass"), compile_behavior("pass")
+    ws = FakeWs()
+    manager = FakeManager([ws])
+
+    async def tiny_sleep(_):
+        await asyncio.sleep(0.001)
+
+    runner = build(manager, FakeMatchRepo(), sleep=tiny_sleep)
+    stop = threading.Event()
+    accepted = []
+
+    def spam():
+        for behavior in itertools.cycle((a, b)):
+            if stop.is_set():
+                return
+            if runner.queue_behavior(1, HOME_FORWARD_ID, behavior):
+                accepted.append(behavior)
+
+    thread = threading.Thread(target=spam)
+    thread.start()
+    try:
+        run(runner)
+    finally:
+        stop.set()
+        thread.join()
+
+    original = used[0]
+    assert accepted  # el hilo llegó a encolar con el partido corriendo
+    assert all(x in (original, a, b) for x in used)
+    assert manager.match_closed == [(1, 1000, "matchEnd")]
+
+
+def test_only_the_result_notifies_the_finished_match():
+    repo = FakeMatchRepo()
+    repo.add(1)
+    seen = []
+    runner = build(
+        FakeManager([FakeWs()]),
+        repo,
+        on_match_finished=lambda match_id: seen.append((match_id, repo.states[1].status)),
+    )
+    run(runner)
+    # No se avisa al empezar, y al avisar el resultado ya está guardado.
+    assert seen == [(1, "finished")]
+
+
+def test_a_failing_finished_notification_does_not_stop_the_match(caplog):
+    def boom(match_id):
+        raise RuntimeError("canal caído")
+
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), on_match_finished=boom))
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudo avisar el cambio del partido" in caplog.text
+
+
+# --- penales -------------------------------------------------------------------
+
+
+def test_a_shootout_is_saved_with_the_result_and_sent_in_match_end():
+    ws, repo = FakeWs(), FakeMatchRepo()
+    repo.add(1)
+    run(build(FakeManager([ws]), repo, duration=0.05, allow_draws=False))  # 1 tick: 0 a 0
+
+    saved = repo.penalties[1]
+    sent = ws.received[-1]["event"]["result"]["penalties"]
+    assert repo.results[1] == (0, 0)
+    assert (saved.score_1, saved.score_2) == (sent["score1"], sent["score2"])
+    assert saved.kicks == sent["kicks"]
+    assert saved.winner == (1 if sent["winner"] == "club1" else 2)

@@ -3,15 +3,14 @@ info:
   title: FutBot
   description: >
     API REST para FutBot, juego de fútbol.
-
-    Los eventos en tiempo real (redirección de usuarios al iniciar un partido amistoso, y la transmisión del partido) están en el documento AsyncAPI `futbot-asyncapi.yaml`.
-  version: 0.4.0
+    Los eventos en tiempo real (redirección de usuarios al iniciar un partido amistoso, la transmisión del partido, la transmisión de la prueba de un comportamiento y los participantes, el fixture, el ranking y el partido siguiente de una liga) están en el documento AsyncAPI `futbot-asyncapi.yaml`.
+  version: 0.9.0
   x-project: "Laboratorio 2026 - Ingeniería del Software 1"
-
+ 
 servers:
   - url: "(no definido todavía)"
     description: Servidor local
-
+ 
 # ============================================================
 # CONVENCIONES
 #
@@ -69,6 +68,11 @@ servers:
 #    400 (query/body) > 403 > 409. Dentro del 400 no hay precedencia
 #    entre reglas: se informan todos los campos que fallan
 #    (convención 6).
+#    Las reglas de negocio de un campo que requieren evaluar su
+#    contenido (ej: que el `code` de un behavior respete la API de
+#    comportamientos de su tipo, o que su `name` no esté repetido)
+#    NO son errores de validación 400: responden 409 con un `code`
+#    propio del endpoint.
 #
 # 5) ORDEN DE LOS LISTADOS PAGINADOS: todos los listados paginados
 #    (GET /players/me, /behaviors/me, /leagues y /friendlies) se
@@ -76,6 +80,10 @@ servers:
 #    mayor (ascendente). El cliente no puede cambiar el orden. Con un
 #    orden fijo la paginación es estable: sin él, una misma fila
 #    puede repetirse o saltearse entre páginas.
+#    GET /ranking también es paginado (`page`, 50 por página, filtro
+#    `name`), pero NO se ordena por `id` sino por los criterios del
+#    ranking (ver el endpoint). La paginación sigue siendo estable:
+#    los empates en todos los criterios se desempatan por id de club.
 #
 # 6) FORMATO Y EVALUACIÓN DE LOS 400 DE VALIDACIÓN: todo endpoint con
 #    body o query tipados responde los errores de validación con
@@ -99,17 +107,21 @@ servers:
 #    d) Vocabulario único de `reason` (detalle en
 #       components/schemas/FieldError):
 #         - de un campo: required, invalidType, tooLong, outOfRange,
-#           invalidEmail.
+#           invalidEmail, invalidValue.
 #         - que cruzan campos: invalidSum, lessThanMin, invalidTeam,
 #           notStarter, notSubstitute.
 #    e) Precedencia DENTRO de un campo (se emite solo la primera que
-#       falla): required > invalidType > tooLong / outOfRange >
-#       invalidEmail. `tooLong` aplica a strings y `outOfRange` a
-#       números, así que nunca compiten entre sí. `null` es
+#       falla): required > invalidType > tooLong / outOfRange /
+#       invalidValue > invalidEmail. `tooLong` aplica a strings con
+#       largo máximo, `outOfRange` a números e `invalidValue` a
+#       strings que deben ser uno de un conjunto cerrado de valores
+#       (enum), así que nunca compiten entre sí. `null` es
 #       `invalidType` (salvo `password` de liga privada, que es
-#       `required`; ver CreateLeagueRequest y JoinLeagueRequest). Un
-#       id fuera del rango 1 a 2147483647 es `outOfRange`, un id que
-#       no es un entero es `invalidType`.
+#       `required`, y `coachBehaviorId`, donde `null` es un valor
+#       válido que significa "sin director técnico"; ver
+#       CreateLeagueRequest, JoinLeagueRequest y UnlockLeagueRequest).
+#       Un id fuera del rango 1 a 2147483647 es `outOfRange`, un id
+#       que no es un entero es `invalidType`.
 #    f) REGLAS QUE CRUZAN CAMPOS: solo se evalúan si todos los campos
 #       de los que dependen pasaron su validación individual (para no
 #       duplicar ruido), y se reportan con este `field`:
@@ -123,8 +135,13 @@ servers:
 #           formato (ver Member). Depende de que `members` sea un
 #           array y de que ningún elemento tenga errores de campo.
 #         - `starterId` / `notStarter` y `substituteId` /
-#           `notSubstitute` en POST /matches/{id}/substitutions.
-#           Cada una depende solo de su propio campo.
+#           `notSubstitute` en PUT /matches/{id}/substitutions.
+#           Cada una depende solo de su propio campo y solo se
+#           evalúa si el usuario es jugador del partido: un
+#           no-jugador no tiene equipo contra el cual evaluarlas,
+#           así que se saltean y responde 403 (los errores de
+#           campo required / invalidType / outOfRange sí se
+#           informan siempre, antes del 403).
 #    g) ORDEN de `errors`: el del schema del request (para `members`,
 #       por índice y, dentro de cada elemento, playerId, role,
 #       behaviorId). Una regla que cruza campos ocupa el lugar de su
@@ -143,10 +160,12 @@ servers:
 #    liga pública), no se valida NADA de él: ni su valor (longitud,
 #    vacío o nulo) ni su tipo, no se persiste y nunca aparece en
 #    `errors`. Un `password: 123` en una liga pública es aceptado. Por
-#    eso `password` es opcional (no `required`) en POST /leagues y
-#    POST /leagues/{id}/participants: solo es obligatorio cuando la
-#    liga es privada. Lo mismo vale para campos que no existen en el
-#    schema del request: se ignoran sin error.
+#    eso `password` es opcional (no `required`) en POST /leagues,
+#    POST /leagues/{id}/participants y POST /leagues/{id}/access: solo
+#    es obligatorio cuando la liga es privada (y, en el caso de
+#    /access, cuando además el usuario no es creador ni participante).
+#    Lo mismo vale para campos que no existen en el schema del
+#    request: se ignoran sin error.
 #
 # 8) PARTIDOS: un partido (Match) es el mismo recurso sea de liga o
 #    amistoso. Tiene un único conjunto de estados (MatchStatus:
@@ -154,6 +173,11 @@ servers:
 #    respuesta (Match). Un amistoso es un Match con `leagueId` null.
 #    "Esperando rival" y "cuenta regresiva" no son estados: son un
 #    `scheduled` sin rival (`club2` null) y un `scheduled` con rival.
+#    La prueba de un comportamiento (POST /behaviors/{id}/test-connections)
+#    NO es un partido: no tiene `id` de partido, no figura en ningún
+#    listado ni afecta rankings. Usa los jugadores del usuario, pero no los anota en ningún
+#    equipo ni cuenta como uso de sus comportamientos: un comportamiento que está en
+#    una prueba se puede editar y eliminar.
 #
 # 9) BODY ILEGIBLE: si el body no se puede interpretar como un objeto
 #    JSON (JSON inválido, body vacío, o un valor que no es un objeto:
@@ -167,31 +191,128 @@ servers:
 #      - POST /auth/log-in: email, password.
 #      - POST /players: name, power, agility, control, strength,
 #        speed.
-#      - POST /behaviors y PUT /behaviors/{id}: name, code.
+#      - POST /behaviors: name, code, type.
+#      - PUT /behaviors/{id}: name, code.
 #      - POST /leagues: name, minParticipants, maxParticipants,
 #        matchDuration, private, members. (`password` no aparece:
 #        solo es obligatorio si `private` es `true`, y `private`
-#        falta.)
+#        falta. `coachBehaviorId` tampoco aparece: es opcional.)
+#      - POST /leagues/{id}/access: password, solo si la liga es
+#        privada y el usuario no es creador ni participante (si no,
+#        el body se ignora por completo y responde 204; convención 7).
 #      - POST /leagues/{id}/participants: members, y también
 #        `password` (que va primero) si la liga es privada.
 #      - POST /friendlies: name, members.
 #      - POST /friendlies/{id}/members: members.
 #      - PUT /matches/{id}/behavior: playerId, behaviorId.
-#      - POST /matches/{id}/substitutions: starterId, substituteId.
+#      - PUT /matches/{id}/substitutions: starterId, substituteId.
+#      - POST /behaviors/{id}/test-connections: members.
 #    `members` se reporta como un único campo `required`, sin
-#    desglosar sus elementos.
-#    Excepción: POST /matches/{id}/connections tiene body OPCIONAL.
-#    Un body ilegible se trata como si `password` no se hubiera
-#    enviado: nunca responde 400 por el body (si `password` se
-#    evalúa, responde 403).
+#    desglosar sus elementos. `coachBehaviorId` es opcional: nunca
+#    aparece en `errors` por faltar.
+#    POST /matches/{id}/connections no tiene body: cualquier body que
+#    se envíe se ignora.
 #    Se aplica la precedencia de la convención 4: el 401 y el 404 por
 #    `{id}` de ruta inválido o inexistente tienen prioridad sobre
 #    este 400.
-# ============================================================
-
+#
+# 10) EQUIPO: al armar un equipo (POST /leagues,
+#    POST /leagues/{id}/participants, POST /friendlies y
+#    POST /friendlies/{id}/members) se envía `members` (6 jugadores,
+#    cada uno con su behavior de jugador) y, opcionalmente,
+#    `coachBehaviorId` (el behavior del director técnico).
+#    `coachBehaviorId` es totalmente opcional: puede omitirse, puede
+#    ser `null`, o puede ser un entero. Si falta o es `null`, el
+#    equipo no tiene director técnico y NO es un error. Si se envía
+#    un entero, debe ser un `coachBehavior` del usuario.
+#    Los `members[i].behaviorId` deben ser behaviors
+#    `playerBehavior`, todos del usuario. Un id bien tipado y dentro
+#    de rango que no pertenece al usuario responde 409
+#    `playerOrBehaviorNotOwned`; si pertenece al usuario pero es del
+#    tipo equivocado, 409 `behaviorTypeMismatch` (se evalúa después
+#    de `playerOrBehaviorNotOwned`).
+#    Ver la convención 13 para saber cuándo se ejecuta el DT.
+#    (NOTA: la convención 13 no figuraba en el documento original que
+#    se recibió; el texto se conserva tal cual hasta que se complete.)
+#
+# 11) ACCESO A LIGAS PRIVADAS (SESIÓN DE LIGA): los participantes, el
+#    fixture y el ranking de una liga se leen por REST
+#    (GET /leagues/{id}/participants, /fixture y /ranking) cuando la
+#    liga ya no cambia: los participantes con la liga iniciada, el
+#    fixture y el ranking con la liga terminada.
+#    La contraseña de una liga privada se envía una sola vez a
+#    POST /leagues/{id}/access y, si es correcta, el servidor
+#    registra en la sesión del usuario (la de la cookie `session_id`)
+#    que desbloqueó esa liga. No hay token ni cookie nueva: el
+#    cliente no guarda ni reenvía nada.
+#    Tienen acceso a una liga (REST y canales):
+#      - cualquier usuario si la liga es pública;
+#      - el creador y los participantes de la liga;
+#      - cualquier usuario cuya sesión desbloqueó la liga.
+#    Si la liga es privada y no se cumple ninguno de los tres
+#    casos, los GET de participants, fixture y ranking responden 403
+#    `leagueAccessRequired` y el handshake de los canales cierra con
+#    `4403` / `leagueAccessRequired`.
+#    Este mismo acceso es el que habilita ver como espectador los
+#    partidos de la liga (convención 12).
+#    El desbloqueo es por sesión y por liga: dura lo que dure la
+#    sesión (log-out o expiración lo pierden; hay que volver a
+#    llamar a /access) y no afecta a otras ligas ni a otras
+#    sesiones del mismo usuario. Es idempotente: desbloquear una
+#    liga ya desbloqueada responde 204.
+#    POST /leagues/{id}/participants sigue recibiendo `password` en
+#    el body y la valida por sí mismo (no exige haber desbloqueado
+#    antes). Si la inscripción a una liga privada es exitosa, además
+#    desbloquea la liga en la sesión.
+#    El desbloqueo es independiente de ser participante: si el
+#    usuario abandona la liga (DELETE /leagues/{id}/participants/me),
+#    conserva el acceso mientras dure la sesión, porque la sesión la
+#    desbloqueó al unirse. POST /leagues/{id}/access también registra
+#    el desbloqueo cuando el usuario es creador o participante (sin
+#    evaluar contraseña: ya la pasó al unirse o la definió al
+#    crear). Si el usuario se había unido en una sesión anterior y
+#    abandona en otra donde nunca llamó a /access, pierde el acceso y
+#    debe desbloquear con la contraseña.
+#
+# 12) ESPECTADORES: LOS PARTIDOS DE LIGA SE PUEDEN VER; LOS AMISTOSOS NO.
+#    Hay dos formas de estar en un partido:
+#      - JUGADOR: los dos usuarios del partido (`club1` y `club2`).
+#        Ven el partido y además actúan sobre él (equipo, behavior,
+#        sustituciones).
+#      - ESPECTADOR: cualquier otro usuario, solo en partidos de
+#        LIGA, y solo para mirar (solo lectura).
+#    GET /matches/{id}, POST /matches/{id}/connections y el WebSocket
+#    del partido (ver AsyncAPI) admiten a los jugadores y, si el
+#    partido es de liga, a los espectadores:
+#      - Partido de liga: puede verlo el que tenga acceso a la liga
+#        (convención 11): cualquier usuario si la liga es pública; si
+#        es privada, el creador, los participantes y quien la
+#        desbloqueó en su sesión con POST /leagues/{id}/access. Sin
+#        acceso: 403 `leagueAccessRequired` (REST) o cierre `4403` /
+#        `leagueAccessRequired` (handshake del WebSocket).
+#      - Amistoso: solo sus dos usuarios. Cualquier otro recibe 403
+#        `notAPlayerInMatch`; un amistoso no se puede ver.
+#    El acceso se valida al pedir el token y de nuevo en el handshake
+#    del WebSocket.
+#    Las ACCIONES sobre el partido son solo de los jugadores, también
+#    en partidos de liga: GET /matches/{id}/team,
+#    GET/PUT /matches/{id}/behavior, PUT /matches/{id}/substitutions
+#    y GET /matches/{id}/substitutions. Un espectador recibe 403
+#    (`notAPlayerInMatch` donde el endpoint informa `code`). El equipo
+#    y el código de los behaviors nunca se exponen a espectadores.
+#    Los NOMBRES de los titulares de ambos clubes sí los ven jugadores
+#    y espectadores, con GET /matches/{id}/lineups: mismo acceso que
+#    GET /matches/{id}.
+#    Mirar un partido NO es jugarlo: no cuenta para `alreadyPlaying`
+#    ni para `deletable` de un jugador, y no afecta el resultado.
+#    POST /matches/{id}/connections informa en `role` si la conexión
+#    es de `player` o de `spectator`.
+#    Qué eventos del WebSocket recibe un espectador lo define el
+#    AsyncAPI.
+ 
 security:
   - cookieAuth: []
-
+ 
 tags:
   - name: Auth
     description: Inicio y cierre de sesión.
@@ -200,11 +321,44 @@ tags:
   - name: Players
     description: Jugadores del usuario (alta, listado y baja).
   - name: Behaviors
-    description: Comportamientos programables que se asignan a los jugadores.
+    description: >
+      Comportamientos programables del usuario. Hay dos tipos
+      (`type`): `playerBehavior`, que se asigna a los jugadores, y
+      `coachBehavior`, el del director técnico. El código de cada tipo
+      se valida contra su propia API de comportamientos. Incluye la
+      prueba de un comportamiento de jugador (token para el WebSocket
+      de prueba, ver AsyncAPI).
   - name: Leagues
-    description: Ligas, inscripciones y fixture.
+    description: >
+      Ligas e inscripciones. Participantes, fixture y ranking se leen
+      por REST cuando la liga ya no cambia y por WebSocket mientras
+      cambia (ver AsyncAPI); el partido siguiente, solo por
+      WebSocket. El acceso a una liga privada se obtiene una vez con
+      POST /leagues/{id}/access (convención 11).
+      El orden de las entradas, la regla de empates y el puntaje son los
+      mismos que en GET /ranking.
+      Orden de evaluación: 401 > 404 > 403 > 409.
+      Flujo sugerido para el front al abrir una liga de la lista:
+      (1) GET /leagues/{id} (trae `private` y `joined`). (2) Si la
+      liga es pública o `joined` es `true`, entrar directo: según el
+      `status`, canal de participantes en `preparation`; GET de
+      participantes más canales de fixture, ranking y partido
+      siguiente en `started`; solo los GET en `finished`. (3) Si es
+      privada y `joined` es `false`, intentar cargar igual: si el
+      servidor responde 403 `leagueAccessRequired` (REST) o cierra
+      con `4403` (canal), pedir la contraseña, llamar a
+      POST /leagues/{id}/access y reintentar. Así no se re-pide la
+      contraseña cuando la sesión ya había desbloqueado la liga.
+      (4) Para participar, POST /leagues/{id}/participants con la
+      contraseña en el body, que además desbloquea la liga.
+      (5) Los partidos del fixture y el partido siguiente se pueden
+      ver como espectador con GET /matches/{id} y
+      POST /matches/{id}/connections (convención 12); si la liga es
+      privada vale el mismo acceso del paso (3).
   - name: Ranking
-    description: Rankings de liga y ranking global.
+    description: >
+      Rankings de liga y ranking global (paginado y con buscador por
+      nombre de club).
   - name: Friendlies
     description: >
       Partidos amistosos: crear uno con nombre, buscar los que esperan
@@ -212,12 +366,27 @@ tags:
       un partido (Match): su `id` es el id del partido y se usa en
       POST /matches/{id}/connections y en el WebSocket. Las acciones
       sobre el partido en curso (behavior, sustituciones) están en el
-      tag Matches.
+      tag Matches. A diferencia de los partidos de liga, un amistoso
+      no se puede ver como espectador (convención 12).
   - name: Matches
     description: >
-      Acciones sobre un partido en curso (de liga o amistoso) y
-      obtención del token de transmisión.
-
+      Consulta de un partido, acciones sobre un partido en curso (de
+      liga o amistoso) y obtención del token de conexión. Los
+      partidos de liga se pueden ver como espectador (convención
+      12): GET /matches/{id} y POST /matches/{id}/connections admiten,
+      además de los dos usuarios del partido, a cualquier usuario con
+      acceso a la liga. Los amistosos solo los ven sus dos usuarios.
+      Los titulares de ambos clubes (nombre y rol) se obtienen con
+      GET /matches/{id}/lineups, con el mismo acceso de ver el
+      partido. Las acciones sobre el partido (equipo, behavior,
+      sustituciones) son solo de los jugadores.
+  - name: Notifications
+    description: >
+      Notificaciones del usuario (fin de un partido de una liga en la
+      que participa y fin de la liga). Se reciben por el canal
+      `/ws/notifications` (ver AsyncAPI); por REST solo se marcan como
+      vistas.
+ 
 paths:
   # ==========================================================
   # AUTH
@@ -231,8 +400,6 @@ paths:
         Crea el usuario, hashea la contraseña antes de persistirla, y
         abre sesión automáticamente (setea la cookie de sesión),
         redirigiendo al usuario al sistema principal.
-
-
         Las reglas de cada campo están en RegisterUserRequest. Si el
         body es ilegible, ver convención 9.
       security: []
@@ -260,7 +427,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-
+ 
   /auth/log-in:
     post:
       tags: [Auth]
@@ -290,25 +457,29 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           description: >
-            Credenciales inválidas (email no registrado, contraseña incorrecta 
+            Credenciales inválidas (email no registrado, contraseña incorrecta
             o contraseña que excede el límite de 72 caracteres).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-
+ 
   /auth/log-out:
     post:
       tags: [Auth]
       operationId: logOut
       summary: Cerrar sesión
-      description: Expira la cookie de sesión.
+      description: >
+        Expira la cookie de sesión. Como los accesos a ligas privadas
+        desbloqueadas (POST /leagues/{id}/access) viven en la sesión,
+        también se pierden: al volver a iniciar sesión hay que
+        desbloquearlas de nuevo (convención 11).
       responses:
         "204":
           description: Sesión cerrada.
         "401":
           $ref: "#/components/responses/Unauthorized"
-
+ 
   # ==========================================================
   # USERS
   # ==========================================================
@@ -330,7 +501,7 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
+ 
   # ==========================================================
   # PLAYERS
   # ==========================================================
@@ -359,7 +530,7 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
+ 
   /players:
     post:
       tags: [Players]
@@ -368,8 +539,6 @@ paths:
       description: >
         Cada stat debe estar entre 20 y 100 y la suma de los cinco debe
         ser exactamente 300 (UC12 - 4c, 4d).
-
-
         Las reglas de cada campo y la regla de la suma (`field: stats`,
         `reason: invalidSum`, solo si las cinco stats son válidas) están
         en CreatePlayerRequest. Si el body es ilegible, ver
@@ -391,7 +560,7 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
+ 
   /players/{id}:
     parameters:
       - $ref: "#/components/parameters/PlayerId"
@@ -416,7 +585,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeletePlayerConflict"
-
+ 
   # ==========================================================
   # BEHAVIORS
   # ==========================================================
@@ -427,7 +596,12 @@ paths:
       summary: Listar los behaviors del usuario logueado
       description: >
         Hasta 50 elementos por página, ordenados por `id` ascendente.
-        Solo id y nombre; el código se pide con GET /behaviors/{id}.
+        Solo id, nombre y tipo; el código se pide con
+        GET /behaviors/{id}. Sin `type` trae behaviors de ambos
+        tipos. Con `type`, solo los de ese tipo: el front lo usa para
+        llenar el selector de behaviors de jugador (`members`) o el
+        del DT (`coachBehaviorId`) sin filtrar en el cliente, lo que
+        rompería la paginación.
       parameters:
         - name: name
           in: query
@@ -435,6 +609,17 @@ paths:
           description: Filtra por nombre del behavior (búsqueda parcial, case-insensitive).
           schema:
             type: string
+        - name: type
+          in: query
+          required: false
+          description: >
+            Filtra por tipo. Si viene vacío (`?type=`) se trata como
+            ausente y no filtra. Un string que no es `playerBehavior`
+            ni `coachBehavior` responde 400 con `field: type`,
+            `reason: invalidValue`. En `errors`, `type` va después de
+            `name` y antes de `page`.
+          schema:
+            $ref: "#/components/schemas/BehaviorType"
         - $ref: "#/components/parameters/PageQuery"
       responses:
         "200":
@@ -447,15 +632,32 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
+ 
   /behaviors:
     post:
       tags: [Behaviors]
       operationId: createBehavior
       summary: Crear un behavior
       description: >
+        Crea un behavior de tipo `playerBehavior` o `coachBehavior`. El
+        `code` se valida contra la API de comportamientos del `type`
+        elegido: si no la respeta, el behavior no se registra.
         Las reglas de cada campo están en CreateBehaviorRequest. Si el
         body es ilegible, ver convención 9.
+        Orden de evaluación: 401 > 400 (campos) > 409. Los 409 son
+        reglas de negocio (convención 4): nombre repetido entre los
+        behaviors del usuario (sin importar el tipo), código que no
+        respeta la API del tipo y código demasiado largo (más de 250
+        líneas o más de 20000 caracteres, ver CreateBehaviorRequest).
+        Dentro del 409 se informa un solo motivo, el primero que
+        falla en este orden: `duplicateName` > `codeTooLong` >
+        `invalidCode`.
+        Cuando el motivo es `invalidCode`, la respuesta informa el
+        PRIMER error del código en `codeError`: la regla que
+        incumple (`rule`) y su ubicación (`line` y `column`), más un
+        `message` al estilo de un error de compilación, para que el
+        cliente pueda señalarlo en el editor. Las reglas de validez
+        están en CodeError.
       requestBody:
         required: true
         content:
@@ -476,19 +678,20 @@ paths:
         "409":
           description: >
             Ya existe un behavior con ese nombre para el usuario, el
-            código no es válido, o el código es demasiado largo.
+            código no respeta la API de comportamientos de su tipo, o
+            el código es demasiado largo.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateBehaviorConflict"
-
+ 
   /behaviors/{id}:
     parameters:
       - $ref: "#/components/parameters/BehaviorId"
     get:
       tags: [Behaviors]
       operationId: getBehavior
-      summary: Obtener nombre y código de un behavior
+      summary: Obtener nombre, tipo y código de un behavior
       responses:
         "200":
           description: Detalle del behavior.
@@ -507,6 +710,9 @@ paths:
       operationId: updateBehavior
       summary: Modificar un behavior
       description: >
+        El `type` de un behavior no se puede cambiar: no viaja en el
+        body, y el `code` se valida contra la API del tipo con el que
+        se creó el behavior.
         Las reglas de cada campo están en UpdateBehaviorRequest. Si el
         body es ilegible, ver convención 9 (el 404 por `id` de ruta
         tiene prioridad).
@@ -541,14 +747,131 @@ paths:
                 $ref: "#/components/schemas/UpdateBehaviorNotFound"
         "409":
           description: >
-            El código no es válido, ya existe otro behavior del
-            usuario con el nuevo nombre, o el código es demasiado
-            largo.
+            El código no respeta la API de comportamientos del tipo
+            del behavior, ya existe otro behavior del usuario con el
+            nuevo nombre, o el código es demasiado largo (más de 250
+            líneas o más de 20000 caracteres). Mismo orden y mismo
+            `codeError` que en POST /behaviors.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UpdateBehaviorConflict"
-
+    delete:
+      tags: [Behaviors]
+      operationId: deleteBehavior
+      summary: Eliminar un behavior
+      description: >
+        Solo se puede eliminar un behavior que no está en uso (ver
+        `deletable` en BehaviorDetail). Orden de evaluación:
+        401 > 404 > 403 > 409.
+        Si un mismo behavior está en uso por los dos motivos, se
+        informa un solo código, el primero en este orden:
+        `behaviorInLeagueTeam` > `behaviorInMatch`.
+      responses:
+        "204":
+          description: Behavior eliminado.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: El behavior existe pero no pertenece al usuario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: null
+                message: "No tenés permiso para eliminar este behavior."
+        "404":
+          description: >
+            El behavior no existe, o el `id` de la ruta no es válido
+            (no es un entero, es menor que 1 o supera 2147483647).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: null
+                message: "El behavior no existe."
+        "409":
+          description: >
+            El behavior está en uso (ver `deletable` en
+            BehaviorDetail).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteBehaviorConflict"
+              examples:
+                inLeagueTeam:
+                  summary: Asignado a un jugador o al DT de un equipo de liga
+                  value:
+                    code: behaviorInLeagueTeam
+                    message: "El behavior está asignado a un equipo inscripto en una liga."
+                inMatch:
+                  summary: En uso en un partido en curso
+                  value:
+                    code: behaviorInMatch
+                    message: "El behavior está en uso en un partido en curso."
+ 
+  /behaviors/{id}/test-connections:
+    parameters:
+      - $ref: "#/components/parameters/BehaviorId"
+    post:
+      tags: [Behaviors]
+      operationId: testBehavior
+      summary: Pedir conexión para probar un comportamiento de jugador
+      description: >
+        Devuelve `tokenWs`, que se usa para conectarse al canal
+        `/ws/behaviors/{id}/test` (ver AsyncAPI), donde el servidor
+        transmite la prueba. Es el equivalente de
+        POST /matches/{id}/connections para la prueba de un
+        comportamiento.
+        La prueba es un 3 contra 3 con 6 jugadores del usuario: el body
+        dice de qué club (`club1` o `club2`) es cada uno, con qué rol y
+        con qué behavior juega. El behavior de la ruta es el que el
+        usuario quiere probar: el cliente lo precarga en la alineación,
+        pero no es obligatorio que algún jugador lo use.
+        Solo se pueden probar behaviors `playerBehavior` del propio
+        usuario. La prueba NO es un partido (convención 8). La
+        simulación arranca cuando el cliente abre el WebSocket, no
+        acá.
+        El token vence a los 5 minutos (fijo), es reutilizable hasta
+        entonces y está atado a este usuario, a este behavior y a esta
+        alineación. La expiración se valida solo en el handshake del
+        WebSocket.
+        Orden de evaluación: 401 > 404 > 400 > 403 > 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BehaviorTestRequest"
+      responses:
+        "201":
+          description: Conexión creada. Token para conectarse al WebSocket de prueba.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BehaviorTestConnectionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            notPlayerBehavior: el behavior de la ruta es de tipo
+            `coachBehavior`. playerOrBehaviorNotOwned: algún jugador o
+            behavior de `members` no es del usuario.
+            behaviorTypeMismatch: algún behavior de `members` es un
+            `coachBehavior`. Se informa el primero, en ese orden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestBehaviorConflict"
+ 
   # ==========================================================
   # LEAGUES
   # ==========================================================
@@ -561,18 +884,17 @@ paths:
         Hasta 50 elementos por página (tamaño fijo, ver `pageSize` en
         la respuesta), ordenados por `id` ascendente (convención 5).
         Requiere sesión.
-
-
         Un `items: []` con status 200 puede deberse a tres causas: no
         hay ligas, ninguna liga coincide con `name`, o `page` es válida
         pero supera la última página disponible (convención 4). El
         cliente las distingue con `total` (0 o mayor a 0) y con la
         `page` que pidió.
-
-
         Cantidad de páginas disponibles: `max(1, ceil(total / pageSize))`.
         Este listado no permite inscribirse: para eso existe
-        POST /leagues/{id}/participants.
+        POST /leagues/{id}/participants. Las ligas privadas figuran
+        en el listado (con `private: true`); para leer su
+        información (REST o WebSocket) hay que desbloquearlas con
+        POST /leagues/{id}/access.
       parameters:
         - name: name
           in: query
@@ -602,18 +924,15 @@ paths:
       summary: Crear una liga
       description: >
         La liga queda en estado `preparation`. El creador se inscribe
-        automáticamente como participante con el equipo (`members`)
-        enviado en el mismo request, sin necesidad de un llamado
-        posterior a POST /leagues/{id}/participants.
-
-
+        automáticamente como participante con el equipo (`members` y,
+        opcionalmente, `coachBehaviorId`) enviado en el mismo request,
+        sin necesidad de un llamado posterior a
+        POST /leagues/{id}/participants.
         Si `private` es `false`, `password` se ignora por completo
         (convención 7): no se valida ni su valor (longitud, vacío o
         nulo) ni su tipo, y no se persiste; en ese caso puede omitirse
         del body. Si `private` es `true`, es obligatoria (presente, no
         nula ni vacía).
-
-
         Las reglas de cada campo, `maxParticipants` / `lessThanMin` y
         `members` / `invalidTeam` están en CreateLeagueRequest. Si el
         body es ilegible, ver convención 9.
@@ -636,13 +955,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "409":
           description: >
-            Algún jugador o behavior del equipo (`members`) enviado no
-            pertenece al creador.
+            Algún jugador o behavior del equipo (`members`,
+            `coachBehaviorId` si se envió) no pertenece al creador
+            (`playerOrBehaviorNotOwned`), o algún behavior es del tipo
+            equivocado (`behaviorTypeMismatch`, convención 10).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateLeagueConflict"
-
+ 
   /leagues/{id}:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -650,18 +971,83 @@ paths:
       tags: [Leagues]
       operationId: getLeague
       summary: Obtener una liga
+      description: >
+        Detalle de la liga: lo mismo que figura en GET /leagues más
+        `joined`. No requiere acceso de liga
+        (convención 11): se puede pedir también para ligas privadas.
+        No informa si el usuario tiene acceso a los canales WebSocket
+        de la liga: eso lo decide el servidor al conectar, igual que
+        con cualquier otro recurso protegido. El front se conecta con
+        su sesión y, si la liga es privada y el handshake cierra con
+        `4403` / `leagueAccessRequired`, pide la contraseña, llama a
+        POST /leagues/{id}/access y se reconecta.
       responses:
         "200":
-          description: Información de la liga.
+          description: Detalle de la liga.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LeagueSummary"
+                $ref: "#/components/schemas/LeagueDetail"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
-
+ 
+  /leagues/{id}/access:
+    parameters:
+      - $ref: "#/components/parameters/LeagueId"
+    post:
+      tags: [Leagues]
+      operationId: unlockLeague
+      summary: Desbloquear una liga privada para la sesión actual
+      description: >
+        Valida la contraseña de una liga privada y, si es correcta,
+        registra en la sesión del usuario que desbloqueó esa liga
+        (convención 11). A partir de ahí, los GET de participants,
+        fixture y ranking dejan de responder 403 y el handshake de los canales WebSocket
+        de la liga (`/ws/leagues/{id}/...`) deja de cerrar con `4403`
+        / `leagueAccessRequired` para esta sesión. No
+        devuelve token ni
+        setea cookies: el cliente no guarda nada.
+        La contraseña solo se evalúa si la liga es privada y el
+        usuario no es su creador ni participante. En cualquier otro
+        caso el body se ignora por completo (convención 7) y responde
+        204: con una liga pública no hace nada; con una liga privada
+        de la que el usuario es creador o participante, registra el
+        desbloqueo en la sesión sin evaluar contraseña, para que el
+        acceso se conserve si después abandona la liga. Así el front
+        puede llamarlo siempre antes de leer una liga sin distinguir
+        casos. Es idempotente: desbloquear una liga ya desbloqueada
+        responde 204.
+        El desbloqueo dura lo que dure la sesión (log-out o expiración
+        lo pierden) y vale solo para esta liga.
+        Como la obligatoriedad de `password` depende de la liga, el
+        404 (liga inexistente) se resuelve antes de validar el body.
+        Las reglas de cada campo están en UnlockLeagueRequest. Si el
+        body es ilegible, ver convención 9.
+        Orden de evaluación: 401 > 404 > 400 > 403.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnlockLeagueRequest"
+      responses:
+        "204":
+          description: Liga desbloqueada para la sesión (o no hacía falta).
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: La liga es privada y la contraseña enviada es incorrecta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlockLeagueForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+ 
   /leagues/{id}/participants:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -670,15 +1056,22 @@ paths:
       operationId: listLeagueParticipants
       summary: Listar los participantes inscriptos en una liga
       description: >
-        Si la liga es privada, requiere la contraseña de la liga en el
-        header `X-League-Password`, salvo que el usuario sea el
-        creador o ya participe de la liga, en cuyo caso no se
-        exige. Si la liga es pública, el header se ignora.
-      parameters:
-        - $ref: "#/components/parameters/LeaguePasswordHeader"
+        Pensado para ligas ya iniciadas (`started`, `finished` o
+        `cancelled`), donde la cantidad de participantes no puede
+        cambiar. Mientras la liga está en `preparation` la lista
+        cambia con cada inscripción o abandono, y se sigue por el
+        canal WebSocket `/ws/leagues/{id}/participants` (ver
+        AsyncAPI), que rechaza la conexión si la liga ya no está en
+        `preparation`; este endpoint, en cambio, responde con la lista
+        actual en cualquier estado, sin 409.
+        Si la liga es privada, requiere ser el creador, ser
+        participante o haberla desbloqueado en la sesión con
+        POST /leagues/{id}/access (convención 11). Si la liga es
+        pública, no requiere nada más.
+        Orden de evaluación: 401 > 404 > 403.
       responses:
         "200":
-          description: Participantes inscriptos actualmente, incluido el creador.
+          description: Participantes inscriptos, incluido el creador.
           content:
             application/json:
               schema:
@@ -688,13 +1081,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: >
-            La liga es privada, el usuario no es creador ni
-            participante, y no envió la contraseña o esta es incorrecta.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListLeagueParticipantsForbidden"
+          $ref: "#/components/responses/LeagueAccessForbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -703,13 +1090,17 @@ paths:
       summary: Inscribirse a una liga con un equipo
       description: >
         `password` solo es requerida si la liga es privada (UC19); se
-        ignora si es pública (UC18), según la convención 7.
-
-
+        ignora si es pública (UC18), según la convención 7. La
+        contraseña se valida acá mismo: no hace falta haber
+        desbloqueado la liga antes con POST /leagues/{id}/access
+        (convención 11). Si la liga es privada y la inscripción es
+        exitosa, la liga queda desbloqueada en la sesión del usuario.
         Como la obligatoriedad de `password` depende de la liga, el
         404 (liga inexistente) se resuelve antes de validar el body.
-        Las reglas de cada campo y `members` / `invalidTeam` están en
-        JoinLeagueRequest. Si el body es ilegible, ver convención 9.
+        El equipo se envía como `members` y, opcionalmente,
+        `coachBehaviorId` (convención 10). Las reglas de cada campo y
+        `members` / `invalidTeam` están en JoinLeagueRequest. Si el
+        body es ilegible, ver convención 9.
       requestBody:
         required: true
         content:
@@ -738,12 +1129,13 @@ paths:
         "409":
           description: >
             La liga no está en `preparation`, ya está llena, el usuario
-            ya participa, o algún jugador/behavior no le pertenece.
+            ya participa, algún jugador/behavior no le pertenece, o
+            algún behavior es del tipo equivocado (convención 10).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/JoinLeagueConflict"
-
+ 
   /leagues/{id}/participants/me:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -756,7 +1148,10 @@ paths:
         inscripción junto con el equipo que había registrado). Solo
         disponible mientras la liga está en `preparation`; una vez
         `started`, no hay forma de abandonar (el fixture ya está
-        generado).
+        generado). Abandonar NO revoca el desbloqueo de la sesión: si
+        la liga es privada y la sesión la tenía desbloqueada, el
+        usuario sigue pudiendo conectarse a sus canales WebSocket
+        hasta que la sesión termine (convención 11).
       responses:
         "204":
           description: Inscripción eliminada.
@@ -773,7 +1168,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LeaveLeagueConflict"
-
+ 
   /leagues/{id}/start:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -783,11 +1178,27 @@ paths:
       summary: Iniciar una liga
       description: >
         Solo el creador. Requiere que la liga esté en `preparation` y
-        que haya al menos `minParticipants` participantes. Genera el
-        fixture y pasa la liga a `started`.
+        que haya al menos `minParticipants` participantes. Pasa la
+        liga a `started` y genera el fixture.
+        Orden de evaluación: 401 (sin sesión) > 404 (la liga no
+        existe) > 403 (el usuario no es el creador) > 409
+        `notInPreparation` > 409 `notEnoughParticipants`. El cliente
+        no manda body: el usuario sale de la cookie de sesión y la
+        liga de la ruta.
+        Fixture generado: solo ida. Cada par de participantes se
+        enfrenta UNA vez (n·(n-1)/2 partidos para n participantes), en
+        un único partido sin local ni visitante: `club1` y `club2`
+        solo fijan el orden en que se muestran y el lado de la
+        cancha. Los
+        partidos se crean en `scheduled`, con `leagueId`, `club1`,
+        `club2` y `scheduledAt` completos, y no se superponen en fecha
+        y hora: cada partido se agenda después del anterior (el
+        "partido siguiente"). Se consulta con GET /leagues/{id}/fixture y, con la
+        liga en curso, se sigue por el canal WebSocket
+        `/ws/leagues/{id}/fixture` (ver AsyncAPI).
       responses:
         "204":
-          description: Liga iniciada.
+          description: Liga iniciada y fixture generado.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -795,12 +1206,14 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: La liga no está en `preparation`, o no alcanza el mínimo de participantes.
+          description: >
+            La liga no está en `preparation`, o no alcanza el mínimo
+            de participantes (se informa primero `notInPreparation`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/StartLeagueConflict"
-
+ 
   /leagues/{id}/cancel:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -808,7 +1221,10 @@ paths:
       tags: [Leagues]
       operationId: cancelLeague
       summary: Cancelar una liga
-      description: Solo el creador. La cancelación es permanente.
+      description: >
+        Solo el creador y solo con la liga en `preparation`: una liga
+        iniciada no se puede cancelar. La cancelación es permanente.
+        Orden de evaluación: 401 > 404 > 403 > 409.
       responses:
         "204":
           description: Liga cancelada.
@@ -819,12 +1235,12 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: La liga ya está cancelada, o ya está finalizada.
+          description: La liga ya está en curso, ya está cancelada o ya está finalizada.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CancelLeagueConflict"
-
+ 
   /leagues/{id}/fixture:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -834,7 +1250,20 @@ paths:
       summary: Obtener el fixture de una liga
       description: >
         Grilla de partidos de la liga (todos los estados) con fecha,
-        clubes, estado y resultado.
+        clubes, estado y resultado. El `id` de cada partido sirve para
+        verlo como espectador (GET /matches/{id} y
+        POST /matches/{id}/connections, convención 12) con el mismo
+        acceso a la liga que exige este endpoint.
+        Pensado para ligas terminadas (`finished`), donde el fixture
+        ya no cambia. Con la liga en curso el fixture cambia con cada
+        partido y se sigue por el canal WebSocket
+        `/ws/leagues/{id}/fixture` (ver AsyncAPI); este endpoint
+        igual responde con el fixture actual de cualquier liga que ya
+        tenga uno.
+        Si la liga es privada, requiere ser el creador, ser
+        participante o haberla desbloqueado en la sesión con
+        POST /leagues/{id}/access (convención 11).
+        Orden de evaluación: 401 > 404 > 403 > 409.
       responses:
         "200":
           description: Fixture de la liga.
@@ -844,15 +1273,20 @@ paths:
                 $ref: "#/components/schemas/Fixture"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/LeagueAccessForbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: La liga todavía no tiene fixture (no fue iniciada).
+          description: >
+            La liga no tiene fixture: todavía no fue iniciada
+            (`leagueNotStarted`) o fue cancelada (`leagueCancelled`;
+            una liga cancelada no tiene fixture ni ranking).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
-
+                $ref: "#/components/schemas/LeagueDataConflict"
+ 
   /leagues/{id}/ranking:
     parameters:
       - $ref: "#/components/parameters/LeagueId"
@@ -860,6 +1294,20 @@ paths:
       tags: [Leagues, Ranking]
       operationId: getLeagueRanking
       summary: Obtener el ranking de una liga
+      description: >
+        Pensado para ligas terminadas (`finished`), donde el ranking
+        ya no cambia. Con la liga en curso el ranking cambia al
+        terminar cada partido y se sigue por el canal WebSocket
+        `/ws/leagues/{id}/ranking` (ver AsyncAPI); este endpoint
+        igual responde con el ranking actual de cualquier liga que ya
+        tenga uno. Una liga sin ranking (todavía no iniciada, o
+        cancelada) responde 409.
+        Si la liga es privada, requiere ser el creador, ser
+        participante o haberla desbloqueado en la sesión con
+        POST /leagues/{id}/access (convención 11).
+        El orden de las entradas, la regla de empates y el puntaje son los
+        mismos que en GET /ranking.
+        Orden de evaluación: 401 > 404 > 403 > 409.
       responses:
         "200":
           description: Ranking de la liga.
@@ -869,28 +1317,19 @@ paths:
                 $ref: "#/components/schemas/LeagueRanking"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/LeagueAccessForbidden"
         "404":
           $ref: "#/components/responses/NotFound"
-
-  /leagues/{id}/matches:
-    parameters:
-      - $ref: "#/components/parameters/LeagueId"
-    get:
-      tags: [Leagues, Matches]
-      operationId: listLeagueLiveMatches
-      summary: Listar los partidos de la liga que se están jugando ahora
-      responses:
-        "200":
-          description: Partidos en curso.
+        "409":
+          description: >
+            La liga no tiene ranking: todavía no fue iniciada
+            (`leagueNotStarted`) o fue cancelada (`leagueCancelled`).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LiveLeagueMatchList"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
+                $ref: "#/components/schemas/LeagueDataConflict"
+ 
   # ==========================================================
   # GLOBAL RANKING
   # ==========================================================
@@ -899,16 +1338,66 @@ paths:
       tags: [Ranking]
       operationId: getGlobalRanking
       summary: Obtener el ranking global
+      description: >
+        Ranking de clubes, paginado: hasta 50 por página (tamaño fijo,
+        ver `pageSize`), ordenado por los criterios del ranking y no
+        por `id` (convención 5). Filtra por nombre de club con `name`.
+        Solo aparecen los clubes con al menos un partido finalizado en
+        ligas públicas.
+        Se calcula sobre todos los partidos FINALIZADOS de ligas
+        PÚBLICAS ya iniciadas. Los amistosos y las ligas privadas no
+        cuentan.
+        Puntaje por partido: ganado sin penales = 3, ganado por
+        penales = 2, empate = 1, perdido = 0 (un partido perdido por
+        penales cuenta como perdido).
+        Orden de las entradas, por prioridad (cada criterio solo
+        desempata al anterior): `score` descendente, `goalDifference`
+        descendente, `goals` descendente, `wonRegular` descendente,
+        `wonPenalties` descendente y `lost` ASCENDENTE (el que
+        perdió menos va más arriba).
+        `position` NO es un criterio: se deriva del orden. Los clubes
+        empatados en TODOS los criterios comparten el mismo `position`
+        y el siguiente puesto se saltea (ranking de competición: 1, 2,
+        2, 4). Para que la paginación sea estable, los empatados se
+        ordenan por id de club ascendente. Los goles (`goals`, `goalDifference`) son los
+        del juego, sin contar la tanda de penales.
+        El filtro `name` reduce los resultados pero NO cambia el
+        `position`: cada club conserva su puesto en el ranking
+        completo (un club que figura 40.º sigue siendo 40.º al
+        buscarlo por nombre). Un `items: []` con status 200 puede
+        deberse a que ningún club coincide con `name` o a una `page`
+        válida que supera la última (convención 4); `total` los
+        distingue. Cantidad de páginas: `max(1, ceil(total / pageSize))`.
+        El ranking cambia cada vez que termina un partido de una liga
+        pública, así que entre dos páginas pedidas con tiempo de por
+        medio un club puede pasar de una a otra. No hay canal
+        WebSocket: el front vuelve a pedir la página cuando quiera
+        actualizarla.
+      parameters:
+        - name: name
+          in: query
+          required: false
+          description: >
+            Filtra por nombre del club (búsqueda parcial,
+            case-insensitive). Si viene vacío (`?name=`) se trata como
+            ausente y no filtra. En `errors`, `name` va antes de
+            `page`.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/PageQuery"
       responses:
         "200":
-          description: Ranking global.
+          description: >
+            Página del ranking global. Puede traer `items: []`.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GlobalRanking"
+                $ref: "#/components/schemas/GlobalRankingPage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
-
+ 
   # ==========================================================
   # FRIENDLIES (PARTIDO AMISTOSO)
   # ==========================================================
@@ -955,11 +1444,15 @@ paths:
         máximo de 15 minutos contados desde `createdAt`: si nadie se
         une, el servidor pasa el partido a `cancelled` y cierra sus
         conexiones WebSocket (ver AsyncAPI).
-
-
-        Las reglas de cada campo y `members` / `invalidTeam` están en
-        CreateFriendlyMatchRequest. Si el body es ilegible, ver
-        convención 9.
+        La duración de un amistoso es fija, de 3 minutos de juego (sin
+        contar las pausas), y no se envía en el body: a diferencia de
+        las ligas, CreateFriendlyMatchRequest no tiene `matchDuration`.
+        Las 3 pausas caen a los 45 segundos, al 1 minuto 30 y a los 2
+        minutos 15 de juego.
+        El equipo se envía como `members` y, opcionalmente,
+        `coachBehaviorId` (convención 10). Las reglas de cada campo y
+        `members` / `invalidTeam` están en CreateFriendlyMatchRequest.
+        Si el body es ilegible, ver convención 9.
       requestBody:
         required: true
         content:
@@ -983,13 +1476,14 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "409":
           description: >
-            El usuario ya está jugando un partido, o algún
-            jugador/behavior no le pertenece.
+            El usuario ya está jugando un partido, algún
+            jugador/behavior no le pertenece, o algún behavior es del
+            tipo equivocado (convención 10).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateFriendlyMatchConflict"
-
+ 
   /friendlies/{id}/members:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -1005,15 +1499,15 @@ paths:
         condicional quién llega primero si la unión coincide con el
         vencimiento de la espera. El partido sigue `scheduled`
         durante la cuenta regresiva y pasa a `started` cuando entra
-        en juego. El servidor arranca la simulación automáticamente,
-        con una cuenta regresiva de 10 segundos. El usuario pide su
-        token en POST /matches/{id}/connections con el mismo `id` y se
+        en juego. El servidor espera 3 segundos para arrancar la
+        simulación, luego de la cual ocurre una cuenta regresiva de
+        5 segundos. El usuario pide su token en
+        POST /matches/{id}/connections con el mismo `id` y se
         conecta al WebSocket.
-
-
-        Las reglas de cada campo y `members` / `invalidTeam` están en
-        JoinFriendlyMatchRequest. Si el body es ilegible, ver
-        convención 9.
+        El equipo se envía como `members` y, opcionalmente,
+        `coachBehaviorId` (convención 10). Las reglas de cada campo y
+        `members` / `invalidTeam` están en JoinFriendlyMatchRequest.
+        Si el body es ilegible, ver convención 9.
       requestBody:
         required: true
         content:
@@ -1038,16 +1532,52 @@ paths:
             El partido ya no admite rival (ya tiene uno, ya arrancó,
             ya terminó, o fue cancelado por vencimiento de la espera),
             el usuario es el propio creador, el usuario ya está
-            jugando otro partido, o algún jugador/behavior no le
-            pertenece.
+            jugando otro partido, algún jugador/behavior no le
+            pertenece, o algún behavior es del tipo equivocado
+            (convención 10).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/JoinFriendlyMatchConflict"
-
+ 
   # ==========================================================
   # MATCHES
   # ==========================================================
+  /matches/{id}:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      tags: [Matches]
+      operationId: getMatch
+      summary: Obtener un partido (clubes, usuarios, estado y resultado)
+      description: >
+        Devuelve el `Match` completo, de liga o amistoso, en cualquier
+        estado. Es lo que el front usa para armar el marcador: cada
+        club trae el `username` del usuario y el nombre de su club
+        (`UserClub`). Es un dato estático: el marcador en vivo viaja
+        por el WebSocket.
+        Lo pueden pedir los dos usuarios del partido y, si es un
+        partido de liga, cualquier espectador con acceso a la liga
+        (convención 12). Cualquier otro usuario recibe 403: en un
+        amistoso, `notAPlayerInMatch`; en un partido de una liga
+        privada sin acceso, `leagueAccessRequired` (se resuelve con
+        POST /leagues/{id}/access, convención 11). El `Match` es el
+        mismo para jugadores y espectadores.
+        Orden de evaluación: 401 > 404 > 403.
+      responses:
+        "200":
+          description: El partido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/MatchAccessForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+ 
   /matches/{id}/connections:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -1058,45 +1588,27 @@ paths:
       description: >
         Crea una conexión del usuario al partido y devuelve `tokenWs`,
         que se usa para conectarse al canal `/ws/matches/{id}` (ver
-        AsyncAPI). 
-
-
-        `password` solo se evalúa si el partido pertenece a una liga
-        privada y el usuario es ajeno a ella; se ignora en cualquier
-        otro caso (incluyendo partidos amistosos).
-
-
-        El body es opcional: un body ausente o ilegible (convención 9)
-        se trata como si `password` no se hubiera enviado.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/JoinMatchRequest"
+        AsyncAPI), y `role`, que indica si la conexión es de jugador
+        (`player`) o de espectador (`spectator`). La pueden pedir los
+        dos usuarios del partido y, si es un partido de liga,
+        cualquier usuario con acceso a la liga (convención 12): así
+        se ve un partido de liga ajeno. Un amistoso solo lo pueden
+        ver sus dos usuarios.
+        No tiene body (si se envía, se ignora).
+        Orden de evaluación: 401 > 404 > 403 > 409.
       responses:
         "201":
-          description: Conexión creada. Token para conectarse al WebSocket del partido.
+          description: >
+            Conexión creada. Token para conectarse al WebSocket del
+            partido y rol de la conexión (`player` o `spectator`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/JoinMatchResponse"
-        "400":
-          $ref: "#/components/responses/ValidationError"
         "401":
-          description: Sin sesión.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Unauthorized"
         "403":
-          description: >
-            La liga es privada y la contraseña fue enviada y es incorrecta
-            o no fue enviada.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/JoinMatchForbidden"
+          $ref: "#/components/responses/MatchAccessForbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -1107,7 +1619,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JoinMatchConflict"
-
+ 
+  /matches/{id}/lineups:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      tags: [Matches]
+      operationId: getMatchLineups
+      summary: Obtener los titulares de ambos clubes de un partido
+      description: >
+        Devuelve los 3 titulares (`forward`, `midfield`, `defense`) de
+        cada club, con `playerId`, `name` y `role`, y NADA más: no trae
+        suplentes, stats ni behaviors. Sirve para mostrar el nombre de
+        cualquier jugador que aparece en `players` del tick sin depender de
+        GET /matches/{id}/team, que solo devuelve el equipo del
+        propio usuario y es una acción de jugador.
+        Refleja la alineación efectiva en este momento: antes de que
+        arranque el partido, la alineación vigente; durante el
+        partido, con las sustituciones ya aplicadas. Las
+        sustituciones se aplican en las pausas, así que el front
+        debe volver a pedirlo cuando termina cada pausa. Después del
+        partido devuelve la alineación con la que terminó.
+        Lo pueden pedir los dos usuarios del partido y, si es un
+        partido de liga, cualquier espectador con acceso a la liga:
+        mismo acceso que GET /matches/{id} (convención 12). Es de
+        solo lectura y no depende del estado del partido: no tiene
+        409. En un amistoso que todavía no tiene rival, `club2` es
+        `null`.
+        Orden de evaluación: 401 > 404 > 403.
+      responses:
+        "200":
+          description: Titulares de ambos clubes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchLineups"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/MatchAccessForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+ 
+  /matches/{id}/team:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      tags: [Matches]
+      operationId: getMatchTeam
+      summary: Obtener el equipo del usuario en un partido
+      description: >
+        Devuelve los 6 jugadores del equipo del usuario en este
+        partido, con su rol y el behavior que tienen asignado en este
+        momento. Refleja las sustituciones y las reasignaciones de
+        behavior ya aplicadas (ver PUT /matches/{id}/substitutions y
+        PUT /matches/{id}/behavior). Es la forma de saber quién es
+        titular y quién es suplente: ni el tick ni GET /matches/{id}
+        lo informan.
+        Solo devuelve el equipo del propio usuario, nunca el del rival.
+        Es una acción de jugador: un espectador de un partido de liga
+        recibe 403 `notAPlayerInMatch` (convención 12).
+        Es de solo lectura y no depende del estado del partido: no
+        tiene 409. Antes de que arranque, refleja la alineación vigente
+        del club; durante y después del partido, la alineación
+        efectiva.
+        También informa el behavior del DT del equipo
+        (`coachBehavior`), o `null` si el equipo no tiene DT.
+      responses:
+        "200":
+          description: Equipo del usuario en el partido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchTeam"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: El usuario no es jugador de este partido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchTeamForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+ 
   /matches/{id}/behavior:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -1117,7 +1712,10 @@ paths:
       summary: Obtener el behavior de un jugador durante el partido
       description: >
         Devuelve nombre y código del behavior actualmente asignado al
-        jugador indicado en `playerId`.
+        jugador indicado en `playerId`. Solo para jugadores del
+        partido: un espectador recibe 403 `notAPlayerInMatch` y el
+        código de un behavior nunca se muestra a espectadores
+        (convención 12).
       parameters:
         - name: playerId
           in: query
@@ -1157,10 +1755,16 @@ paths:
     put:
       tags: [Matches]
       operationId: reassignMatchBehavior
-      summary: Reasignar el behavior de un jugador durante el partido
+      summary: Reasignar el behavior de un jugador durante el partido, el cambio se hace efectivo desde el tick siguiente al que llega la request.
       description: >
         Las reglas de cada campo están en ReassignBehaviorRequest. Si
         el body es ilegible, ver convención 9.
+        `behaviorId` debe ser un `playerBehavior` del usuario
+        (convención 10) y `playerId` un titular de su equipo.
+        Orden de evaluación entre status: 401 > 404 > 400 > 403 > 409.
+        Dentro del 409 se informa un solo motivo, el primero que
+        falla: `matchNotInProgress` > `playerOrBehaviorNotOwned` >
+        `behaviorTypeMismatch`.
       requestBody:
         required: true
         content:
@@ -1185,23 +1789,103 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: El partido no está en curso.
+          description: >
+            El partido no está en curso, el behavior no existe o no
+            pertenece al usuario, o el behavior no es de tipo
+            `playerBehavior` (convención 10).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Error"
-
+                $ref: "#/components/schemas/MatchBehaviorConflict"
+ 
   /matches/{id}/substitutions:
     parameters:
       - $ref: "#/components/parameters/MatchId"
-    post:
+    get:
       tags: [Matches]
-      operationId: substitutePlayer
-      summary: Sustituir un titular por un suplente durante el partido
+      operationId: getMatchSubstitutions
+      summary: Obtener la sustitución de cada equipo de un partido en juego (aplicada durante una pausa, pendiente fuera de ella)
+      description: |
+        De un partido en juego (`status: started`), devuelve la
+        sustitución de cada equipo. Qué devuelve depende de si el
+        partido está en pausa (`phase: paused` en el tick del
+        WebSocket, ver AsyncAPI):
+        - Durante una pausa: la sustitución APLICADA al empezar esa
+          pausa. Si el equipo no tenía ninguna pendiente (o se
+          descartó por inválida al aplicarse), su entrada es `null`.
+        - Fuera de una pausa (cualquier otra fase): la sustitución
+          PENDIENTE, la que se aplica al empezar la próxima pausa. Si
+          el equipo no tiene ninguna pendiente (nunca pidió una, o ya
+          se aplicó o se descartó), su entrada es `null`.
+        Cada equipo tiene a lo sumo UNA sustitución (cada PUT reemplaza
+        a la pendiente anterior).
+        Un PUT hecho durante una pausa queda pendiente para la pausa
+        siguiente y NO se ve en este GET hasta que la pausa termina:
+        mientras dura, el GET sigue mostrando la aplicada. Al terminar
+        la pausa vuelve a mostrar la pendiente. La alineación efectiva
+        se consulta con GET /matches/{id}/lineups.
+        Es una acción de jugador: solo la pueden pedir los dos
+        usuarios del partido (convención 12). Cualquier otro usuario
+        recibe 403, incluidos los espectadores de un partido de
+        liga. No usa acceso de liga (convención 11). Es de solo
+        lectura.
+        Dentro del 409 se informa un solo motivo, el primero que
+        falla: `matchNotStarted` > `matchInPenalties` >
+        `noPausesLeft`. `noPausesLeft` solo aplica fuera de una pausa
+        (período 4, después de la última): durante la última pausa el
+        GET responde 200 con la aplicada.
+        Orden de evaluación: 401 > 404 > 403 > 409.
+      responses:
+        "200":
+          description: >
+            Sustitución de cada equipo: la aplicada si el partido está
+            en pausa, la pendiente si no lo está.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Substitutions"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            El partido no está en juego, está en tanda de penales, o
+            ya terminó la última pausa (no puede haber una pendiente).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubstitutionsConflict"
+    put:
+      tags: [Matches]
+      operationId: setMatchSubstitution
+      summary: Pedir una sustitución para el equipo durante el partido
       description: >
+        Cada equipo tiene a lo sumo UNA sustitución pendiente: cada PUT
+        reemplaza a la anterior, así que si se piden varios cambios
+        antes de una pausa vale el último.
+        Cuándo se aplica: la sustitución siempre queda pendiente (se
+        consulta con GET /matches/{id}/substitutions mientras el
+        partido no esté en pausa) y se aplica al empezar la próxima
+        pausa, con el usuario conectado o no. Nunca se aplica en el
+        momento: un PUT que llega durante una pausa queda pendiente
+        para la pausa siguiente, y recién se ve en el GET cuando esa
+        pausa termina (durante ella, el GET muestra la aplicada).
+        Hasta que se aplica, GET /matches/{id}/team sigue mostrando la
+        alineación anterior.
+        Es idempotente: repetir el mismo PUT deja el mismo estado.
         Las reglas de cada campo, `starterId` / `notStarter` y
         `substituteId` / `notSubstitute` están en SubstituteRequest.
+        `notStarter` y `notSubstitute` solo se evalúan si el usuario
+        es jugador del partido; un no-jugador (incluido un espectador
+        de un partido de liga) recibe 403 (convención 6.f).
         Si el body es ilegible, ver convención 9.
+        Orden de evaluación entre status: 401 > 404 > 400 > 403 > 409.
+        Dentro del 409 se informa un solo motivo, el primero que
+        falla: `matchNotStarted` > `matchInPenalties` >
+        `noPausesLeft`.
       requestBody:
         required: true
         content:
@@ -1210,7 +1894,9 @@ paths:
               $ref: "#/components/schemas/SubstituteRequest"
       responses:
         "204":
-          description: Sustitución realizada.
+          description: >
+            Sustitución registrada como pendiente (reemplaza a la
+            anterior, si había). Se aplica al empezar la próxima pausa.
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
@@ -1221,13 +1907,53 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            El partido no está en curso, o el titular/suplente
-            indicado no es válido.
+            El partido no está en curso, está en tanda de penales, o
+            ya no quedan pausas para aplicar el cambio.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SubstitutePlayerConflict"
-
+ 
+  /notifications/seen:
+    post:
+      tags: [Notifications]
+      operationId: markNotificationsSeen
+      summary: Marcar como vistas una notificación y todas las anteriores
+      description: >
+        Marca con `seen: true` la notificación `notificationId` y todas
+        las anteriores del usuario (las de `id` menor o igual). Las más
+        nuevas no se tocan, así no se marcan como vistas notificaciones
+        que llegaron mientras el usuario miraba la lista. Solo se
+        modifican notificaciones del usuario de la sesión.
+        Es idempotente: si ya estaban vistas, responde igual 204.
+        Después de marcar, el servidor reenvía el mensaje
+        `notifications` (con `new` actualizado) a todas las conexiones
+        abiertas del usuario en `/ws/notifications`, de cualquiera de
+        sus sesiones.
+        Las reglas del campo están en MarkNotificationsSeenRequest. Si
+        el body es ilegible, ver convención 9.
+        Orden de evaluación entre status: 401 > 400 > 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkNotificationsSeenRequest"
+      responses:
+        "204":
+          description: Notificaciones marcadas como vistas.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: >
+            La notificación no existe o es de otro usuario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkNotificationsSeenConflict"
+ 
 components:
   securitySchemes:
     cookieAuth:
@@ -1236,14 +1962,22 @@ components:
       name: session_id
       description: >
         Cookie de sesión. Se setea en POST /auth/register y POST /auth/log-in,
-        y se expira en POST /auth/log-out.
-
+        y se expira en POST /auth/log-out. El servidor también cuelga
+        de esta sesión las ligas privadas desbloqueadas con
+        POST /leagues/{id}/access (convención 11).
+ 
   headers:
     SetSessionCookie:
-      description: Cookie de sesión `session_id`.
+      description: >
+        Cookie de sesión `session_id`. Se setea con los atributos
+        `HttpOnly; Secure; SameSite=Lax; Path=/`: el cliente no puede
+        leerla desde JavaScript y el navegador la envía solo. Si
+        front y API están en sitios distintos, ver la configuración
+        de CORS con credenciales.
       schema:
         type: string
-
+        example: "session_id=abc123; HttpOnly; Secure; SameSite=Lax; Path=/"
+ 
   parameters:
     PlayerId:
       name: id
@@ -1293,16 +2027,6 @@ components:
         type: integer
         minimum: 1
         maximum: 2147483647
-    LeaguePasswordHeader:
-      name: X-League-Password
-      in: header
-      required: false
-      description: >
-        Contraseña de la liga. Se evalúa solo si la liga es privada y
-        el usuario no es su creador ni participante; en cualquier
-        otro caso se ignora.
-      schema:
-        type: string
     PageQuery:
       name: page
       in: query
@@ -1319,7 +2043,7 @@ components:
         minimum: 1
         maximum: 2147483647
         default: 1
-
+ 
   responses:
     ValidationError:
       description: >
@@ -1354,7 +2078,27 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-
+    LeagueAccessForbidden:
+      description: >
+        La liga es privada y el usuario no es creador ni participante
+        ni la desbloqueó en su sesión (`leagueAccessRequired`). Se
+        resuelve con POST /leagues/{id}/access. Ver convención 11.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LeagueAccessForbidden"
+    MatchAccessForbidden:
+      description: >
+        El usuario no puede ver el partido (convención 12): no es uno
+        de sus dos jugadores y, o bien es un amistoso
+        (`notAPlayerInMatch`), o bien es un partido de una liga
+        privada a la que no tiene acceso (`leagueAccessRequired`; se
+        resuelve con POST /leagues/{id}/access).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MatchAccessForbidden"
+ 
   schemas:
     # ------------------------------------------------------------
     # Genéricos
@@ -1379,7 +2123,7 @@ components:
           type: string
           example: "El email ya está registrado."
       required: [code, message]
-
+ 
     # -- 400 de validación: formato único (convención 6) -----------
     FieldError:
       type: object
@@ -1405,6 +2149,7 @@ components:
             - tooLong
             - outOfRange
             - invalidEmail
+            - invalidValue
             - invalidSum
             - lessThanMin
             - invalidTeam
@@ -1412,49 +2157,46 @@ components:
             - notSubstitute
           description: >
             Reglas de un solo campo (precedencia: required >
-            invalidType > tooLong / outOfRange > invalidEmail).
-
+            invalidType > tooLong / outOfRange / invalidValue >
+            invalidEmail).
             required: el campo no fue enviado. Donde la descripción
             del campo lo indica, un string vacío también cuenta como
             no enviado.
-
             invalidType: el campo no es del tipo esperado (ej: un
             número, un objeto, un array o `null` en un campo string; un
             string, un decimal como `1.5` o un booleano en un campo
             entero). `null` es invalidType salvo `password` de liga
-            privada.
-
+            privada (que es `required`) y `coachBehaviorId` (donde
+            `null` es válido y significa "sin director técnico").
             tooLong: el string supera el máximo de caracteres del campo.
-
             outOfRange: el valor tiene el tipo correcto pero está fuera
             del rango del campo (stats 20 a 100, `avatar` 1 a 5,
             `matchDuration` 1 a 10, `minParticipants` menor que 3,
+            `minParticipants` y `maxParticipants` mayores que 2147483647,
             ids fuera de 1 a 2147483647, `page` fuera de 1 a
             2147483647).
-
+            invalidValue: el campo es un string pero no es uno de los
+            valores permitidos de un conjunto cerrado (ej: `type` de
+            un behavior que no es `playerBehavior` ni `coachBehavior`).
             invalidEmail: el formato del correo electrónico no es
             válido.
-
-
             Reglas que cruzan campos (solo se evalúan si los campos de
             los que dependen son válidos; ver convención 6.f):
-
             invalidSum: la suma de las cinco stats no es 300
             (`field: stats`).
-
             lessThanMin: `maxParticipants` es menor que
             `minParticipants` (`field: maxParticipants`).
-
             invalidTeam: el equipo no respeta el formato, ver Member
             (`field: members`).
-
             notStarter: `starterId` no es un titular actual del equipo
-            del usuario (`field: starterId`).
-
+            del usuario (`field: starterId`). Solo se evalúa si el
+            usuario es jugador del partido.
             notSubstitute: `substituteId` no es un suplente actual del
-            equipo del usuario (`field: substituteId`).
+            equipo del usuario (`field: substituteId`). Solo se evalúa
+            si el usuario es jugador del partido.
+ 
       required: [field, reason]
-
+ 
     ValidationBadRequest:
       type: object
       description: >
@@ -1485,7 +2227,7 @@ components:
             reason: tooLong
           - field: power
             reason: outOfRange
-
+ 
     # -- errores específicos por endpoint (no son de validación) ---
     DeletePlayerConflict:
       type: object
@@ -1496,17 +2238,137 @@ components:
         message:
           type: string
       required: [code, message]
-
+ 
+    DeleteBehaviorConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [behaviorInLeagueTeam, behaviorInMatch]
+          description: >
+            behaviorInLeagueTeam: el behavior está asignado a un
+            jugador o al DT de un equipo inscripto en una liga.
+            behaviorInMatch: el behavior está en uso en un partido
+            en curso.
+            Se informa un solo motivo, el primero en este orden:
+            behaviorInLeagueTeam, behaviorInMatch. `deletable` en
+            BehaviorDetail es `false` si se da cualquiera de los dos.
+        message:
+          type: string
+      required: [code, message]
+      example:
+        code: behaviorInLeagueTeam
+        message: "El behavior está asignado a un equipo inscripto en una liga."
+ 
     CreateBehaviorConflict:
       type: object
       properties:
         code:
           type: string
           enum: [duplicateName, invalidCode, codeTooLong]
+          description: >
+            duplicateName: el usuario ya tiene un behavior con ese
+            nombre (sin importar el tipo).
+            invalidCode: el código no respeta la API de
+            comportamientos del `type` elegido (de jugador o de DT).
+            codeTooLong: el código tiene más de 250 líneas o más de
+            20000 caracteres.
+            Se informa un solo motivo, el primero en este orden:
+            duplicateName, codeTooLong, invalidCode.
         message:
           type: string
-      required: [code, message]
-
+          description: >
+            Texto legible del motivo. Con `invalidCode` describe el
+            primer error al estilo de un error de compilación (qué
+            regla se incumple).
+        codeError:
+          $ref: "#/components/schemas/CodeError"
+      required: [code, message, codeError]
+ 
+    CodeError:
+      type: object
+      nullable: true
+      description: |
+        Primer error de un código rechazado con `invalidCode`: la
+        regla incumplida y dónde ocurre. Es `null` con cualquier otro
+        motivo (`duplicateName`, `codeTooLong`; el largo del código
+        no tiene ubicación). Solo se informa UN error, no la lista
+        completa: si el código tiene errores de sintaxis de Python
+        se informa `syntaxError` (sin árbol sintáctico no se pueden
+        evaluar las demás reglas); si no, el primero en orden de
+        aparición en el código (por línea y después por columna).
+ 
+        Reglas de validez (ver "API de código de comportamientos").
+        Un código es inválido si contiene:
+        - Errores de sintaxis de Python (`syntaxError`).
+        - `import` de cualquier tipo (`importNotAllowed`).
+        - Una llamada de la forma `nombre()` u `objeto.atributo()`
+          a algo que no sea una primitiva del sistema, incluidas las
+          funciones nativas de Python como `abs`, `min`, `max`,
+          `len`, `round` o `print`, la construcción de objetos y el
+          uso de decoradores (`@`) (`callNotAllowed`).
+        - La definición de una función con `def` o `lambda`
+          (`functionDefinitionNotAllowed`).
+        - La definición de una clase con `class`
+          (`classNotAllowed`).
+        - Una estructura de repetición `for` o `while`, o un
+          generador con `yield` (`loopNotAllowed`).
+        - Una comprensión (de listas, diccionarios o conjuntos) o
+          una expresión generadora (`comprehensionNotAllowed`).
+        - `global` o `nonlocal` (`globalNotAllowed`).
+        - Una asignación a una primitiva del sistema, por ejemplo
+          `move = 1` (`primitiveAssignmentNotAllowed`).
+        - Una primitiva que no corresponde al tipo del behavior, por
+          ejemplo un coach que patea o se mueve, o un jugador que
+          pide cambios de comportamiento o de jugador
+          (`primitiveNotAllowedForType`).
+        - Cualquier otra construcción de Python no permitida
+          (`constructNotAllowed`): `await`, `try`, `with`, `del`,
+          `assert`, el operador `:=`, f-strings, slices (`p[0:1]`,
+          `p[:1]`, `p[::2]`), los operadores `in` y `not in`,
+          literales de diccionario y de conjunto
+          y nombres o atributos que comienzan con `__`.
+ 
+        Se permite: asignaciones y lectura de variables,
+        `if` / `elif` / `else`, operadores aritméticos, de
+        comparación y lógicos (`and`, `or`, `not`), literales
+        (números, strings, `True`, `False`, `None`), tuplas y acceso
+        por índice.
+ 
+        El largo (más de 250 líneas o más de 20000 caracteres) NO
+        es una regla de `CodeError`: se informa como 409
+        `codeTooLong`.
+      properties:
+        rule:
+          type: string
+          enum:
+            - syntaxError
+            - importNotAllowed
+            - callNotAllowed
+            - functionDefinitionNotAllowed
+            - classNotAllowed
+            - loopNotAllowed
+            - comprehensionNotAllowed
+            - globalNotAllowed
+            - primitiveAssignmentNotAllowed
+            - primitiveNotAllowedForType
+            - constructNotAllowed
+          description: Regla de validez que incumple el código.
+        line:
+          type: integer
+          minimum: 1
+          description: >
+            Línea del error. Empieza en 1 y se mide sobre el `code`
+            tal como se envió: las líneas se separan con `\n` y un
+            `\r\n` cuenta como un solo salto.
+        column:
+          type: integer
+          minimum: 1
+          description: >
+            Columna (carácter) del error dentro de esa línea.
+            Empieza en 1 y cuenta caracteres, no bytes.
+      required: [rule, line, column]
+ 
     UpdateBehaviorNotFound:
       type: object
       properties:
@@ -1522,72 +2384,136 @@ components:
         message:
           type: string
       required: [code, message]
-
+ 
     UpdateBehaviorConflict:
       type: object
       properties:
         code:
           type: string
           enum: [invalidCode, duplicateName, codeTooLong]
+          description: >
+            Mismos motivos, mismo orden de evaluación y mismo
+            `codeError` que CreateBehaviorConflict.
         message:
           type: string
-      required: [code, message]
-
-    ListLeagueParticipantsForbidden:
+        codeError:
+          $ref: "#/components/schemas/CodeError"
+      required: [code, message, codeError]
+ 
+    TestBehaviorConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [leaguePasswordRequired, invalidLeaguePassword]
+          enum: [notPlayerBehavior, playerOrBehaviorNotOwned, behaviorTypeMismatch]
           description: >
-            leaguePasswordRequired: la liga es privada y no se envió
-            la contraseña.
-            invalidLeaguePassword: la liga es privada y la contraseña
-            enviada es incorrecta.
+            notPlayerBehavior: el behavior de la ruta es de tipo
+            `coachBehavior`; solo se prueban los `playerBehavior`.
+            playerOrBehaviorNotOwned: algún `playerId` o `behaviorId`
+            de `members` no es del usuario (o no existe).
+            behaviorTypeMismatch: algún `behaviorId` de `members` es
+            un `coachBehavior`.
         message:
           type: string
       required: [code, message]
-
+ 
+    LeagueAccessForbidden:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [leagueAccessRequired]
+          description: >
+            leagueAccessRequired: la liga es privada, el usuario no es
+            creador ni participante y no la desbloqueó en su sesión
+            (POST /leagues/{id}/access).
+        message:
+          type: string
+      required: [code, message]
+ 
+    MatchAccessForbidden:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [notAPlayerInMatch, leagueAccessRequired]
+          description: >
+            notAPlayerInMatch: el partido es un amistoso y el usuario
+            no es ninguno de sus dos jugadores (un amistoso no se
+            puede ver).
+            leagueAccessRequired: el partido es de una liga privada,
+            el usuario no es jugador del partido ni tiene acceso a la
+            liga (creador, participante o sesión que la desbloqueó).
+            Se resuelve con POST /leagues/{id}/access (convención 11).
+        message:
+          type: string
+      required: [code, message]
+ 
+    UnlockLeagueForbidden:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [invalidLeaguePassword]
+          description: >
+            invalidLeaguePassword: la liga es privada y la contraseña
+            enviada es incorrecta (incluye el string vacío).
+        message:
+          type: string
+      required: [code, message]
+ 
     CreateLeagueConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [playerOrBehaviorNotOwned]
+          enum: [playerOrBehaviorNotOwned, behaviorTypeMismatch]
+          description: >
+            playerOrBehaviorNotOwned: algún jugador o behavior
+            (`members`, `coachBehaviorId` si se envió) no pertenece al
+            usuario.
+            behaviorTypeMismatch: algún `members[i].behaviorId` no es
+            `playerBehavior` o `coachBehaviorId` (si se envió) no es
+            `coachBehavior`.
         message:
           type: string
       required: [code, message]
-
+ 
     StartLeagueConflict:
       type: object
       properties:
         code:
           type: string
           enum: [notInPreparation, notEnoughParticipants]
+          description: >
+            notInPreparation: la liga no está en `preparation` (se
+            evalúa primero).
+            notEnoughParticipants: la cantidad de participantes es
+            menor que `minParticipants`.
         message:
           type: string
       required: [code, message]
-
+ 
     CancelLeagueConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [alreadyCancelled, alreadyFinished]
+          enum: [alreadyStarted, alreadyCancelled, alreadyFinished]
         message:
           type: string
       required: [code, message]
-
+ 
     JoinLeagueConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [notInPreparation, leagueFull, alreadyParticipating, playerOrBehaviorNotOwned]
+          enum: [notInPreparation, leagueFull, alreadyParticipating, playerOrBehaviorNotOwned, behaviorTypeMismatch]
         message:
           type: string
       required: [code, message]
-
+ 
     JoinLeagueForbidden:
       type: object
       properties:
@@ -1597,7 +2523,7 @@ components:
         message:
           type: string
       required: [code, message]
-
+ 
     LeaveLeagueConflict:
       type: object
       properties:
@@ -1610,23 +2536,38 @@ components:
         message:
           type: string
       required: [code, message]
-
+ 
+    LeagueDataConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [leagueNotStarted, leagueCancelled]
+          description: >
+            leagueNotStarted: la liga está en `preparation` y todavía
+            no tiene fixture ni ranking.
+            leagueCancelled: la liga fue cancelada y no tiene fixture
+            ni ranking.
+        message:
+          type: string
+      required: [code, message]
+ 
     CreateFriendlyMatchConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [alreadyPlaying, playerOrBehaviorNotOwned]
+          enum: [alreadyPlaying, playerOrBehaviorNotOwned, behaviorTypeMismatch]
         message:
           type: string
       required: [code, message]
-
+ 
     JoinFriendlyMatchConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [notJoinable, isOwnMatch, alreadyPlaying, playerOrBehaviorNotOwned]
+          enum: [notJoinable, isOwnMatch, alreadyPlaying, playerOrBehaviorNotOwned, behaviorTypeMismatch]
           description: >
             notJoinable: el partido ya tiene rival, ya arrancó, ya
             terminó o fue cancelado.
@@ -1634,10 +2575,12 @@ components:
             alreadyPlaying: el usuario ya está jugando otro partido.
             playerOrBehaviorNotOwned: algún jugador/behavior no le
             pertenece.
+            behaviorTypeMismatch: algún behavior es del tipo
+            equivocado (convención 10).
         message:
           type: string
       required: [code, message]
-
+ 
     JoinMatchConflict:
       type: object
       properties:
@@ -1647,17 +2590,7 @@ components:
         message:
           type: string
       required: [code, message]
-
-    JoinMatchForbidden:
-      type: object
-      properties:
-        code:
-          type: string
-          enum: [invalidLeaguePassword]
-        message:
-          type: string
-      required: [code, message]
-
+ 
     MatchBehaviorForbidden:
       type: object
       properties:
@@ -1667,17 +2600,69 @@ components:
         message:
           type: string
       required: [code, message]
-
+ 
+    MatchBehaviorConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [matchNotInProgress, playerOrBehaviorNotOwned, behaviorTypeMismatch]
+          description: >
+            matchNotInProgress: el partido no está en juego (`status`
+            no es `started`) o terminó mientras se procesaba el
+            pedido.
+            playerOrBehaviorNotOwned: el `behaviorId` no existe o no
+            pertenece al usuario.
+            behaviorTypeMismatch: el behavior pertenece al usuario
+            pero es un `coachBehavior`; a un jugador solo se le
+            asigna un `playerBehavior`.
+            Se informa un solo motivo, el primero en este orden:
+            matchNotInProgress, playerOrBehaviorNotOwned,
+            behaviorTypeMismatch.
+        message:
+          type: string
+      required: [code, message]
+ 
     SubstitutePlayerConflict:
       type: object
       properties:
         code:
           type: string
-          enum: [matchNotStarted, invalidStarterOrSubstitute]
+          enum: [matchNotStarted, matchInPenalties, noPausesLeft]
+          description: >
+            matchNotStarted: el partido no está en juego (`status` no
+            es `started`).
+            matchInPenalties: el partido está en la tanda de penales;
+            no se piden sustituciones.
+            noPausesLeft: no queda ninguna pausa por empezar en la que
+            aplicar el cambio (durante o después de la última pausa).
+            Se informa un solo motivo, el primero en este orden:
+            matchNotStarted, matchInPenalties, noPausesLeft.
         message:
           type: string
       required: [code, message]
-
+ 
+    SubstitutionsConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [matchNotStarted, matchInPenalties, noPausesLeft]
+          description: >
+            matchNotStarted: el partido no está en juego (`status` no
+            es `started`).
+            matchInPenalties: el partido está en la tanda de penales.
+            noPausesLeft: ya no queda ninguna pausa por empezar y el
+            partido no está en una pausa (período 4, después de la
+            última): no puede haber una sustitución pendiente. Durante
+            la última pausa NO se informa: el GET responde 200 con la
+            aplicada.
+            Se informa un solo motivo, el primero en este orden:
+            matchNotStarted, matchInPenalties, noPausesLeft.
+        message:
+          type: string
+      required: [code, message]
+ 
     # ------------------------------------------------------------
     # USER
     # ------------------------------------------------------------
@@ -1699,7 +2684,7 @@ components:
         email:
           type: string
           format: email
-          maxLength: 255
+          maxLength: 254
         password:
           type: string
           format: password
@@ -1719,7 +2704,7 @@ components:
             Debe ser un entero JSON: `"3"`, `3.0` y `true` son
             `invalidType`; fuera de 1 a 5 es `outOfRange`.
       required: [username, email, password, clubName, avatar]
-
+ 
     LogInRequest:
       type: object
       description: >
@@ -1740,7 +2725,7 @@ components:
             de servicio y respondan 401 (credenciales inválidas) en lugar
             de 400.
       required: [email, password]
-
+ 
     User:
       type: object
       description: >
@@ -1755,12 +2740,13 @@ components:
         clubName:
           type: string
       required: [id, username, clubName]
-
+ 
     UserClub:
       type: object
       description: >
         Un usuario junto con su club. `username` es el nombre del
-        usuario y `name` es el nombre del club.
+        usuario, `name` es el nombre del club y `avatar` es el avatar
+        del club.
       properties:
         id:
           type: integer
@@ -1771,8 +2757,13 @@ components:
         name:
           type: string
           description: Nombre del club (el `clubName` de POST /auth/register).
-      required: [id, username, name]
-
+        avatar:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Avatar del club (el `avatar` de POST /auth/register).
+      required: [id, username, name, avatar]
+ 
     # ------------------------------------------------------------
     # PLAYERS
     # ------------------------------------------------------------
@@ -1803,7 +2794,7 @@ components:
           minimum: 20
           maximum: 100
       required: [power, agility, control, strength, speed]
-
+ 
     Player:
       type: object
       properties:
@@ -1822,7 +2813,7 @@ components:
             o está jugando un partido actualmente; mismas condiciones
             del 409 de DELETE /players/{id}).
       required: [id, name, stats, deletable]
-
+ 
     PlayerPage:
       type: object
       description: Página de resultados de GET /players/me.
@@ -1836,38 +2827,37 @@ components:
           type: integer
         pageSize:
           type: integer
-          const: 50
+          enum: [50]
           description: Tamaño de página fijo del sistema; el cliente no puede modificarlo.
         total:
           type: integer
           description: Cantidad total de jugadores del usuario que matchean el filtro, sumando todas las páginas.
       required: [items, page, pageSize, total]
-
+ 
     CreatePlayerRequest:
       type: object
       description: >
         Validación (400 `invalidFields`, convención 6).
-
-        `name`: `required` si falta o es un string vacío (`""`);
-        `invalidType` si no es un string; `tooLong` si supera los 20
-        caracteres.
-
+        `name`: se recortan los espacios al principio y al final;
+        `required` si falta o queda vacío (`""` o solo espacios);
+        `invalidType` si no es un string; `tooLong` si, ya recortado,
+        supera los 20 caracteres.
         Stats (`power`, `agility`, `control`, `strength`, `speed`):
         `required` si falta; `invalidType` si no es un entero (ej:
         `"abc"`, `1.5`, `null`); `outOfRange` si es un entero fuera de
         20 a 100.
-
         Suma: si las cinco stats son válidas y su suma no es
         exactamente 300, se agrega `field: stats`,
         `reason: invalidSum` (va después de las cinco stats en
         `errors`). Si alguna stat tiene error, la suma no se evalúa.
-
         Body ilegible: convención 9.
       properties:
         name:
           type: string
           maxLength: 20
-          description: Nombre del jugador. Hasta 20 caracteres.
+          description: >
+            Nombre del jugador. Hasta 20 caracteres, sin contar los
+            espacios de los extremos (se recortan al guardar).
         power:
           type: integer
           minimum: 20
@@ -1889,10 +2879,21 @@ components:
           minimum: 20
           maximum: 100
       required: [name, power, agility, control, strength, speed]
-
+ 
     # ------------------------------------------------------------
     # BEHAVIORS
     # ------------------------------------------------------------
+    BehaviorType:
+      type: string
+      description: >
+        Tipo de comportamiento. playerBehavior: se asigna a un
+        jugador y su código usa la API de comportamientos de jugador.
+        coachBehavior: es el del director técnico; su código usa la API
+        de comportamientos de DT y el servidor lo ejecuta en un tick
+        propio del DT, antes del tick de los jugadores de su equipo.
+        Un equipo puede no tener `coachBehavior` (convención 10).
+      enum: [playerBehavior, coachBehavior]
+ 
     BehaviorSummary:
       type: object
       properties:
@@ -1900,8 +2901,10 @@ components:
           type: integer
         name:
           type: string
-      required: [id, name]
-
+        type:
+          $ref: "#/components/schemas/BehaviorType"
+      required: [id, name, type]
+ 
     BehaviorPage:
       type: object
       description: Página de resultados de GET /behaviors/me.
@@ -1915,13 +2918,13 @@ components:
           type: integer
         pageSize:
           type: integer
-          const: 50
+          enum: [50]
           description: Tamaño de página fijo del sistema; el cliente no puede modificarlo.
         total:
           type: integer
           description: Cantidad total de behaviors del usuario que matchean el filtro, sumando todas las páginas.
       required: [items, page, pageSize, total]
-
+ 
     BehaviorDetail:
       type: object
       properties:
@@ -1929,39 +2932,128 @@ components:
           type: integer
         name:
           type: string
+        type:
+          $ref: "#/components/schemas/BehaviorType"
         code:
           type: string
-      required: [id, name, code]
-
+        deletable:
+          type: boolean
+          description: >
+            `false` si el behavior está en uso: exactamente cuando
+            DELETE /behaviors/{id} responde 409 (misma regla, una
+            sola implementación). El frontend lo usa para mostrar u
+            ocultar el botón "Eliminar".
+      required: [id, name, type, code, deletable]
+ 
     CreateBehaviorRequest:
       type: object
       description: >
-        Validación (400 `invalidFields`, convención 6): `name` y
-        `code` son `required` si faltan e `invalidType` si no son
-        strings (incluye `null`); `name` además es `tooLong` si es
-        demasiado largo. El código no se valida acá: un código
-        inválido o demasiado largo responde 409. Body ilegible:
-        convención 9.
+        Validación (400 `invalidFields`, convención 6): `name`,
+        `code` y `type` son `required` si faltan e `invalidType` si no
+        son strings (incluye `null`); `name` además es `tooLong` si es
+        demasiado largo; `type` además es `invalidValue` si es un
+        string que no es `playerBehavior` ni `coachBehavior`.
+        El código NO se valida acá: que respete la API de
+        comportamientos de su `type` (`invalidCode`), que no supere
+        250 líneas ni 20000 caracteres (`codeTooLong`) y que el
+        nombre no esté repetido (`duplicateName`) responden 409
+        (convención 4). Body
+        ilegible: convención 9.
       properties:
         name:
           type: string
         code:
           type: string
-      required: [name, code]
-
+          description: >
+            Código fuente del behavior. Máximo 250 líneas y 20000
+            caracteres (caracteres, no bytes; un salto final no agrega
+            una línea). Si supera cualquiera de los dos límites,
+            responde 409 `codeTooLong` (no 400: convención 4). Que
+            respete la API de comportamientos del `type` se informa
+            con 409 `invalidCode`, con la regla y la ubicación del primer error
+            (`codeError`).
+        type:
+          $ref: "#/components/schemas/BehaviorType"
+      required: [name, code, type]
+ 
     UpdateBehaviorRequest:
       type: object
       description: >
         Validación (400 `invalidFields`, convención 6): `name` y
         `code` son `required` si faltan e `invalidType` si no son
-        strings (incluye `null`). Body ilegible: convención 9.
+        strings (incluye `null`); `name` además es `tooLong` si es
+        demasiado largo. Body ilegible: convención 9.
       properties:
         name:
           type: string
         code:
           type: string
+          description: >
+            Mismos límites y mismos errores que el `code` de
+            CreateBehaviorRequest (409 `codeTooLong` e `invalidCode`).
       required: [name, code]
-
+ 
+    BehaviorTestConnectionResponse:
+      type: object
+      description: Respuesta de POST /behaviors/{id}/test-connections.
+      properties:
+        tokenWs:
+          type: string
+          description: >
+            Token para `/ws/behaviors/{id}/test?token=<tokenWs>`
+            (ver AsyncAPI). Vence a los 5 minutos.
+      required: [tokenWs]
+ 
+    BehaviorTestRequest:
+      type: object
+      description: >
+        Body de POST /behaviors/{id}/test-connections.
+      properties:
+        members:
+          type: array
+          description: >
+            Exactamente 6 elementos (BehaviorTestMember) con `playerId`
+            distintos: cada club (`club1` y `club2`) con un forward, un
+            midfield y un defense. Si `members` es un array y ningún
+            elemento tiene errores de campo pero no se cumple esta regla,
+            responde `field: members`, `reason: invalidTeam`.
+            Si falta, `required`; si no es un array, `invalidType`.
+          items:
+            $ref: "#/components/schemas/BehaviorTestMember"
+      required: [members]
+ 
+    BehaviorTestMember:
+      type: object
+      description: >
+        Un jugador de la prueba. Validación de campo (400
+        `invalidFields`, convención 6; `field` es
+        `members[i].playerId`, `members[i].club`, `members[i].role` o
+        `members[i].behaviorId`):
+        `playerId` y `behaviorId`: `required` si faltan; `invalidType`
+        si no son enteros; `outOfRange` si están fuera de 1 a
+        2147483647.
+        `club` y `role`: `required` si faltan; `invalidType` si no son
+        strings. Un string que no es uno de los valores del enum no es
+        un error de campo: la alineación no respeta la regla y responde
+        `members` / `invalidTeam` (igual que `role` en `Member`).
+        Un elemento que no es un objeto: `members[i]` / `invalidType`.
+      properties:
+        playerId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        club:
+          type: string
+          enum: [club1, club2]
+        role:
+          type: string
+          enum: [forward, midfield, defense]
+        behaviorId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+      required: [playerId, club, role, behaviorId]
+ 
     # ------------------------------------------------------------
     # LEAGUES
     # ------------------------------------------------------------
@@ -1971,10 +3063,11 @@ components:
         preparation: recién creada, admite inscripciones.
         started: fixture generado y en curso.
         cancelled: cancelada permanentemente; sigue visible pero ya no
-        admite inicio ni nuevos participantes.
+        admite inicio ni nuevos participantes, y no tiene fixture ni
+        ranking.
         finished: todos los partidos del fixture ya se jugaron.
       enum: [preparation, started, cancelled, finished]
-
+ 
     LeagueSummary:
       type: object
       description: Información resumida de una liga.
@@ -1990,6 +3083,13 @@ components:
         participantsCount:
           type: integer
           description: Número de participantes actuales.
+        minParticipants:
+          type: integer
+          minimum: 3
+          description: >
+            Cantidad mínima de participantes para poder iniciar la
+            liga (ver `notEnoughParticipants` en POST
+            /leagues/{id}/start).
         maxParticipants:
           type: integer
           description: Cantidad máxima de participantes que admite la liga.
@@ -1997,7 +3097,15 @@ components:
           type: boolean
           description: >
             `true` si la liga es privada (para participar hace falta su
-            contraseña), `false` si es pública.
+            contraseña y para leer su información (REST o WebSocket) hay
+            que ser creador, participante o
+            haberla desbloqueado con POST /leagues/{id}/access),
+            `false` si es pública.
+        allowDraws:
+          type: boolean
+          description: >
+            `false` si la liga no admite empates (los empatados se
+            definen por penales). Ver CreateLeagueRequest.allowDraws.
         createdAt:
           type: string
           format: date-time
@@ -2008,18 +3116,39 @@ components:
         - creator
         - status
         - participantsCount
+        - minParticipants
         - maxParticipants
         - private
+        - allowDraws
         - createdAt
-
+ 
+    LeagueDetail:
+      description: >
+        Respuesta de GET /leagues/{id}: `LeagueSummary` más `joined`,
+        que depende del usuario logueado. El listado (GET /leagues) no
+        lo trae.
+      allOf:
+        - $ref: "#/components/schemas/LeagueSummary"
+        - type: object
+          properties:
+            joined:
+              type: boolean
+              description: >
+                `true` si el usuario logueado participa de la liga (el
+                creador siempre participa). Permite al front mostrar
+                "Inscribirme" o "Abandonar". Quien participa tiene
+                acceso a los canales de la liga (convención 11).
+          required: [joined]
+ 
     LeagueParticipant:
       allOf:
         - $ref: "#/components/schemas/UserClub"
       description: >
         Un participante inscripto en la liga, tal como aparece en
-        GET /leagues/{id}/participants. No incluye el equipo
-        (jugadores, roles, behaviors).
-
+        GET /leagues/{id}/participants y en el canal WebSocket de
+        participantes. No incluye el equipo (jugadores, roles,
+        behaviors).
+ 
     LeaguePage:
       type: object
       description: Página de resultados de GET /leagues.
@@ -2036,7 +3165,7 @@ components:
           type: integer
         pageSize:
           type: integer
-          const: 50
+          enum: [50]
           description: Tamaño de página fijo del sistema; el cliente no puede modificarlo.
         total:
           type: integer
@@ -2046,40 +3175,35 @@ components:
             es mayor a 0, la `page` pedida supera la última página
             disponible.
       required: [items, page, pageSize, total]
-
+ 
     CreateLeagueRequest:
       type: object
       description: >
         El creador se inscribe automáticamente con el equipo enviado
         en `members`, con las mismas reglas de formación de equipo que
         POST /leagues/{id}/participants (ver Member).
-
-
         Validación (400 `invalidFields`, convención 6):
-
-        `name`: `required` si falta; `invalidType` si no es un string;
-        `tooLong` si supera los 20 caracteres.
-
+        `name`: `required` si falta o es un string vacío (`""`); `invalidType`
+        si no es un string; `tooLong` si supera los 20 caracteres.
         `minParticipants`: `required` si falta; `invalidType` si no es
-        un entero; `outOfRange` si es menor que 3.
-
+        un entero; `outOfRange` si es menor que 3 o mayor que 2147483647.
         `maxParticipants`: `required` si falta; `invalidType` si no es
-        un entero. Si `minParticipants` y `maxParticipants` son
+        un entero; `outOfRange` si es mayor que 2147483647. Si
+        `minParticipants` y `maxParticipants` son
         válidos y `maxParticipants` es menor que `minParticipants`, se
         agrega `field: maxParticipants`, `reason: lessThanMin`.
-
         `matchDuration`: `required` si falta; `invalidType` si no es
         un entero; `outOfRange` si está fuera de 1 a 10 (minutos).
-
         `private`: `required` si falta; `invalidType` si no es un
         booleano.
-
         `password`: solo se evalúa si `private` es el booleano `true`
         (si es `false`, falta o es inválido, se ignora por completo:
         convención 7). Si se evalúa: `required` si falta, es `null` o
         es un string vacío; `invalidType` si no es un string ni
         `null`; `tooLong` si supera los 72 caracteres.
-
+        `allowDraws`: opcional; si falta se toma `true`. `invalidType`
+        si está presente y no es un booleano (incluye `null`). Va
+        después de `password` en `errors`.
         `members`: `required` si falta; `invalidType` si no es un
         array; cada elemento se valida según Member
         (`members[i].playerId`, `members[i].role`,
@@ -2087,7 +3211,14 @@ components:
         elemento tiene errores de campo, se evalúa el formato del
         equipo y, si no lo respeta, se agrega `field: members`,
         `reason: invalidTeam`.
-
+        `coachBehaviorId`: opcional. Si falta o es `null`, no hay
+        error y el equipo queda sin director técnico. Si está
+        presente y no es `null`: `invalidType` si no es un entero
+        (ej: `"abc"`, `1.5`, `true`); `outOfRange` si está fuera de
+        1 a 2147483647. Va después de `members` en `errors`. No
+        participa de la regla `invalidTeam`. Que no pertenezca al
+        usuario o no sea un `coachBehavior` responde 409
+        (convención 10).
         Body ilegible: convención 9.
       properties:
         name:
@@ -2096,13 +3227,19 @@ components:
         minParticipants:
           type: integer
           minimum: 3
+          maximum: 2147483647
         maxParticipants:
           type: integer
+          maximum: 2147483647
         matchDuration:
           type: integer
           minimum: 1
           maximum: 10
-          description: Duración de cada partido, en minutos.
+          description: >
+            Duración de cada partido, en minutos (sin contar
+            lo que duran las pausas, durante las cuales el reloj se
+            detiene). Las 3 pausas del partido se ubican a 1/4, 1/2 y
+            3/4 de esta duración.
         private:
           type: boolean
         password:
@@ -2118,17 +3255,40 @@ components:
             `invalidType`). Si `private` es `true` y falta, llega nula
             o vacía, el motivo es `required`; si supera los 72
             caracteres, `tooLong`.
+            La contraseña se usa en POST /leagues/{id}/participants y
+            POST /leagues/{id}/access (convención 11).
             Límite de 72 caracteres por consistencia con el campo
             `password` de usuario, aunque a diferencia de aquel esta
             contraseña de liga no necesariamente se hashea (se
-            compara contra el valor ingresado al unirse) — revisar si
-            corresponde el mismo límite u otro si cambia el manejo.
+            compara contra el valor ingresado al unirse o al
+            desbloquear) — revisar si corresponde el mismo límite u
+            otro si cambia el manejo.
+        allowDraws:
+          type: boolean
+          default: true
+          description: >
+            Si es `true` (por defecto), los partidos de la liga pueden
+            terminar empatados (empate = 1 punto). Si es `false`, un
+            partido que termina empatado en el juego se define por una
+            tanda de penales y no hay empates: ganado = 3, ganado por
+            penales = 2, perdido = 0 (un partido perdido por penales
+            cuenta como perdido).
         members:
           type: array
           minItems: 6
           maxItems: 6
           items:
             $ref: "#/components/schemas/Member"
+        coachBehaviorId:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 2147483647
+          description: >
+            Opcional. Id del behavior del director técnico del
+            equipo. Si falta o es `null`, el equipo no tiene DT. Si
+            se envía un entero, debe ser un `coachBehavior` del
+            usuario (convención 10).
       required:
         - name
         - minParticipants
@@ -2136,7 +3296,30 @@ components:
         - matchDuration
         - private
         - members
-
+ 
+    UnlockLeagueRequest:
+      type: object
+      description: >
+        Body de POST /leagues/{id}/access. Solo se lee si la liga es
+        privada y el usuario no es su creador ni participante; en
+        cualquier otro caso se ignora por completo (convención 7) y
+        el body puede omitirse.
+        Validación (400 `invalidFields`, convención 6), solo cuando se
+        evalúa: `password`: `required` si falta o es `null`;
+        `invalidType` si no es un string ni `null`. Un string vacío o
+        incorrecto NO es error de validación: responde 403
+        `invalidLeaguePassword`.
+        Body ilegible: convención 9 (`password` como `required`, solo
+        si la liga es privada y el usuario no es creador ni
+        participante).
+      properties:
+        password:
+          type: string
+          nullable: true
+          description: >
+            Contraseña de la liga privada que se quiere desbloquear.
+      required: [password]
+ 
     # ------------------------------------------------------------
     # MATCHES (liga y amistoso: un único recurso)
     # ------------------------------------------------------------
@@ -2147,24 +3330,193 @@ components:
         scheduled: todavía no arrancó. En un amistoso incluye la espera
         de rival y la cuenta regresiva posterior a que el rival se une
         (se distinguen porque en el primer caso `club2` es null).
-        started: se está jugando ahora (aparece en
-        GET /leagues/{id}/matches).
+        started: se está jugando ahora.
         finished: ya tiene resultado.
         cancelled: amistoso cuya espera de 15 minutos venció sin que se
         uniera un rival. Los partidos de liga nunca pasan a este
         estado.
       enum: [scheduled, started, finished, cancelled]
-
+ 
+    LineupRole:
+      type: string
+      description: Rol de un titular. Los suplentes no figuran en una alineación.
+      enum: [forward, midfield, defense]
+ 
+    LineupPlayer:
+      type: object
+      properties:
+        playerId:
+          type: integer
+        name:
+          type: string
+          maxLength: 20
+        role:
+          $ref: "#/components/schemas/LineupRole"
+      required: [playerId, name, role]
+ 
+    MatchLineups:
+      type: object
+      description: Respuesta de GET /matches/{id}/lineups.
+      properties:
+        club1:
+          type: array
+          minItems: 3
+          maxItems: 3
+          description: >
+            Titulares de `club1`, en este orden: forward, midfield,
+            defense.
+          items:
+            $ref: "#/components/schemas/LineupPlayer"
+        club2:
+          type: array
+          nullable: true
+          minItems: 3
+          maxItems: 3
+          description: >
+            Titulares de `club2`, en el mismo orden. `null` mientras un
+            amistoso espera rival.
+          items:
+            $ref: "#/components/schemas/LineupPlayer"
+      required: [club1, club2]
+ 
+    MatchTeam:
+      type: object
+      description: Respuesta de GET /matches/{id}/team.
+      properties:
+        members:
+          type: array
+          minItems: 6
+          maxItems: 6
+          description: >
+            Siempre 6 elementos, en este orden: los tres titulares
+            (forward, midfield, defense) y después los tres suplentes
+            (substitute). Cuando un suplente reemplaza a un titular
+            toma su rol, y el titular que sale pasa a ser substitute.
+          items:
+            $ref: "#/components/schemas/MatchTeamMember"
+        coachBehavior:
+          description: >
+            Behavior del director técnico del equipo, o `null` si el
+            equipo no tiene DT (`coachBehaviorId` omitido o `null` al
+            armarlo).
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/BehaviorSummary"
+      required: [members, coachBehavior]
+ 
+    MatchTeamMember:
+      type: object
+      properties:
+        playerId:
+          type: integer
+        name:
+          type: string
+          maxLength: 20
+        role:
+          $ref: "#/components/schemas/MemberRole"
+        behavior:
+          $ref: "#/components/schemas/BehaviorSummary"
+      required: [playerId, name, role, behavior]
+ 
+    MatchTeamForbidden:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [notAPlayerInMatch]
+        message:
+          type: string
+      required: [code, message]
+ 
+    PenaltyKickRecord:
+      type: object
+      description: >
+        Un penal ejecutado de la tanda (penal australiano: el
+        pateador sale del medio de la cancha y tiene 8 segundos para
+        convertir contra el defensor rival). Cada club patea 5
+        penales. Mismo formato que `PenaltyKickRecord` del AsyncAPI.
+      properties:
+        club:
+          type: string
+          enum: [club1, club2]
+          description: Lado del partido que pateó.
+        kickerId:
+          type: integer
+          description: Id del jugador que pateó.
+        kickerName:
+          type: string
+          maxLength: 20
+          description: Nombre del jugador que pateó.
+        round:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: >
+            Número de penal de la tanda para ese club, de 1 a 5 (1 es
+            el primero de cada club).
+        scored:
+          type: boolean
+          description: >
+            `true` si fue gol. Es `false` si se agotaron los 8
+            segundos o si la pelota entró en el arco del propio
+            equipo pateador (el penal no cuenta).
+      required: [club, kickerId, kickerName, round, scored]
+ 
+    PenaltyShootout:
+      type: object
+      description: >
+        Resultado de la tanda de penales de un partido que se definió
+        por penales. Cada club patea 5 penales.
+      properties:
+        score1:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Penales convertidos por `club1`.
+        score2:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Penales convertidos por `club2`.
+        winner:
+          type: string
+          enum: [club1, club2]
+          description: >
+            Club que ganó el partido por penales. Normalmente es el que
+            convirtió más penales. Si la tanda termina empatada, el
+            ganador se define por sorteo 50/50: con `score1` igual a
+            `score2`, solo `winner` indica quién ganó.
+        kicks:
+          type: array
+          description: >
+            Todos los penales de la tanda, en orden de ejecución.
+            Permite mostrar la pantalla final (marcas por club)
+            también al recargar, leyendo GET /matches/{id}.
+          items:
+            $ref: "#/components/schemas/PenaltyKickRecord"
+      required: [score1, score2, winner, kicks]
+ 
     MatchResult:
       type: object
-      description: Resultado de un partido ya finalizado.
+      description: >
+        Resultado de un partido ya finalizado. `score1` y `score2` son
+        los goles del juego, sin contar la tanda de penales. Si el
+        partido se definió por penales, `penalties` trae su resultado
+        (el ganador es `penalties.winner`); si no, es null.
+        El ranking global usa `penalties` para distinguir un partido
+        ganado por penales (2 puntos) de uno ganado sin penales (3).
       properties:
         score1:
           type: integer
         score2:
           type: integer
-      required: [score1, score2]
-
+        penalties:
+          allOf:
+            - $ref: "#/components/schemas/PenaltyShootout"
+          nullable: true
+          description: null si el partido no se definió por penales.
+      required: [score1, score2, penalties]
+ 
     Match:
       type: object
       description: >
@@ -2172,8 +3524,11 @@ components:
         los endpoints: `id` es el que usan POST /matches/{id}/connections
         y el canal /ws/matches/{id}. En los amistosos `leagueId` y
         `scheduledAt` son null. `club1` es el creador del amistoso (en
-        un partido de liga, el local) y `club2` es null mientras un
-        amistoso espera rival.
+        un partido de liga, el primero del par: no hay local ni
+        visitante) y `club2` es null mientras un amistoso espera
+        rival. Los partidos de liga los puede ver como espectador
+        cualquier usuario con acceso a la liga; los amistosos, solo
+        sus dos usuarios (convención 12).
       properties:
         id:
           type: integer
@@ -2222,7 +3577,7 @@ components:
         - scheduledAt
         - createdAt
         - result
-
+ 
     MatchPage:
       type: object
       description: Página de resultados de GET /friendlies.
@@ -2236,7 +3591,7 @@ components:
           type: integer
         pageSize:
           type: integer
-          const: 50
+          enum: [50]
           description: Tamaño de página fijo del sistema; el cliente no puede modificarlo.
         total:
           type: integer
@@ -2245,7 +3600,7 @@ components:
             usuarios que matchean el filtro, sumando todas las páginas
             (no cuenta los del propio usuario).
       required: [items, page, pageSize, total]
-
+ 
     Fixture:
       type: array
       description: >
@@ -2253,106 +3608,159 @@ components:
         `scheduledAt` nunca son null.
       items:
         $ref: "#/components/schemas/Match"
-
-    LiveLeagueMatch:
-      description: >
-        Elemento de GET /leagues/{id}/matches: un `Match` más `playable`,
-        que depende del usuario que consulta y no del partido.
-      allOf:
-        - $ref: "#/components/schemas/Match"
-        - type: object
-          properties:
-            playable:
-              type: boolean
-              description: >
-                true si el usuario es participante de uno de los dos
-                clubes del partido y todavía no lo jugó como jugador (el
-                front muestra "Jugar Partido"; si es false, muestra
-                "Ver Partido").
-          required: [playable]
-
-    LiveLeagueMatchList:
-      type: array
-      items:
-        $ref: "#/components/schemas/LiveLeagueMatch"
-
+ 
     # ------------------------------------------------------------
     # RANKINGS
     # ------------------------------------------------------------
     LeagueRankingEntry:
       type: object
       description: >
-        Elemento de GET /leagues/{id}/ranking. Ordenado de mayor
-        a menor por score (victoria=3, empate=1, derrota=0) y
-        diferencia de gol, considerando solo partidos de liga ya
-        finalizados.
+        Elemento del ranking de una liga (GET /leagues/{id}/ranking y
+        canal WebSocket de ranking). Incluye a todos los participantes
+        (los que no jugaron, en 0). Solo cuentan los partidos finalizados
+        de la liga. Los criterios de orden, la regla de empates y el
+        puntaje son los mismos que en GET /ranking. En una liga con
+        `allowDraws: false` no hay empates y `drawn` es siempre 0.
       properties:
+        position:
+          type: integer
+          minimum: 1
+          description: >
+            Puesto en el ranking. Derivado del orden; los clubes empatados
+            en todos los criterios comparten puesto (1, 2, 2, 4).
         name:
           type: string
           description: Nombre del club.
+        avatar:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Avatar del club (el `avatar` de POST /auth/register).
         played:
           type: integer
-        won:
+          description: Partidos finalizados jugados en la liga.
+        wonRegular:
           type: integer
+          description: Partidos ganados sin penales.
+        wonPenalties:
+          type: integer
+          description: Partidos ganados por penales.
         drawn:
           type: integer
+          description: Partidos empatados.
         lost:
           type: integer
+          description: Partidos perdidos (incluye los perdidos por penales).
+        goals:
+          type: integer
+          description: Goles convertidos, sin contar la tanda de penales.
         goalDifference:
           type: integer
+          description: Goles a favor menos goles en contra, sin contar la tanda de penales.
         score:
           type: integer
-          description: victoria=3, empate=1, derrota=0.
+          description: >
+            Puntaje: ganado sin penales = 3, ganado por penales = 2,
+            empate = 1, perdido = 0.
       required:
+        - position
         - name
+        - avatar
         - played
-        - won
+        - wonRegular
+        - wonPenalties
         - drawn
         - lost
+        - goals
         - goalDifference
         - score
-
+ 
     LeagueRanking:
       type: array
       items:
         $ref: "#/components/schemas/LeagueRankingEntry"
-
+ 
     GlobalRankingEntry:
       type: object
       description: >
-        Elemento de GET /ranking. Mismo criterio de orden que
-        LeagueRankingEntry (score, diferencia de gol) más partidos
-        jugados como tercer criterio de desempate.
+        Elemento de GET /ranking: un club con sus totales sobre los
+        partidos finalizados de ligas públicas. Los criterios de
+        orden y la regla de empates están en GET /ranking.
+        Columnas del front: Puesto (`position`), P (`score`),
+        DG (`goalDifference`), Goles (`goals`), PG (`wonRegular`),
+        PGP (`wonPenalties`), PP (`lost`).
       properties:
+        position:
+          type: integer
+          minimum: 1
+          description: >
+            Puesto en el ranking. Derivado del orden, no un atributo
+            del club; los clubes empatados en todos los criterios
+            comparten puesto (1, 2, 2, 4).
         name:
           type: string
           description: Nombre del club.
-        played:
+        avatar:
           type: integer
-        won:
-          type: integer
-        drawn:
-          type: integer
-        lost:
-          type: integer
-        goalDifference:
-          type: integer
+          minimum: 1
+          maximum: 5
+          description: Avatar del club (el `avatar` de POST /auth/register).
         score:
           type: integer
+          description: >
+            Puntaje: ganado sin penales = 3, ganado por penales = 2,
+            empate = 1, perdido = 0.
+        goalDifference:
+          type: integer
+          description: Goles a favor menos goles en contra.
+        goals:
+          type: integer
+          description: Cantidad de goles convertidos.
+        wonRegular:
+          type: integer
+          description: Partidos ganados sin penales.
+        wonPenalties:
+          type: integer
+          description: Partidos ganados por penales.
+        lost:
+          type: integer
+          description: Partidos perdidos (incluye los perdidos por penales).
       required:
+        - position
         - name
-        - played
-        - won
-        - drawn
-        - lost
-        - goalDifference
+        - avatar
         - score
-
-    GlobalRanking:
-      type: array
-      items:
-        $ref: "#/components/schemas/GlobalRankingEntry"
-
+        - goalDifference
+        - goals
+        - wonRegular
+        - wonPenalties
+        - lost
+ 
+    GlobalRankingPage:
+      type: object
+      description: Página de resultados de GET /ranking.
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          description: >
+            Clubes de la página, ordenados por los criterios del
+            ranking. Puede ser `[]` con status 200.
+          items:
+            $ref: "#/components/schemas/GlobalRankingEntry"
+        page:
+          type: integer
+        pageSize:
+          type: integer
+          enum: [50]
+          description: Tamaño de página fijo del sistema; el cliente no puede modificarlo.
+        total:
+          type: integer
+          description: >
+            Cantidad total de clubes del ranking que matchean el
+            filtro, sumando todas las páginas. Puede ser 0.
+      required: [items, page, pageSize, total]
+ 
     # ------------------------------------------------------------
     # MEMBERS / PARTICIPANTS
     # ------------------------------------------------------------
@@ -2367,7 +3775,7 @@ components:
         valor que no es un string responde
         `members[i].role` / `invalidType` (convención 6.h).
       enum: [substitute, forward, midfield, defense]
-
+ 
     Member:
       type: object
       description: >
@@ -2375,27 +3783,22 @@ components:
         partido amistoso). Exactamente 6 elementos con `playerId`
         distintos: forward/midfield/defense una vez cada uno
         (titulares) y substitute tres veces (suplentes). No se envía
-        posición en cancha (X,Y): la calcula el sistema.
-
-
+        posición en cancha (X,Y): la calcula el sistema. Cada `behaviorId`
+        debe ser un `playerBehavior` del usuario; el del DT va aparte,
+        en `coachBehaviorId`, que es opcional (convención 10).
         Validación de campo de cada elemento (400 `invalidFields`,
         convención 6; `field` es `members[i].playerId`,
         `members[i].role` o `members[i].behaviorId`, con `i` el índice
         desde 0):
-
         `playerId` y `behaviorId`: `required` si faltan;
         `invalidType` si no son enteros (ej: `"abc"`, `1.5`, `null`);
         `outOfRange` si están fuera de 1 a 2147483647. Nunca 404 ni
         409: el 409 `playerOrBehaviorNotOwned` aplica solo a ids
         bien tipados y dentro de rango que no pertenecen al usuario.
-
         `role`: `required` si falta; `invalidType` si no es un
         string.
-
         Un elemento de `members` que no es un objeto se reporta como
         `members[i]` / `invalidType`.
-
-
         Regla del equipo: si `members` es un array y ningún elemento
         tiene errores de campo, el equipo debe cumplir lo de arriba
         (6 elementos, `role` de cada uno dentro de MemberRole,
@@ -2414,24 +3817,29 @@ components:
           minimum: 1
           maximum: 2147483647
       required: [playerId, role, behaviorId]
-
+ 
     JoinLeagueRequest:
       type: object
       description: >
         Validación (400 `invalidFields`, convención 6):
-
         `password`: solo se evalúa si la liga es privada (si es
         pública se ignora por completo, convención 7). Si se evalúa:
         `required` si falta o es `null`; `invalidType` si no es un
         string ni `null`. Un string vacío o incorrecto no es error
         de validación: responde 403 `invalidLeaguePassword`.
-
         `members`: `required` si falta; `invalidType` si no es un
         array; cada elemento se valida según Member. Si `members` es
         un array y ningún elemento tiene errores de campo, se evalúa
         el formato del equipo y, si no lo respeta, se agrega
         `field: members`, `reason: invalidTeam`.
-
+        `coachBehaviorId`: opcional. Si falta o es `null`, no hay
+        error y el equipo queda sin director técnico. Si está
+        presente y no es `null`: `invalidType` si no es un entero
+        (ej: `"abc"`, `1.5`, `true`); `outOfRange` si está fuera de
+        1 a 2147483647. Va después de `members` en `errors`. No
+        participa de la regla `invalidTeam`. Que no pertenezca al
+        usuario o no sea un `coachBehavior` responde 409
+        (convención 10).
         Body ilegible: convención 9 (incluye `password` si la liga
         es privada).
       properties:
@@ -2442,15 +3850,26 @@ components:
             Solo requerida si la liga es privada (UC19); se ignora si
             es pública (UC18) según la convención 7 (ni su valor ni
             su tipo se validan, y puede omitirse). Si la liga es
-            privada y falta, `required`.
+            privada y falta, `required`. Se valida acá mismo, sin
+            depender de POST /leagues/{id}/access.
         members:
           type: array
           minItems: 6
           maxItems: 6
           items:
             $ref: "#/components/schemas/Member"
+        coachBehaviorId:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 2147483647
+          description: >
+            Opcional. Id del behavior del director técnico del
+            equipo. Si falta o es `null`, el equipo no tiene DT. Si
+            se envía un entero, debe ser un `coachBehavior` del
+            usuario (convención 10).
       required: [members]
-
+ 
     # ------------------------------------------------------------
     # FRIENDLIES (requests)
     # ------------------------------------------------------------
@@ -2458,16 +3877,22 @@ components:
       type: object
       description: >
         Validación (400 `invalidFields`, convención 6):
-
-        `name`: `required` si falta; `invalidType` si no es un
-        string; `tooLong` si supera los 20 caracteres.
-
+        `name`: `required` si falta o es un string vacío (`""`);
+        `invalidType` si no es un string; `tooLong` si supera los 20
+        caracteres.
         `members`: `required` si falta; `invalidType` si no es un
         array; cada elemento se valida según Member. Si `members` es
         un array y ningún elemento tiene errores de campo, se evalúa
         el formato del equipo y, si no lo respeta, se agrega
         `field: members`, `reason: invalidTeam`.
-
+        `coachBehaviorId`: opcional. Si falta o es `null`, no hay
+        error y el equipo queda sin director técnico. Si está
+        presente y no es `null`: `invalidType` si no es un entero
+        (ej: `"abc"`, `1.5`, `true`); `outOfRange` si está fuera de
+        1 a 2147483647. Va después de `members` en `errors`. No
+        participa de la regla `invalidTeam`. Que no pertenezca al
+        usuario o no sea un `coachBehavior` responde 409
+        (convención 10).
         Body ilegible: convención 9.
       properties:
         name:
@@ -2480,8 +3905,18 @@ components:
           maxItems: 6
           items:
             $ref: "#/components/schemas/Member"
+        coachBehaviorId:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 2147483647
+          description: >
+            Opcional. Id del behavior del director técnico del
+            equipo. Si falta o es `null`, el equipo no tiene DT. Si
+            se envía un entero, debe ser un `coachBehavior` del
+            usuario (convención 10).
       required: [name, members]
-
+ 
     JoinFriendlyMatchRequest:
       type: object
       description: >
@@ -2490,7 +3925,16 @@ components:
         elemento se valida según Member. Si `members` es un array y
         ningún elemento tiene errores de campo, se evalúa el formato
         del equipo y, si no lo respeta, se agrega `field: members`,
-        `reason: invalidTeam`. Body ilegible: convención 9.
+        `reason: invalidTeam`.
+        `coachBehaviorId`: opcional. Si falta o es `null`, no hay
+        error y el equipo queda sin director técnico. Si está
+        presente y no es `null`: `invalidType` si no es un entero
+        (ej: `"abc"`, `1.5`, `true`); `outOfRange` si está fuera de
+        1 a 2147483647. Va después de `members` en `errors`. No
+        participa de la regla `invalidTeam`. Que no pertenezca al
+        usuario o no sea un `coachBehavior` responde 409
+        (convención 10).
+        Body ilegible: convención 9.
       properties:
         members:
           type: array
@@ -2498,8 +3942,18 @@ components:
           maxItems: 6
           items:
             $ref: "#/components/schemas/Member"
+        coachBehaviorId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          nullable: true
+          description: >
+            Opcional. Id del behavior del director técnico del
+            equipo. Si falta o es `null`, el equipo no tiene DT. Si
+            se envía un entero, debe ser un `coachBehavior` del
+            usuario (convención 10).
       required: [members]
-
+ 
     # ------------------------------------------------------------
     # MATCHES (acciones en curso)
     # ------------------------------------------------------------
@@ -2512,7 +3966,7 @@ components:
         code:
           type: string
       required: [name, code]
-
+ 
     ReassignBehaviorRequest:
       type: object
       description: >
@@ -2530,20 +3984,22 @@ components:
           minimum: 1
           maximum: 2147483647
       required: [playerId, behaviorId]
-
+ 
     SubstituteRequest:
       type: object
       description: >
         Validación (400 `invalidFields`, convención 6): `starterId` y
         `substituteId`: `required` si faltan; `invalidType` si no son
         enteros (ej: `"abc"`, `null`); `outOfRange` si están fuera de
-        1 a 2147483647. Si `starterId` es válido pero no es un titular
-        actual del equipo del usuario, se agrega
-        `field: starterId`, `reason: notStarter`. Si `substituteId` es
-        válido pero no es un suplente actual del equipo del usuario,
-        se agrega `field: substituteId`, `reason: notSubstitute`. Cada
-        regla depende solo de su propio campo, así que pueden
-        aparecer las dos juntas. Body ilegible: convención 9.
+        1 a 2147483647. Si el usuario es jugador del partido y
+        `starterId` es válido pero no es un titular actual de su
+        equipo, se agrega `field: starterId`, `reason: notStarter`. Si
+        `substituteId` es válido pero no es un suplente actual de su
+        equipo, se agrega `field: substituteId`,
+        `reason: notSubstitute`. Cada regla depende solo de su propio
+        campo, así que pueden aparecer las dos juntas. Si el usuario no
+        es jugador del partido, estas dos reglas no se evalúan (no
+        tiene equipo) y responde 403. Body ilegible: convención 9.
       properties:
         starterId:
           type: integer
@@ -2556,25 +4012,97 @@ components:
           maximum: 2147483647
           description: "`playerId` del suplente que entra."
       required: [starterId, substituteId]
-
-    JoinMatchRequest:
-      type: object
-      description: >
-        Body opcional. `password` solo se evalúa si el partido
-        pertenece a una liga privada y el usuario es ajeno a ella; se
-        ignora en cualquier otro caso (incluyendo partidos amistosos).
-        Cuando se evalúa y no es un string, responde 400 con
-        `field: password`, `reason: invalidType`. Un body ausente o
-        ilegible se trata como `password` no enviada (convención 9).
-      properties:
-        password:
-          type: string
-          maxLength: 72
-
+ 
+ 
     JoinMatchResponse:
       type: object
+      description: Respuesta de POST /matches/{id}/connections.
       properties:
         tokenWs:
           type: string
-      required: [tokenWs]
+          description: Token para conectarse al canal `/ws/matches/{id}` (ver AsyncAPI).
+        role:
+          type: string
+          enum: [player, spectator]
+          description: >
+            `player` si el usuario es uno de los dos usuarios del
+            partido. `spectator` si mira un partido de liga ajeno
+            (solo lectura; no puede usar las acciones de jugador,
+            convención 12). El front lo usa para mostrar u ocultar los
+            controles del partido.
+      required: [tokenWs, role]
+ 
+    Substitution:
+      type: object
+      description: Una sustitución de un partido, identificada por los nombres de los jugadores.
+      properties:
+        starterName:
+          type: string
+          maxLength: 20
+          description: Nombre del titular que sale.
+        substituteName:
+          type: string
+          maxLength: 20
+          description: Nombre del suplente que entra.
+      required: [starterName, substituteName]
+ 
+    Substitutions:
+      type: object
+      description: >
+        Respuesta de GET /matches/{id}/substitutions. La sustitución
+        de cada club, o `null` si ese club no tiene ninguna. Es la
+        APLICADA al empezar la pausa en curso si el partido está en
+        pausa (`phase: paused`), y la PENDIENTE (la que se aplica en
+        la próxima pausa) si no lo está.
+      properties:
+        club1:
+          allOf:
+            - $ref: "#/components/schemas/Substitution"
+          nullable: true
+          description: >
+            Sustitución de `club1`: aplicada si el partido está en
+            pausa, pendiente si no. null si no tiene.
+        club2:
+          allOf:
+            - $ref: "#/components/schemas/Substitution"
+          nullable: true
+          description: >
+            Sustitución de `club2`: aplicada si el partido está en
+            pausa, pendiente si no. null si no tiene.
+      required: [club1, club2]
+ 
+    MarkNotificationsSeenRequest:
+      type: object
+      description: >
+        Validación (400 `invalidFields`, convención 6): `notificationId`:
+        `required` si falta; `invalidType` si no es un entero (ej:
+        `"abc"`, `null`); `outOfRange` si está fuera de 1 a 2147483647.
+        Body ilegible: convención 9.
+      properties:
+        notificationId:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: >
+            Id de la notificación más reciente que el front le mostró
+            al usuario.
+      required: [notificationId]
+ 
+    MarkNotificationsSeenConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [notificationNotOwned]
+          description: >
+            notificationNotOwned: la notificación no existe o es de
+            otro usuario. Es un único code para los dos casos, igual que
+            `playerOrBehaviorNotOwned`, para no revelar qué ids existen.
+        message:
+          type: string
+      required: [code, message]
+ 
+ 
+ 
+
 

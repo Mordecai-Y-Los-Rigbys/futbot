@@ -1,15 +1,9 @@
 import pytest
 
-MISSING = object()
+from app.schemas.errors import ValidationBadRequest
+from app.tests.unit.member_cases import MEMBERS_IDS, MEMBERS_PARAMS, MISSING, TEAM, err
 
-TEAM = [
-    {"playerId": 1, "behaviorId": 1, "role": "forward"},
-    {"playerId": 2, "behaviorId": 1, "role": "midfield"},
-    {"playerId": 3, "behaviorId": 1, "role": "defense"},
-    {"playerId": 4, "behaviorId": 1, "role": "substitute"},
-    {"playerId": 5, "behaviorId": 1, "role": "substitute"},
-    {"playerId": 6, "behaviorId": 1, "role": "substitute"},
-]
+REQUIRED = ["name", "minParticipants", "maxParticipants", "matchDuration", "private", "members"]
 
 
 def payload(**over):
@@ -19,7 +13,7 @@ def payload(**over):
         "maxParticipants": 8,
         "matchDuration": 5,
         "private": False,
-        "members": TEAM,
+        "members": [dict(m) for m in TEAM],
     }
     for k, v in over.items():
         if v is MISSING:
@@ -29,19 +23,17 @@ def payload(**over):
     return p
 
 
-def team(i, **changes):
-    """TEAM con el miembro i modificado (MISSING borra la clave)."""
-    out = [dict(m) for m in TEAM]
-    for k, v in changes.items():
-        if v is MISSING:
-            out[i].pop(k)
-        else:
-            out[i][k] = v
-    return out
-
-
 def post(api, body):
     return api.post("/leagues", json=body)
+
+
+def assert_errors(resp, expected):
+    assert resp.status_code == 400
+    body = resp.json()
+    ValidationBadRequest.model_validate(body)
+    assert body["code"] == "invalidFields"
+    assert body["message"]
+    assert body["errors"] == expected
 
 
 # --- éxito --------------------------------------------------------------------
@@ -72,59 +64,18 @@ def test_public_league_ignores_password_entirely(auth_api, fake_repo, pw):
     assert fake_repo.created[0].password is None
 
 
-# --- 400 por código -----------------------------------------------------------
-
-CASES = [
-    # invalidFieldType
-    ({"name": 123}, "invalidFieldType"),
-    ({"name": None}, "invalidFieldType"),
-    ({"minParticipants": "3"}, "invalidFieldType"),
-    ({"minParticipants": 3.0}, "invalidFieldType"),
-    ({"minParticipants": True}, "invalidFieldType"),
-    ({"maxParticipants": 2147483648}, "invalidFieldType"),
-    ({"matchDuration": "5"}, "invalidFieldType"),
-    ({"private": "yes"}, "invalidFieldType"),
-    ({"private": True, "password": 123}, "invalidFieldType"),
-    ({"members": "x"}, "invalidFieldType"),
-    ({"members": TEAM[:5] + ["x"]}, "invalidFieldType"),
-    ({"members": team(0, playerId="abc")}, "invalidFieldType"),
-    ({"members": team(0, playerId=0)}, "invalidFieldType"),
-    ({"members": team(0, behaviorId=2147483648)}, "invalidFieldType"),
-    ({"members": team(0, role=5)}, "invalidFieldType"),
-    # incompleteForm
-    ({"name": MISSING}, "incompleteForm"),
-    ({"minParticipants": MISSING}, "incompleteForm"),
-    ({"maxParticipants": MISSING}, "incompleteForm"),
-    ({"matchDuration": MISSING}, "incompleteForm"),
-    ({"private": MISSING}, "incompleteForm"),
-    ({"members": MISSING}, "incompleteForm"),
-    ({"private": True, "password": MISSING}, "incompleteForm"),
-    ({"private": True, "password": None}, "incompleteForm"),
-    ({"private": True, "password": ""}, "incompleteForm"),
-    ({"members": team(0, behaviorId=MISSING)}, "incompleteForm"),
-    # contenido
-    ({"name": "x" * 21}, "nameTooLong"),
-    ({"minParticipants": 2}, "minParticipantsTooLow"),
-    ({"minParticipants": 5, "maxParticipants": 4}, "maxLessThanMin"),
-    ({"matchDuration": 0}, "matchDurationOutOfRange"),
-    ({"matchDuration": 11}, "matchDurationOutOfRange"),
-    ({"private": True, "password": "x" * 73}, "passwordTooLong"),
-    # invalidTeam
-    ({"members": TEAM[:5]}, "invalidTeam"),
-    ({"members": TEAM + [TEAM[0]]}, "invalidTeam"),
-    ({"members": team(0, role="goalkeeper")}, "invalidTeam"),
-    ({"members": team(3, role="forward")}, "invalidTeam"),
-    ({"members": team(1, playerId=1)}, "invalidTeam"),
-]
+def test_league_without_allow_draws_is_created_in_normal_mode(auth_api, fake_repo):
+    resp = post(auth_api, payload())
+    assert resp.status_code == 201
+    assert fake_repo.created[0].allow_draws is True
+    assert resp.json()["allowDraws"] is True
 
 
-@pytest.mark.parametrize("over, code", CASES)
-def test_invalid_payload_returns_400_with_code(auth_api, fake_repo, over, code):
-    resp = post(auth_api, payload(**over))
-    assert resp.status_code == 400
-    assert resp.json()["code"] == code
-    assert resp.json()["message"]
-    assert fake_repo.created == []
+def test_league_with_allow_draws_false_is_created_in_penalties_mode(auth_api, fake_repo):
+    resp = post(auth_api, payload(allowDraws=False))
+    assert resp.status_code == 201
+    assert fake_repo.created[0].allow_draws is False
+    assert resp.json()["allowDraws"] is False
 
 
 def test_boundaries_are_valid(auth_api):
@@ -132,31 +83,119 @@ def test_boundaries_are_valid(auth_api):
     assert post(auth_api, ok).status_code == 201
     ok = payload(private=True, password="x" * 72, matchDuration=1)
     assert post(auth_api, ok).status_code == 201
+    ok = payload(minParticipants=2147483647, maxParticipants=2147483647)
+    assert post(auth_api, ok).status_code == 201
 
 
-# --- orden de evaluación (convención 6) ---------------------------------------
+# --- un reason por campo --------------------------------------------------------
+
+FIELD_CASES = [
+    ({"name": MISSING}, [err("name", "required")]),
+    ({"name": ""}, [err("name", "required")]),
+    ({"name": 123}, [err("name", "invalidType")]),
+    ({"name": None}, [err("name", "invalidType")]),
+    ({"name": "x" * 21}, [err("name", "tooLong")]),
+    ({"minParticipants": MISSING}, [err("minParticipants", "required")]),
+    ({"minParticipants": "3"}, [err("minParticipants", "invalidType")]),
+    ({"minParticipants": 3.0}, [err("minParticipants", "invalidType")]),
+    ({"minParticipants": True}, [err("minParticipants", "invalidType")]),
+    ({"minParticipants": None}, [err("minParticipants", "invalidType")]),
+    ({"minParticipants": 2}, [err("minParticipants", "outOfRange")]),
+    ({"minParticipants": 2147483648}, [err("minParticipants", "outOfRange")]),
+    ({"maxParticipants": MISSING}, [err("maxParticipants", "required")]),
+    ({"maxParticipants": "8"}, [err("maxParticipants", "invalidType")]),
+    ({"maxParticipants": None}, [err("maxParticipants", "invalidType")]),
+    ({"maxParticipants": 2147483648}, [err("maxParticipants", "outOfRange")]),
+    ({"minParticipants": 5, "maxParticipants": 4}, [err("maxParticipants", "lessThanMin")]),
+    ({"matchDuration": MISSING}, [err("matchDuration", "required")]),
+    ({"matchDuration": "5"}, [err("matchDuration", "invalidType")]),
+    ({"matchDuration": 1.5}, [err("matchDuration", "invalidType")]),
+    ({"matchDuration": 0}, [err("matchDuration", "outOfRange")]),
+    ({"matchDuration": 11}, [err("matchDuration", "outOfRange")]),
+    ({"private": MISSING}, [err("private", "required")]),
+    ({"private": "yes"}, [err("private", "invalidType")]),
+    ({"private": None}, [err("private", "invalidType")]),
+    ({"private": 1}, [err("private", "invalidType")]),
+    ({"private": True, "password": MISSING}, [err("password", "required")]),
+    ({"private": True, "password": None}, [err("password", "required")]),
+    ({"private": True, "password": ""}, [err("password", "required")]),
+    ({"private": True, "password": 123}, [err("password", "invalidType")]),
+    ({"private": True, "password": "x" * 73}, [err("password", "tooLong")]),
+    ({"allowDraws": None}, [err("allowDraws", "invalidType")]),
+    ({"allowDraws": "false"}, [err("allowDraws", "invalidType")]),
+    ({"allowDraws": 0}, [err("allowDraws", "invalidType")]),
+]
 
 
-def test_type_error_beats_missing_field(auth_api):
-    resp = post(auth_api, payload(name=MISSING, matchDuration="x"))
-    assert resp.json()["code"] == "invalidFieldType"
+@pytest.mark.parametrize("over, expected", FIELD_CASES)
+def test_field_reasons(auth_api, fake_repo, over, expected):
+    assert_errors(post(auth_api, payload(**over)), expected)
+    assert fake_repo.created == []
 
 
-def test_incomplete_beats_content_rules(auth_api):
-    resp = post(auth_api, payload(members=MISSING, name="x" * 99))
-    assert resp.json()["code"] == "incompleteForm"
+@pytest.mark.parametrize("members, expected", MEMBERS_PARAMS, ids=MEMBERS_IDS)
+def test_members_reasons(auth_api, fake_repo, members, expected):
+    assert_errors(post(auth_api, payload(members=members)), expected)
+    assert fake_repo.created == []
 
 
-def test_content_rules_follow_enum_order(auth_api):
-    resp = post(auth_api, payload(name="x" * 99, minParticipants=1, matchDuration=99))
-    assert resp.json()["code"] == "nameTooLong"
-    resp = post(auth_api, payload(minParticipants=1, matchDuration=99))
-    assert resp.json()["code"] == "minParticipantsTooLow"
+# --- reglas que cruzan campos y orden -----------------------------------------
 
 
-def test_invalid_team_is_the_last_400(auth_api):
-    resp = post(auth_api, payload(matchDuration=0, members=TEAM[:5]))
-    assert resp.json()["code"] == "matchDurationOutOfRange"
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"minParticipants": 2, "maxParticipants": 1},  # min inválido
+        {"minParticipants": 5, "maxParticipants": "1"},  # max inválido
+    ],
+)
+def test_less_than_min_needs_both_fields_valid(auth_api, over):
+    resp = post(auth_api, payload(**over))
+    assert all(e["reason"] != "lessThanMin" for e in resp.json()["errors"])
+
+
+@pytest.mark.parametrize("private", [False, "yes", MISSING])
+def test_password_is_not_evaluated_unless_private_is_true(auth_api, private):
+    resp = post(auth_api, payload(private=private, password=123))
+    errors = resp.json().get("errors", [])
+    assert all(e["field"] != "password" for e in errors)
+
+
+def test_all_failures_are_reported_in_schema_order(auth_api):
+    body = payload(
+        name="x" * 21,
+        minParticipants=1,
+        maxParticipants="x",
+        matchDuration=99,
+        private=True,
+        password="",
+        allowDraws="si",
+        members=TEAM[:5],
+    )
+    assert_errors(
+        post(auth_api, body),
+        [
+            err("name", "tooLong"),
+            err("minParticipants", "outOfRange"),
+            err("maxParticipants", "invalidType"),
+            err("matchDuration", "outOfRange"),
+            err("password", "required"),
+            err("allowDraws", "invalidType"),
+            err("members", "invalidTeam"),
+        ],
+    )
+
+
+def test_less_than_min_takes_the_place_of_max_participants(auth_api):
+    body = payload(name=5, minParticipants=5, maxParticipants=4, matchDuration=0)
+    assert_errors(
+        post(auth_api, body),
+        [
+            err("name", "invalidType"),
+            err("maxParticipants", "lessThanMin"),
+            err("matchDuration", "outOfRange"),
+        ],
+    )
 
 
 def test_400_has_priority_over_409(auth_api, fake_players):
@@ -165,7 +204,7 @@ def test_400_has_priority_over_409(auth_api, fake_players):
     assert resp.status_code == 400
 
 
-# --- 409 / 401 / body raro ----------------------------------------------------
+# --- 409 / 401 / body ilegible --------------------------------------------------
 
 
 def test_not_owned_returns_409(auth_api, fake_repo, fake_players):
@@ -182,15 +221,18 @@ def test_no_session_returns_401_even_with_broken_body(api):
     assert resp.json()["code"] is None
 
 
-def test_malformed_json_returns_400(auth_api):
-    resp = auth_api.post("/leagues", content="{", headers={"Content-Type": "application/json"})
-    assert resp.status_code == 400
-    assert resp.json()["code"] == "invalidFieldType"
-
-
-def test_non_object_body_returns_400(auth_api):
-    assert post(auth_api, [1, 2]).json()["code"] == "invalidFieldType"
-
-
-def test_empty_body_is_incomplete_form(auth_api):
-    assert auth_api.post("/leagues").json()["code"] == "incompleteForm"
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},  # sin body
+        {"content": "{", "headers": {"Content-Type": "application/json"}},
+        {"json": [1, 2]},
+        {"json": "texto"},
+        {"json": 42},
+        {"json": {}},
+    ],
+)
+def test_unreadable_body_reports_every_required_field(auth_api, fake_repo, kwargs):
+    resp = auth_api.post("/leagues", **kwargs)
+    assert_errors(resp, [err(f, "required") for f in REQUIRED])
+    assert fake_repo.created == []

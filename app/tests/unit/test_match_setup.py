@@ -5,15 +5,17 @@ import pytest
 from app.domain.team_member import MemberRole
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import MatchSetupData
-from app.repositories.team_abstract import AbstractTeamRepository, StarterData
+from app.repositories.team_abstract import StarterData
 from app.services.match_setup_service import MatchSetupService
 from app.simulation.constants import STARTER_ROLES, FRIENDLY_MATCH_DURATION
 from app.tests.unit.match_ws_fakes import FakeMatchRepo
+from app.tests.unit.repo_fakes import FakeTeams
 
 
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
     return StarterData(
         player_id=player_id,
+        name=f"Jugador {player_id}",
         role=role,
         power=60,
         agility=60,
@@ -43,18 +45,38 @@ class FakeLeagues(AbstractLeagueRepository):
     def create(self, data):
         raise NotImplementedError
 
+    def get_detail(self, league_id: int, user_id: int):
+        raise NotImplementedError
 
-class FakeTeams(AbstractTeamRepository):
-    def __init__(self, starters=None):
-        self.starters = starters or {}  # {user_id: [StarterData]}
-        self.calls = []
+    def get_leave_info(self, league_id):
+        raise NotImplementedError
 
-    def get_starters(self, match_id, league_id, user_id):
-        self.calls.append((match_id, league_id, user_id))
-        return self.starters.get(user_id, [])
+    def is_participant(self, league_id, user_id):
+        raise NotImplementedError
+
+    def remove_participant(self, league_id, user_id):
+        raise NotImplementedError
+
+    def get_join_state(self, league_id, user_id):
+        raise NotImplementedError
+
+    def join(self, data):
+        raise NotImplementedError
+
+    def get_fixture(self, league_id):
+        raise NotImplementedError
+
+    def list_participants(self, league_id):
+        raise NotImplementedError
+
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
+        raise NotImplementedError
 
 
-def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData:
+def setup_data(league_id=None, user_2_id=2, club_2="Club Dos", allow_draws=True) -> MatchSetupData:
     return MatchSetupData(
         id=1,
         league_id=league_id,
@@ -62,6 +84,7 @@ def setup_data(league_id=None, user_2_id=2, club_2="Club Dos") -> MatchSetupData
         user_2_id=user_2_id,
         club_1_name="Club Uno",
         club_2_name=club_2,
+        allow_draws=allow_draws,
     )
 
 
@@ -84,6 +107,14 @@ def test_league_match_uses_the_league_duration_and_league_teams():
     assert (setup.club_1_name, setup.club_2_name) == ("Club Uno", "Club Dos")
 
 
+def test_league_mode_and_player_names_reach_the_setup():
+    service, _, _ = build(setup_data(league_id=5, allow_draws=False), durations={5: 2})
+    setup = service.load_match_setup(1)
+
+    assert setup.allow_draws is False
+    assert {p.name for p in setup.team_1.players} == {"Jugador 10", "Jugador 11", "Jugador 12"}
+
+
 def test_friendly_uses_the_fixed_duration_and_never_asks_the_league():
     service, leagues, teams = build(setup_data(league_id=None))
     setup = service.load_match_setup(1)
@@ -91,6 +122,12 @@ def test_friendly_uses_the_fixed_duration_and_never_asks_the_league():
     assert setup.duration_seconds == FRIENDLY_MATCH_DURATION * 60
     assert leagues.calls == []
     assert teams.calls == [(1, None, 1), (1, None, 2)]
+
+
+def test_setup_uses_four_periods_and_15_second_pauses():
+    service, _, _ = build(setup_data())
+    setup = service.load_match_setup(1)
+    assert (setup.periods, setup.pause_seconds) == (4, 15)
 
 
 def test_each_team_has_three_starters_with_their_behaviors():
@@ -123,7 +160,7 @@ def test_league_that_does_not_exist_is_a_lookup_error():
 
 def test_team_without_starters_is_an_error():
     service, _, _ = build(setup_data(), starters={1: full_team(10), 2: []})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="equipo del usuario 2"):
         service.load_match_setup(1)
 
 

@@ -1,16 +1,29 @@
-"""Reglas del partido alrededor de la física: arranque, goles, reacomodo y fin.
+"""Reglas del partido alrededor de la física: arranque, goles, pausas, reacomodo y fin.
 
 Todo es CPU puro y sin I/O: lo usan igual el loop en tiempo real (MatchRunner)
 y el simulador sin espera (simulate_match).
 
-Línea de tiempo (a 20 ticks/s):
-    ticks 0 .. CT-1      fase countdown (CT = cuenta regresiva en ticks).
-                         El tick 0 trae el evento periodStart. Nadie se mueve.
-    ticks CT .. CT+N-1   fase playing (N = ticks de juego).
-    último tick          fase finished con el evento matchEnd.
+Línea de tiempo (a 20 ticks/s), con P períodos:
+
+    countdown(1) playing(1) | pausa(1) countdown(2) playing(2) | ... | countdown(P) playing(P)
+
+- countdown: el primer tick trae `periodStart`. Nadie se mueve.
+- playing: los behaviors y la física corren. El último tick del último
+  período es `finished` con `matchEnd`.
+- paused: el primer tick trae `pause`. Todo congelado y el reloj detenido.
+
+Al empezar cada countdown posterior a una pausa, el partido se reinicia como
+un saque normal (posiciones iniciales, pelota quieta, cooldowns en cero), haya
+habido gol antes de la pausa o no.
+
+Si el último tick de un período es un gol, el reacomodo del gol se aplica en
+el primer tick de la pausa: la pelota nunca queda dentro del arco en `paused`.
 """
 
+import copy
+import dataclasses
 import enum
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -24,6 +37,7 @@ from app.simulation.physics import (
     reset_positions,
     step,
 )
+from app.simulation.penalties import PenaltyKick, Shootout, ShootoutStatus
 from app.simulation.state import Goal, MatchState, PlayerKey, Team
 from app.domain.team_member import MemberRole
 
@@ -31,13 +45,23 @@ from app.domain.team_member import MemberRole
 class Phase(str, enum.Enum):
     COUNTDOWN = "countdown"
     PLAYING = "playing"
+    PAUSED = "paused"
+    PENALTIES = "penalties"
     FINISHED = "finished"
 
 
 class Event(str, enum.Enum):
     PERIOD_START = "periodStart"
     GOAL = "goal"
+    PAUSE = "pause"
+    PENALTIES_START = "penaltiesStart"
+    PENALTY_KICK = "penaltyKick"
     MATCH_END = "matchEnd"
+
+
+class PauseReason(str, enum.Enum):
+    HYDRATION = "hydration"
+    HALFTIME = "halftime"
 
 
 @dataclass(frozen=True)
@@ -56,10 +80,30 @@ class TickResult:
     state: MatchState
     score_1: int
     score_2: int
-    elapsed: float  # segundos de juego (no avanza en la cuenta regresiva)
+    elapsed: float  # segundos de juego (no avanza en la cuenta regresiva ni en las pausas)
     remaining: float
-    period: int
+    period: int  # en un countdown, el período que arranca; en una pausa, el que terminó
     scoring_team: Team | None = None  # quién anotó, solo si event == GOAL
+    pause_reason: PauseReason | None = None  # solo en ticks `paused`
+    pause_remaining_seconds: int | None = None  # solo en ticks `paused`
+    pause_duration_seconds: int | None = None  # solo en ticks `paused`
+    shootout: ShootoutStatus | None = None  # solo en la tanda y en su tick final
+    penalty_kick: PenaltyKick | None = None  # solo si event == PENALTY_KICK
+    # Pausas que todavía no empezaron. No cuenta la pausa en curso: el tick con el
+    # evento `pause` ya trae el valor decrementado. Es la única fuente de la regla:
+    # el `pausesLeft` del tick y el 409 `noPausesLeft` salen de acá.
+    pauses_left: int = 0
+
+
+@dataclass(frozen=True)
+class _Segment:
+    """Tramo consecutivo de ticks de una misma fase."""
+
+    phase: Phase
+    ticks: int
+    period: int
+    restart: bool = False  # su primer tick reinicia el partido (saque normal)
+    pauses_left: int = 0  # pausas que no empezaron cuando salen los ticks de este tramo
 
 
 class MatchSession:
@@ -76,54 +120,241 @@ class MatchSession:
         duration_seconds: float,
         countdown_seconds: float = C.COUNTDOWN_SECONDS,
         periods: int = C.PERIODS,
+        pause_seconds: float = C.PAUSE_SECONDS,
+        allow_draws: bool = True,
     ) -> None:
         self._state = state
+        self._allow_draws = allow_draws
+        self._shootout: Shootout | None = None
         self._behaviors = behaviors
         self._countdown_ticks = round(countdown_seconds * C.TICKS_PER_SECOND)
+        self._pause_ticks = round(pause_seconds * C.TICKS_PER_SECOND)
+        self._pause_seconds = pause_seconds
         self._play_ticks = round(duration_seconds * C.TICKS_PER_SECOND)
-        if self._play_ticks < 1:
-            raise ValueError("el partido tiene que durar al menos un tick")
+        if periods < 1 or self._play_ticks < periods:
+            raise ValueError("el partido tiene que durar al menos un tick por período")
         self._periods = periods
-        self._period_ticks = max(1, self._play_ticks // periods)
+        self._segments = self._build_segments()
+        self._seg_index = 0
+        self._offset = 0  # posición dentro del segmento actual
         self._seq = 0
+        self._played = 0  # ticks de juego efectivo ya jugados
         self._score_1 = 0
         self._score_2 = 0
         self._pending_reset = False
         self._finished = False
+
+    def _build_segments(self) -> list[_Segment]:
+        base = self._play_ticks // self._periods
+        segments: list[_Segment] = []
+        for period in range(1, self._periods + 1):
+            if period > 1 and self._pause_ticks > 0:
+                segments.append(_Segment(Phase.PAUSED, self._pause_ticks, period - 1))
+            restart = period > 1  # lo reinicia el primer tramo no-pausa del período
+            if self._countdown_ticks > 0:
+                segments.append(_Segment(Phase.COUNTDOWN, self._countdown_ticks, period, restart))
+                restart = False
+            # el último período absorbe el resto de la división
+            ticks = base if period < self._periods else self._play_ticks - base * (period - 1)
+            segments.append(_Segment(Phase.PLAYING, ticks, period, restart))
+        # Pausas por empezar en cada tramo: las pausas que vienen después de él. Una
+        # pausa no se cuenta a sí misma, así que su primer tick ya trae el valor nuevo.
+        pending = 0
+        for index in range(len(segments) - 1, -1, -1):
+            segments[index] = dataclasses.replace(segments[index], pauses_left=pending)
+            if segments[index].phase is Phase.PAUSED:
+                pending += 1
+        return segments
 
     @property
     def finished(self) -> bool:
         return self._finished
 
     @property
+    def periods(self) -> int:
+        return self._periods
+
+    @property
+    def state(self) -> MatchState:
+        """Estado actual. Cada tick lo reemplaza por uno nuevo: no se muta en el lugar."""
+        return self._state
+
+    @property
     def total_ticks(self) -> int:
-        return self._countdown_ticks + self._play_ticks
+        return sum(s.ticks for s in self._segments)
+
+    @property
+    def pause_starts(self) -> list[float]:
+        """Segundos de juego en los que empieza cada pausa."""
+        starts, played = [], 0
+        for segment in self._segments:
+            if segment.phase is Phase.PLAYING:
+                played += segment.ticks
+            elif segment.phase is Phase.PAUSED:
+                starts.append(played / C.TICKS_PER_SECOND)
+        return starts
 
     def advance(self) -> TickResult:
         if self._finished:
             raise RuntimeError("el partido ya terminó")
         seq = self._seq
         self._seq += 1
-        event: Event | None = Event.PERIOD_START if seq == 0 else None
 
-        if seq < self._countdown_ticks:
-            return self._result(seq, Phase.COUNTDOWN, event, played=0)
+        if self._shootout is not None:
+            return self._penalty_tick(seq)
 
-        play_index = seq - self._countdown_ticks
+        segment = self._segments[self._seg_index]
+        offset = self._offset
+        self._offset += 1
+        if self._offset == segment.ticks:
+            self._seg_index += 1
+            self._offset = 0
+
+        if offset == 0 and segment.restart:
+            self._restart()
+
+        if segment.phase is Phase.PAUSED:
+            return self._pause_tick(seq, segment, offset)
+        if segment.phase is Phase.COUNTDOWN:
+            event = Event.PERIOD_START if offset == 0 else None
+            return self._result(seq, segment, event)
+        return self._play(seq, segment)
+
+    def replace_behavior(self, player_id: int, behavior: CompiledBehavior) -> None:
+        """Reemplaza el comportamiento de un jugador en tiempo real."""
+        for player in self._state.players:
+            if player.player_id == player_id:
+                self._behaviors = {**self._behaviors, player.key: behavior}
+                return
+        raise ValueError(f"no hay jugador con id {player_id}")
+
+    def substitute(
+        self,
+        team: Team,
+        out_player_id: int,
+        incoming: PlayerSetup,
+        behavior: CompiledBehavior,
+    ) -> None:
+        """Cambia en cancha al titular `out_player_id` por `incoming`, que toma su rol.
+
+        Se llama en la pausa (el estado está congelado). Conserva la posición y
+        reinicia los cooldowns del que entra; el saque posterior a la pausa lo
+        vuelve a ubicar en su posición inicial. El estado se reemplaza por una copia:
+        los ticks ya emitidos no cambian.
+
+        Raises:
+            ValueError: el titular no está en cancha o `incoming` no tiene su rol.
+        """
+        index = next(
+            (
+                i
+                for i, p in enumerate(self._state.players)
+                if p.team is team and p.player_id == out_player_id
+            ),
+            None,
+        )
+        if index is None:
+            raise ValueError(f"no hay jugador con id {out_player_id} en el equipo {team.value}")
+        if incoming.role.number != self._state.players[index].number:
+            raise ValueError("el suplente tiene que tomar el rol del titular que sale")
+
+        state = copy.deepcopy(self._state)
+        player = state.players[index]
+        player.player_id = incoming.player_id
+        player.stats = incoming.stats
+        player.name = incoming.name
+        player.move = None
+        player.next_kick_tick = C.NO_KICK_COOLDOWN
+        player.regain_blocked_until = C.NOT_REGAIN_BLOCKED
+        self._state = state
+        self._behaviors = {**self._behaviors, player.key: behavior}
+
+    def _restart(self) -> None:
+        """Saque normal: posiciones iniciales, pelota libre y quieta, sin
+        movimientos previos y cooldowns en cero. También descarta un reacomodo
+        por gol pendiente."""
+        self._state = reset_positions(self._state)
+        self._pending_reset = False
+
+    def _pause_tick(self, seq: int, segment: _Segment, offset: int) -> TickResult:
+        if offset == 0 and self._pending_reset:
+            # Gol en el último tick del período: el tick siguiente al gol (el primero
+            # de la pausa) ya tiene todo en posiciones iniciales (contrato `goal`).
+            self._reset_after_goal()
+        # Congelado: no corren behaviors ni física, y el estado no cambia.
+        ticks_left = segment.ticks - offset
+        remaining = math.ceil(ticks_left / C.TICKS_PER_SECOND)  # de N a 0
+        event = Event.PAUSE if offset == 0 else None
+        return self._result(
+            seq,
+            segment,
+            event,
+            pause_reason=self._pause_reason(segment.period),
+            pause_remaining=remaining,
+        )
+
+    def _pause_reason(self, period: int) -> PauseReason:
+        if period == self._periods // 2:
+            return PauseReason.HALFTIME
+        return PauseReason.HYDRATION
+
+    def _play(self, seq: int, segment: _Segment) -> TickResult:
+        play_index = self._played
+        self._played += 1
+        event: Event | None = None
         scorer: Team | None = None
         if self._pending_reset:
             self._reset_after_goal()
         else:
-            scorer = self._play_tick(play_index)
+            scorer = self._play_tick(play_index, segment.period)
         if scorer is not None:
             event = Event.GOAL
 
         phase = Phase.PLAYING
-        if play_index == self._play_ticks - 1:
-            # matchEnd tiene prioridad: si el último tick fue gol, igual suma al marcador.
+        if self._played == self._play_ticks:
+            if self._goes_to_penalties():
+                # Desde el tick siguiente se juega la tanda.
+                self._shootout = Shootout(
+                    self._state, self._behaviors, self._played / C.TICKS_PER_SECOND, segment.period
+                )
+            else:
+                # matchEnd tiene prioridad: si el último tick fue gol, igual suma al marcador.
+                phase, event = Phase.FINISHED, Event.MATCH_END
+                self._finished = True
+        return self._result(seq, segment, event, phase=phase, scorer=scorer)
+
+    def _goes_to_penalties(self) -> bool:
+        return not self._allow_draws and self._score_1 == self._score_2
+
+    def _penalty_tick(self, seq: int) -> TickResult:
+        penalty = self._shootout.advance()
+        self._state = penalty.state
+
+        if penalty.finished:
             phase, event = Phase.FINISHED, Event.MATCH_END
             self._finished = True
-        return self._result(seq, phase, event, played=play_index + 1, scorer=scorer)
+        elif penalty.first:
+            phase, event = Phase.PENALTIES, Event.PENALTIES_START
+        else:
+            phase = Phase.PENALTIES
+            event = Event.PENALTY_KICK if penalty.kick is not None else None
+
+        elapsed = self._played / C.TICKS_PER_SECOND  # el reloj no avanza en la tanda
+
+        return TickResult(
+            tick=seq,
+            phase=phase,
+            event=event,
+            state=self._state,
+            score_1=self._score_1,
+            score_2=self._score_2,
+            elapsed=elapsed,
+            remaining=0.0,
+            period=self._periods,
+            shootout=penalty.status,
+            penalty_kick=penalty.kick if event is Event.PENALTY_KICK else None,
+            pauses_left=0,  # la tanda viene después del último período: ya empezaron todas
+        )
 
     def _reset_after_goal(self) -> None:
         """Tick siguiente al gol: todos en sus posiciones, pelota libre en el
@@ -132,12 +363,12 @@ class MatchSession:
         self._state.tick += 1
         self._pending_reset = False
 
-    def _play_tick(self, play_index: int) -> Team | None:
+    def _play_tick(self, play_index: int, period: int) -> Team | None:
         """Corre los behaviors y la física de un tick. Devuelve quién hizo gol, o None."""
         clock = MatchClock(
             elapsed=play_index / C.TICKS_PER_SECOND,
             remaining=(self._play_ticks - play_index) / C.TICKS_PER_SECOND,
-            period=self._period(play_index),
+            period=period,
         )
         actions = run_behaviors(self._state, self._behaviors, clock)
         result = step(self._state, actions)
@@ -156,29 +387,33 @@ class MatchSession:
             self._score_2 += 1
         self._pending_reset = True
 
-    def _period(self, play_index: int) -> int:
-        return min(self._periods, play_index // self._period_ticks + 1)
-
     def _result(
         self,
         seq: int,
-        phase: Phase,
+        segment: _Segment,
         event: Event | None,
-        played: int,
+        phase: Phase | None = None,
         scorer: Team | None = None,
+        pause_reason: PauseReason | None = None,
+        pause_remaining: int | None = None,
     ) -> TickResult:
-        elapsed = played / C.TICKS_PER_SECOND
+        elapsed = self._played / C.TICKS_PER_SECOND
+        paused = segment.phase is Phase.PAUSED
         return TickResult(
             tick=seq,
-            phase=phase,
+            phase=phase or segment.phase,
             event=event,
             state=self._state,
             score_1=self._score_1,
             score_2=self._score_2,
             elapsed=elapsed,
             remaining=self._play_ticks / C.TICKS_PER_SECOND - elapsed,
-            period=self._period(max(0, played - 1)),
+            period=segment.period,
             scoring_team=scorer,
+            pause_reason=pause_reason,
+            pause_remaining_seconds=pause_remaining,
+            pause_duration_seconds=round(self._pause_seconds) if paused else None,
+            pauses_left=segment.pauses_left,
         )
 
 
@@ -196,9 +431,18 @@ def build_session(
     duration_seconds: float,
     seed: int,
     countdown_seconds: float = C.COUNTDOWN_SECONDS,
+    periods: int = C.PERIODS,
+    pause_seconds: float = C.PAUSE_SECONDS,
+    allow_draws: bool = True,
 ) -> MatchSession:
     """Crea el estado inicial (la semilla entra acá) y la sesión del partido."""
     state = create_initial_state(team_1.players, team_2.players, seed)
     return MatchSession(
-        state, behaviors_by_key(team_1, team_2), duration_seconds, countdown_seconds
+        state,
+        behaviors_by_key(team_1, team_2),
+        duration_seconds,
+        countdown_seconds,
+        periods,
+        pause_seconds,
+        allow_draws,
     )

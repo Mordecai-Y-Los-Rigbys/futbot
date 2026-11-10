@@ -1,15 +1,19 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
 from app.domain.team_member import MemberRole
+from app.domain.match import MatchStatus
 
 
 class LeagueCreatorData(BaseModel):
     id: int
     username: str
     club_name: str
+    avatar: int
 
     model_config = {"from_attributes": True}
 
@@ -20,11 +24,21 @@ class LeagueListItemData(BaseModel):
     creator: LeagueCreatorData
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
+    allow_draws: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LeagueParticipantData(LeagueCreatorData):
+    pass
+
+
+class LeagueDetailData(LeagueListItemData):
+    joined: bool
 
 
 class LeaguePageData(BaseModel):
@@ -46,7 +60,99 @@ class CreateLeagueData(BaseModel):
     match_duration: int
     private: bool
     password: str | None  # None si la liga es pública
+    allow_draws: bool
     members: list[CreateLeagueMemberData]
+
+
+class LeagueLeaveInfo(BaseModel):
+    status: LeagueStatus
+    creator_id: int
+
+
+# Conflictos de inscripción que dependen del estado de la liga, en el orden
+# en que se evalúan (enum de JoinLeagueConflict del contrato).
+JoinLeagueStateConflict = Literal["notInPreparation", "leagueFull", "alreadyParticipating"]
+
+
+class LeagueJoinState(BaseModel):
+    """Lo que necesita POST /leagues/{id}/participants para decidir 403 y 409."""
+
+    private: bool
+    password: str | None
+    status: LeagueStatus
+    max_participants: int
+    participants_count: int
+    is_participant: bool  # el usuario que se inscribe ya participa
+
+    def conflict(self) -> JoinLeagueStateConflict | None:
+        """Primer 409 de estado que aplica, o None si la liga admite al usuario."""
+        if self.status != LeagueStatus.preparation:
+            return "notInPreparation"
+        if self.participants_count >= self.max_participants:
+            return "leagueFull"
+        if self.is_participant:
+            return "alreadyParticipating"
+        return None
+
+
+class JoinLeagueData(BaseModel):
+    league_id: int
+    user_id: int
+    session_id: str
+    members: list[CreateLeagueMemberData]
+    coach_behavior_id: int | None  # None: el equipo no tiene DT
+    unlock_session: bool  # True si la liga es privada: queda desbloqueada en la sesión
+    
+
+class LeagueFixtureClubData(BaseModel):
+    id: int
+    username: str
+    club_name: str
+    avatar: int
+
+
+class LeagueFixtureMatchData(BaseModel):
+    id: int
+    status: MatchStatus
+    club_1: LeagueFixtureClubData
+    club_2: LeagueFixtureClubData
+    scheduled_at: datetime
+    created_at: datetime
+    score_1: int | None
+    score_2: int | None
+
+
+class LeagueFixtureData(BaseModel):
+    status: LeagueStatus
+    matches: list[LeagueFixtureMatchData]
+
+
+StartLeagueConflict = Literal["notInPreparation", "notEnoughParticipants"]
+
+
+class LeagueStartState(BaseModel):
+    creator_id: int
+    status: LeagueStatus
+    min_participants: int
+    participants_count: int
+    match_duration: int
+    allow_draws: bool
+
+    def conflict(self) -> StartLeagueConflict | None:
+        if self.status != LeagueStatus.preparation:
+            return "notInPreparation"
+        if self.participants_count < self.min_participants:
+            return "notEnoughParticipants"
+        return None
+
+
+class FixtureMatchData(BaseModel):
+    user_1_id: int
+    user_2_id: int
+    scheduled_at: datetime
+
+
+PlanFixture = Callable[[list[int]], list[FixtureMatchData]]
 
 
 class AbstractLeagueRepository(ABC):
@@ -73,4 +179,87 @@ class AbstractLeagueRepository(ABC):
 
         Es el valor `match_duration` que definió el creador al crear la liga
         (entre 1 y 10). Devuelve None si la liga no existe.
+        """
+
+    @abstractmethod
+    def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
+        """Estado y creador de la liga. Devuelve None si la liga no existe."""
+
+    @abstractmethod
+    def is_participant(self, league_id: int, user_id: int) -> bool:
+        """True si el usuario está inscripto en la liga (el creador incluido)."""
+
+    @abstractmethod
+    def remove_participant(self, league_id: int, user_id: int) -> None:
+        """
+        Elimina la inscripción del usuario y el equipo que registró en esa liga,
+        en una única transacción (o nada).
+        """
+
+    @abstractmethod
+    def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
+        """Detalle de una liga en cualquier estado, pública o privada.
+
+        Incluye creador, participantes (creador incluido) y si `user_id`
+        participa. Devuelve None si la liga no existe. Nunca expone la contraseña.
+        """
+
+    @abstractmethod
+    def get_join_state(self, league_id: int, user_id: int) -> LeagueJoinState | None:
+        """Estado de la liga visto por `user_id` que quiere inscribirse.
+
+        Devuelve None si la liga no existe.
+        """
+
+    @abstractmethod
+    def join(self, data: JoinLeagueData) -> JoinLeagueStateConflict | None:
+        """Inscribe al usuario con su equipo y su DT, en una única transacción.
+
+        Vuelve a evaluar estado, cupo y participación previa con la liga
+        bloqueada, para que dos inscripciones simultáneas no superen el cupo.
+        Si `unlock_session`, también registra el desbloqueo de la liga en la
+        sesión dentro de la misma transacción.
+
+        Returns:
+            None si inscribió; el código del conflicto si, al bloquear la
+            liga, ya no admitía al usuario (en ese caso no persiste nada).
+        """
+
+    @abstractmethod
+    def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
+        """Participantes actuales de la liga (creador incluido), por id de usuario ascendente.
+
+        Lista vacía si la liga no existe: el 404 lo resuelve quien llama.
+        """
+
+    @abstractmethod
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        """Estado de la liga y sus partidos, por scheduled_at y después id.
+
+        Devuelve None si la liga no existe.
+        """
+
+    @abstractmethod
+    def get_start_state(self, league_id: int) -> LeagueStartState | None:
+        """Creador, estado, participantes y modo de la liga. None si no existe."""
+
+    @abstractmethod
+    def start(self, league_id: int, plan_fixture: PlanFixture) -> StartLeagueConflict | None:
+        """Inicia la liga y guarda su fixture, en una única transacción.
+
+        Bloquea la liga y vuelve a evaluar estado y mínimo, para que dos inicios
+        simultáneos no generen dos fixtures y una inscripción simultánea no
+        quede fuera. Con la liga bloqueada, llama a `plan_fixture` con los ids
+        de los participantes (el creador incluido) y guarda esos partidos en
+        `scheduled`
+
+        Returns:
+            None si la inició; el código del conflicto si, al bloquear la liga,
+            ya no se podía iniciar (en ese caso no persiste nada).
+        """
+    @abstractmethod
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        """Estado de la liga y sus partidos, por scheduled_at y después id.
+
+        Devuelve None si la liga no existe.
         """

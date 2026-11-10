@@ -1,20 +1,27 @@
 from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
+from app.api.ws_league_deps import (
+    get_league_fixture_manager,
+    get_league_next_match_manager,
+    get_league_ranking_manager,
+)
 from app.database import SessionLocal
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
+from app.repositories.league_match_start_sqlalchemy import SqlAlchemyLeagueMatchStartRepository
 from app.repositories.match_expiry_sqlalchemy import SqlAlchemyMatchExpiryRepository
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.repositories.match_start_sqlalchemy import SqlAlchemyMatchStartRepository
 from app.repositories.match_ws_token_sqlalchemy import SqlAlchemyMatchWsTokenRepository
-from app.services.match_connection_manager import MatchConnectionManager
-from app.services.match_handshake_service import MatchHandshakeService
+from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 from app.services.friendly_expiry import FriendlyExpiryService
 from app.services.friendly_start import FriendlyStartService
+from app.services.league_match_start import LeagueMatchStartService
+from app.services.match_connection_manager import MatchConnectionManager
+from app.services.match_handshake_service import MatchHandshakeService
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup, MatchSetupService
-
 
 # Único registro de conexiones del proceso.
 _connection_manager = MatchConnectionManager()
@@ -77,7 +84,41 @@ def _load_setup(match_id: int) -> MatchSetup:
         ).load_match_setup(match_id)
 
 
-_match_runner = MatchRunner(_connection_manager, _load_setup, _match_repo_scope)
+@contextmanager
+def _substitution_repo_scope() -> Iterator[SqlAlchemySubstitutionRepository]:
+    with SessionLocal() as db:
+        yield SqlAlchemySubstitutionRepository(db)
+
+
+def _league_of(match_id: int) -> int | None:
+    """La liga del partido. None si es un amistoso."""
+    with SessionLocal() as db:
+        data = SqlAlchemyMatchRepository(db).get_setup_data(match_id)
+    return None if data is None else data.league_id
+
+
+def _notify_league_channels(match_id: int) -> None:
+    league_id = _league_of(match_id)
+    if league_id is not None:
+        get_league_fixture_manager().fixture_changed(league_id)
+        get_league_next_match_manager().next_match_changed(league_id)
+
+
+def _notify_league_ranking(match_id: int) -> None:
+    """Solo al terminar un partido: es lo único que cambia el ranking."""
+    league_id = _league_of(match_id)
+    if league_id is not None:
+        get_league_ranking_manager().ranking_changed(league_id)
+
+
+_match_runner = MatchRunner(
+    _connection_manager,
+    _load_setup,
+    _match_repo_scope,
+    _substitution_repo_scope,
+    on_match_change=_notify_league_channels,
+    on_match_finished=_notify_league_ranking,
+)
 
 
 async def _start_simulation(match_id: int) -> None:
@@ -87,9 +128,22 @@ async def _start_simulation(match_id: int) -> None:
 _friendly_start = FriendlyStartService(_start_repo_scope, _start_simulation)
 
 
+@contextmanager
+def _league_match_start_repo_scope() -> Iterator[SqlAlchemyLeagueMatchStartRepository]:
+    with SessionLocal() as db:
+        yield SqlAlchemyLeagueMatchStartRepository(db)
+
+
+_league_match_start = LeagueMatchStartService(_league_match_start_repo_scope, _start_simulation)
+
+
 def get_match_runner() -> MatchRunner:
     return _match_runner
 
 
 def get_friendly_start() -> FriendlyStartService:
     return _friendly_start
+
+
+def get_league_match_start() -> LeagueMatchStartService:
+    return _league_match_start

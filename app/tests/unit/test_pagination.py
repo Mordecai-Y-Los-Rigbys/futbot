@@ -1,7 +1,7 @@
 import pytest
 
 from app.api.pagination import MAX_PAGE, parse_page
-from app.errors import ApiError
+from app.errors import ValidationApiError
 
 
 @pytest.mark.parametrize(
@@ -18,12 +18,13 @@ def test_parse_page_valid(raw, expected):
     assert parse_page(raw) == expected
 
 
-def _assert_api_error(raw: str, code: str):
-    with pytest.raises(ApiError) as exc_info:
+def _assert_page_error(raw: str, reason: str):
+    with pytest.raises(ValidationApiError) as exc_info:
         parse_page(raw)
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == code
-    assert exc_info.value.message  # no vacío
+    err = exc_info.value
+    assert (err.status_code, err.code) == (400, "invalidFields")
+    assert err.errors == [{"field": "page", "reason": reason}]
+    assert err.message
 
 
 @pytest.mark.parametrize(
@@ -38,27 +39,29 @@ def _assert_api_error(raw: str, code: str):
         "0x10",
         "-",
         "--1",
+        "+1",
         "１２",  # dígitos de ancho completo: no son [0-9]
     ],
 )
-def test_parse_page_not_an_integer(raw):
-    _assert_api_error(raw, "pageNotAnInteger")
+def test_parse_page_not_an_integer_is_invalid_type(raw):
+    _assert_page_error(raw, "invalidType")
 
 
-@pytest.mark.parametrize("raw", ["0", "-0", "-1", "-100"])
-def test_parse_page_below_minimum(raw):
-    _assert_api_error(raw, "pageBelowMinimum")
+@pytest.mark.parametrize(
+    "raw", ["0", "000", "-0", "-1", "-100", str(MAX_PAGE + 1), "99999999999", "00" + str(MAX_PAGE + 1)]
+)
+def test_parse_page_out_of_range(raw):
+    _assert_page_error(raw, "outOfRange")
 
 
-@pytest.mark.parametrize("raw", [str(MAX_PAGE + 1), "99999999999"])
-def test_parse_page_too_large(raw):
-    _assert_api_error(raw, "pageTooLarge")
+def test_parse_page_huge_digit_string_is_out_of_range():
+    # Más dígitos que el límite de int() de Python (4300 por defecto)
+    _assert_page_error("9" * 5000, "outOfRange")
 
 
-def test_parse_page_huge_digit_string_is_too_large():
-    # Más dígitos que el límite de int() de Python (4300 por defecto).
-    _assert_api_error("9" * 5000, "pageTooLarge")
+def test_parse_page_huge_negative_digit_string_is_out_of_range():
+    _assert_page_error("-" + "9" * 5000, "outOfRange")
 
 
-def test_parse_page_huge_negative_digit_string_is_below_minimum():
-    _assert_api_error("-" + "9" * 5000, "pageBelowMinimum")
+def test_parse_page_leading_zeros_do_not_count_as_digits():
+    assert parse_page("0" * 20 + "5") == 5
