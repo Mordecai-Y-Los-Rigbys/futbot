@@ -9,6 +9,7 @@ from app.repositories.substitution_abstract import (
     AbstractSubstitutionRepository,
     SubstitutionData,
 )
+from app.repositories.team_abstract import AbstractTeamRepository
 from app.services.match_progress import MatchProgress, MatchProgressReader
 from app.services.substitution_service import SubstitutionService
 from app.simulation.match_rules import Phase
@@ -39,7 +40,8 @@ def progress():
 
 
 def service(matches, subs, progress):
-    return SubstitutionService(matches, subs, progress)
+    teams = create_autospec(AbstractTeamRepository, instance=True)
+    return SubstitutionService(matches, subs, progress, teams)
 
 
 def error_of(svc, user_id=1):
@@ -169,4 +171,3 @@ def test_without_progress_it_answers_the_pending_one(matches, subs, progress):
     ]
     out = service(matches, subs, progress).get_substitutions(1, 5)
     assert out.club1.starter_name == "P1"
-

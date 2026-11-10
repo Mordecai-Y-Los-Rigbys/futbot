@@ -10,7 +10,9 @@ import pytest
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
+from app.api.ws_deps import get_match_runner
 from app.domain.match import MatchStatus
+from app.main import app
 from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
@@ -18,6 +20,8 @@ from app.models.substitution import AppliedSubstitution, Substitution
 from app.models.team_member import MemberRole, TeamMember
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
+from app.services.match_progress import MatchProgress
+from app.simulation.match_rules import Phase
 from app.tests.integration.match_factories import add_league, add_team
 
 pytestmark = pytest.mark.integration
@@ -471,3 +475,76 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
         zip(("starterName", "substituteName"), names_of(db_session, teams[1], 0, 3))
     )
 
+
+# --- PUT /matches/{id}/substitutions --------------------------------------------
+
+
+class FakeProgress:
+    """El partido se está jugando en el 1.er período de 4 (le quedan 3 pausas)."""
+
+    def progress(self, match_id):
+        return MatchProgress(Phase.PLAYING, period=1, periods=4)
+
+
+@pytest.fixture()
+def running():
+    app.dependency_overrides[get_match_runner] = lambda: FakeProgress()
+    yield
+    app.dependency_overrides.pop(get_match_runner, None)
+
+
+def put_substitution(api, match, starter, substitute):
+    body = {"starterId": starter.player_id, "substituteId": substitute.player_id}
+    return api.put(f"/matches/{match.id}/substitutions", json=body)
+
+
+def test_put_endpoint_persists_and_replaces_the_team_pending_substitution(
+    login, friendly_match, db_session, running
+):
+    match, teams = friendly_match
+    api = login(1)
+
+    assert put_substitution(api, match, teams[1][0], teams[1][3]).status_code == 204
+    assert put_substitution(api, match, teams[1][1], teams[1][4]).status_code == 204
+
+    rows = db_session.scalars(select(Substitution).where(Substitution.match_id == match.id)).all()
+    assert len(rows) == 1
+    assert rows[0].member_out_id == teams[1][1].id
+    assert rows[0].member_in_id == teams[1][4].id
+
+    response = api.get(f"/matches/{match.id}/substitutions")
+    assert response.json()["club1"] == dict(
+        zip(("starterName", "substituteName"), names_of(db_session, teams[1], 1, 4))
+    )
+
+
+def field_errors(response):
+    assert response.status_code == 400
+    return [(error["field"], error["reason"]) for error in response.json()["errors"]]
+
+
+def test_put_starter_of_the_rival_is_not_starter(login, friendly_match, running):
+    match, teams = friendly_match
+    response = put_substitution(login(1), match, teams[2][0], teams[1][3])
+    assert field_errors(response) == [("starterId", "notStarter")]
+
+
+def test_put_starter_as_substitute_is_not_substitute(login, friendly_match, running):
+    match, teams = friendly_match
+    response = put_substitution(login(1), match, teams[1][0], teams[1][1])
+    assert field_errors(response) == [("substituteId", "notSubstitute")]
+
+
+def test_put_user_outside_the_match_is_403(login, make_user, friendly_match, running):
+    match, teams = friendly_match
+    make_user(3)
+    response = put_substitution(login(3), match, teams[1][0], teams[1][3])
+    assert (response.status_code, response.json()["code"]) == (403, None)
+
+
+def test_put_scheduled_match_is_409(login, friendly_match, db_session, running):
+    match, teams = friendly_match
+    match.status = MatchStatus.scheduled
+    db_session.commit()
+    response = put_substitution(login(1), match, teams[1][0], teams[1][3])
+    assert (response.status_code, response.json()["code"]) == (409, "matchNotStarted")

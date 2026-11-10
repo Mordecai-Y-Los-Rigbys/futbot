@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     get_behavior_service,
@@ -19,6 +19,7 @@ from app.schemas.behavior import (
 )
 from app.schemas.errors import (
     CreateBehaviorConflict,
+    DeleteBehaviorConflict,
     Error,
     TestBehaviorConflict,
     UpdateBehaviorNotFound,
@@ -46,7 +47,7 @@ def create_behavior(
     body: Any = Depends(get_json_body),
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
-    return BehaviorDetail.model_validate(service.create_behavior(user_id, body))
+    return service.create_behavior(user_id, body)
 
 
 # /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.
@@ -89,10 +90,7 @@ def get_behavior(
     user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
-    behavior = service.get_owned_behavior(
-        user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE)
-    )
-    return BehaviorDetail.model_validate(behavior)
+    return service.get_behavior(user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE))
 
 
 @router.put(
@@ -114,7 +112,27 @@ def update_behavior(
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
     parsed_id = _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE, "notFound")
-    return BehaviorDetail.model_validate(service.update_behavior(user_id, parsed_id, body))
+    return service.update_behavior(user_id, parsed_id, body)
+
+
+@router.delete(
+    "/{behavior_id}",
+    status_code=204,
+    operation_id="deleteBehavior",
+    responses={
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": DeleteBehaviorConflict},
+    },
+)
+def delete_behavior(
+    behavior_id: str,
+    user_id: int = Depends(get_current_user_id),
+    service: BehaviorService = Depends(get_behavior_service),
+) -> Response:
+    service.delete_behavior(user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE))
+    return Response(status_code=204)
 
 
 @router.post(

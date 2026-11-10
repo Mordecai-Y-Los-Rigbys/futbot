@@ -109,8 +109,10 @@ class SubstitutionsConflict(BaseModel):
     message: str
 
 
-class LeagueDataConflict(BaseModel):
-    code: Literal["leagueNotStarted", "leagueCancelled"]
+class SubstitutePlayerConflict(BaseModel):
+    # Mismos códigos que el GET, pero noPausesLeft también sale durante la última pausa.
+    # Se informa un solo motivo, el primero en este orden.
+    code: Literal["matchNotStarted", "matchInPenalties", "noPausesLeft"]
     message: str
 
 
@@ -152,4 +154,12 @@ class CreateBehaviorConflict(CamelModel):
 
 class UpdateBehaviorNotFound(BaseModel):
     code: Literal["notFound", "deletedConcurrently"]
+    message: str
+
+
+# --- DELETE /behaviors/{id} ---------------------------------------------------
+
+
+class DeleteBehaviorConflict(BaseModel):
+    code: Literal["behaviorInLeagueTeam", "behaviorInMatch"]
     message: str

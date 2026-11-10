@@ -103,3 +103,6 @@ class FakeSubstitutionRepo(AbstractSubstitutionRepository):
         self.pause_starts.append(match_id)
         swaps, self.swaps = self.swaps, []
         return swaps
+
+    def upsert(self, match_id, user_id, member_in_id, member_out_id):
+        raise NotImplementedError
