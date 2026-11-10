@@ -1,12 +1,19 @@
 from datetime import datetime, timedelta, timezone
 
 from app.models.match import MatchStatus
-from app.repositories.match_abstract import AbstractMatchRepository, MatchSetupData, MatchStateData, MatchPlayersData
+from app.repositories.match_abstract import (
+    AbstractMatchRepository,
+    MatchSetupData,
+    MatchStateData,
+    MatchPlayersData,
+    MatchDetailData,
+    PenaltyShootoutData,
+)
 from app.repositories.match_ws_token_abstract import (
     AbstractMatchWsTokenRepository,
     MatchWsTokenData,
 )
-from app.repositories.substitution_abstract import AbstractSubstitutionRepository
+from app.repositories.substitution_abstract import AbstractSubstitutionRepository, AppliedSwap
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -37,7 +44,9 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history: list[str] = []
         self.seeds: dict[int, int] = {}
         self.players: dict[int, MatchPlayersData] = {}
+        self.details: dict[int, MatchDetailData] = {}
         self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
+        self.penalties: dict[int, PenaltyShootoutData | None] = {}
 
     def add(self, match_id=1, status=MatchStatus.scheduled):
         self.states[match_id] = MatchStateData(id=match_id, status=MatchStatus(status).value)
@@ -52,9 +61,16 @@ class FakeMatchRepo(AbstractMatchRepository):
         self.history.append("started")
         self._set_status(match_id, MatchStatus.started)
 
-    def finish(self, match_id: int, score_1: int, score_2: int) -> None:
+    def finish(
+        self,
+        match_id: int,
+        score_1: int,
+        score_2: int,
+        penalties: PenaltyShootoutData | None = None,
+    ) -> None:
         self.history.append("finished")
         self.results[match_id] = (score_1, score_2)
+        self.penalties[match_id] = penalties
         self._set_status(match_id, MatchStatus.finished)
 
     def _set_status(self, match_id: int, status: MatchStatus) -> None:
@@ -68,16 +84,25 @@ class FakeMatchRepo(AbstractMatchRepository):
     def get_players(self, match_id):
         return self.players.get(match_id)
 
+    def get_detail(self, match_id: int) -> MatchDetailData | None:
+        return self.details.get(match_id)
+
+
 class FakeSubstitutionRepo(AbstractSubstitutionRepository):
     def __init__(self):
-        self.pause_ends: list[int] = []  # un elemento por cada pausa terminada
+        self.pause_starts: list[int] = []  # un elemento por cada pausa que empezó
+        self.swaps: list[AppliedSwap] = []  # lo que devuelve la próxima apply_pending
 
     def list_by_match(self, match_id):
         return []
 
-    def delete_by_match(self, match_id):
-        self.pause_ends.append(match_id)
-        return 0
+    def list_applied_by_match(self, match_id):
+        return []
+
+    def apply_pending(self, match_id):
+        self.pause_starts.append(match_id)
+        swaps, self.swaps = self.swaps, []
+        return swaps
 
     def upsert(self, match_id, user_id, member_in_id, member_out_id):
-        return None
+        raise NotImplementedError

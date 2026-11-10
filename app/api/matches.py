@@ -3,26 +3,78 @@ from typing import Any
 from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import (
+    CurrentSession,
+    get_current_session,
     get_current_user_id,
     get_json_body,
+    get_match_behavior_service,
     get_match_connection_service,
-    get_substitution_service
+    get_match_service,
+    get_substitution_service,
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
     Error,
-    JoinMatchBadRequest,
     JoinMatchConflict,
     JoinMatchForbidden,
     SubstitutionsConflict,
+    MatchAccessForbidden,
+    MatchBehaviorConflict,
+    MatchBehaviorForbidden,
     ValidationBadRequest,
 )
+from app.schemas.friendly import MatchResponse
+from app.schemas.lineup import MatchLineups
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.substitution import Substitutions
+from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
+from app.services.match_service import MATCH_NOT_FOUND_MESSAGE, MatchService
 from app.services.substitution_service import SubstitutionService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
+
+
+@router.get(
+    "/{match_id}",
+    response_model=MatchResponse,
+    operation_id="getMatch",
+    summary="Obtener un partido (clubes, usuarios, estado y resultado)",
+    responses={
+        401: {"model": Error},
+        403: {"model": MatchAccessForbidden},
+        404: {"model": Error},
+    },
+)
+def get_match(
+    match_id: str,
+    session: CurrentSession = Depends(get_current_session),
+    service: MatchService = Depends(get_match_service),
+) -> MatchResponse:
+    return service.get_match(
+        parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
+    )
+
+
+@router.get(
+    "/{match_id}/lineups",
+    response_model=MatchLineups,
+    operation_id="getMatchLineups",
+    summary="Obtener los titulares de ambos clubes de un partido",
+    responses={
+        401: {"model": Error},
+        403: {"model": MatchAccessForbidden},
+        404: {"model": Error},
+    },
+)
+def get_match_lineups(
+    match_id: str,
+    session: CurrentSession = Depends(get_current_session),
+    service: MatchService = Depends(get_match_service),
+) -> MatchLineups:
+    return service.get_lineups(
+        parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
+    )
 
 
 @router.post(
@@ -32,7 +84,7 @@ router = APIRouter(prefix="/matches", tags=["matches"])
     operation_id="joinMatch",
     summary="Crear una conexión a un partido y obtener el token del WebSocket",
     responses={
-        400: {"model": JoinMatchBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         403: {"model": JoinMatchForbidden},
         404: {"model": Error},
@@ -53,7 +105,7 @@ def join_match(
     "/{match_id}/substitutions",
     response_model=Substitutions,
     operation_id="getMatchSubstitutions",
-    summary="Obtener la sustitución pedida de cada equipo de un partido en juego",
+    summary="Obtener la sustitución de cada equipo de un partido en juego (aplicada durante una pausa, pendiente fuera de ella)",
     responses={
         401: {"model": Error},
         403: {"model": Error},
@@ -67,7 +119,6 @@ def get_substitutions(
     service: SubstitutionService = Depends(get_substitution_service),
 ) -> Substitutions:
     return service.get_substitutions(user_id, parse_path_id(match_id, "El partido no existe."))
-
 
 
 @router.put(
@@ -93,7 +144,11 @@ def get_substitutions(
                         "required": ["starterId", "substituteId"],
                         "properties": {
                             "starterId": {"type": "integer", "minimum": 1, "maximum": 2147483647},
-                            "substituteId": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+                            "substituteId": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647,
+                            },
                         },
                     }
                 }
@@ -107,7 +162,29 @@ def request_substitution(
     body: Any = Depends(get_json_body),
     service: SubstitutionService = Depends(get_substitution_service),
 ) -> Response:
-    service.request_substitution(
-        user_id, parse_path_id(match_id, "El partido no existe."), body
-    )
+    service.request_substitution(user_id, parse_path_id(match_id, "El partido no existe."), body)
+    return Response(status_code=204)
+
+
+@router.put(
+    "/{match_id}/behavior",
+    status_code=204,
+    response_class=Response,
+    operation_id="reassignMatchBehavior",
+    summary="Cambiar el behavior de un titular durante el partido",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": MatchBehaviorForbidden},
+        404: {"model": Error},
+        409: {"model": MatchBehaviorConflict},
+    },
+)
+def reassign_match_behavior(
+    match_id: str,
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),
+    service: MatchBehaviorService = Depends(get_match_behavior_service),
+) -> Response:
+    service.reassign(user_id, parse_path_id(match_id, "El partido no existe."), body)
     return Response(status_code=204)

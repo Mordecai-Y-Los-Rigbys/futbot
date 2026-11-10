@@ -1,14 +1,16 @@
-from sqlalchemy import CheckConstraint, DDL, ForeignKey, Integer, event
+from sqlalchemy import CheckConstraint, DDL, ForeignKey, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 
 class Substitution(Base):
-    """La sustitución que un equipo pidió para la próxima pausa.
+    """La sustitución PENDIENTE: la que un equipo pidió para la próxima pausa.
 
     Cada equipo (usuario) tiene como máximo UNA por partido: pedir otra antes
-    de la pausa reemplaza a la anterior. Al terminar la pausa se borra.
+    de la pausa reemplaza a la anterior. Al empezar la pausa se aplica: se
+    intercambian los roles en `team_members`, pasa a `applied_substitutions` y esta
+    fila se borra (un pedido hecho durante la pausa queda pendiente para la siguiente).
     La PK (match_id, user_id) hace cumplir "una por equipo y partido".
 
     `member_in_id` es el integrante (fila de `team_members`) que entra y
@@ -32,6 +34,37 @@ class Substitution(Base):
         CheckConstraint(
             "member_in_id <> member_out_id",
             name="ck_substitutions_distinct_members",
+        ),
+    )
+
+    match_id: Mapped[int] = mapped_column(
+        ForeignKey("matches.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    member_in_id: Mapped[int] = mapped_column(
+        ForeignKey("team_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    member_out_id: Mapped[int] = mapped_column(
+        ForeignKey("team_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+
+class AppliedSubstitution(Base):
+    """La sustitución APLICADA al empezar la última pausa de un partido.
+
+    Es lo que GET /matches/{id}/substitutions muestra mientras dura la pausa.
+    Al empezar la pausa siguiente se reemplaza por completo (un equipo sin
+    cambio pendiente queda sin fila). No necesita trigger: solo la escribe el
+    runner, copiando una `Substitution` ya validada.
+    """
+
+    __tablename__ = "applied_substitutions"
+    __table_args__ = (
+        CheckConstraint(
+            "member_in_id <> member_out_id",
+            name="ck_applied_substitutions_distinct_members",
         ),
     )
 
@@ -123,3 +156,4 @@ event.listen(
     "after_drop",
     DDL("DROP FUNCTION IF EXISTS validate_substitution()").execute_if(**_postgres),
 )
+

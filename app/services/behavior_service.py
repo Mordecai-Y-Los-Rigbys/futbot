@@ -1,16 +1,28 @@
-from app.errors import ApiError
+from typing import Any
+
+from app.domain.behavior import BehaviorType
+from app.errors import ApiError, BehaviorConflictError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
     CreateBehaviorData,
+    DuplicateBehaviorNameError,
 )
+from app.services.behavior_validation import parse_create_behavior, parse_update_behavior
 from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
+from app.simulation.behaviors.validation import (
+    MAX_CODE_CHARS,
+    MAX_CODE_LINES,
+    find_code_violation,
+    is_code_too_long,
+)
 
 PAGE_SIZE = 50
+BEHAVIOR_NOT_FOUND_MESSAGE = "Comportamiento no encontrado."
 
 
 class BehaviorService:
-    """Casos de uso de los behaviors de un usuario: listar, ver y crear los iniciales."""
+    """Casos de uso de los behaviors de un usuario: listar, ver y crear."""
 
     def __init__(self, repository: AbstractBehaviorRepository) -> None:
         self.repository = repository
@@ -31,7 +43,7 @@ class BehaviorService:
         """404 si no existe, 403 si es de otro usuario. Solo lectura."""
         behavior = self.repository.get_by_id(behavior_id)
         if behavior is None:
-            raise ApiError(404, None, "Comportamiento no encontrado.")
+            raise ApiError(404, None, BEHAVIOR_NOT_FOUND_MESSAGE)
         if behavior.user_id != user_id:
             raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
         return behavior
@@ -40,4 +52,69 @@ class BehaviorService:
         """Crea para el usuario una copia propia de los behaviors iniciales."""
         return self.repository.create_many(
             user_id, [CreateBehaviorData(**b) for b in DEFAULT_BEHAVIORS]
+        )
+
+    def create_behavior(self, user_id: int, body: Any) -> BehaviorData:
+        """Crea un behavior del usuario.
+
+        Raises:
+            ValidationApiError 400: el body no cumple el contrato.
+            BehaviorConflictError 409: duplicateName, codeTooLong o invalidCode,
+                el primero que falla en ese orden.
+        """
+        data = parse_create_behavior(body)
+        if self.repository.name_taken(user_id, data.name):
+            raise _duplicate_name()
+        _ensure_valid_code(data.code, data.type)
+        try:
+            return self.repository.create(user_id, data)
+        except DuplicateBehaviorNameError:
+            raise _duplicate_name()
+
+    def update_behavior(self, user_id: int, behavior_id: int, body: Any) -> BehaviorData:
+        """Cambia nombre y código de un behavior del usuario. El tipo no cambia.
+
+        Raises:
+            ApiError 404: notFound si no existe; deletedConcurrently si se eliminó
+                mientras se procesaba el cambio.
+            ValidationApiError 400: el body no cumple el contrato.
+            ApiError 403: el behavior es de otro usuario.
+            BehaviorConflictError 409: duplicateName, codeTooLong o invalidCode,
+                el primero que falla en ese orden.
+        """
+        behavior = self.repository.get_by_id(behavior_id)
+        if behavior is None:
+            raise ApiError(404, "notFound", BEHAVIOR_NOT_FOUND_MESSAGE)
+        data = parse_update_behavior(body)
+        if behavior.user_id != user_id:
+            raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
+        if self.repository.name_taken(user_id, data.name, except_id=behavior_id):
+            raise _duplicate_name()
+        _ensure_valid_code(data.code, behavior.type)
+        try:
+            updated = self.repository.update(behavior_id, data)
+        except DuplicateBehaviorNameError:
+            raise _duplicate_name()
+        if updated is None:
+            raise ApiError(404, "deletedConcurrently", "El comportamiento se eliminó.")
+        return updated
+
+
+def _duplicate_name() -> BehaviorConflictError:
+    return BehaviorConflictError("duplicateName", "Ya tenés un comportamiento con ese nombre.")
+
+
+def _ensure_valid_code(code: str, behavior_type: BehaviorType) -> None:
+    """codeTooLong antes que invalidCode, como pide el contrato."""
+    if is_code_too_long(code):
+        raise BehaviorConflictError(
+            "codeTooLong",
+            f"El código supera las {MAX_CODE_LINES} líneas o los {MAX_CODE_CHARS} caracteres.",
+        )
+    violation = find_code_violation(code, behavior_type)
+    if violation:
+        raise BehaviorConflictError(
+            "invalidCode",
+            violation.message,
+            {"rule": violation.rule.value, "line": violation.line, "column": violation.column},
         )

@@ -37,10 +37,13 @@ def test_put_returns_204(client, service):
     )
 
 
-@pytest.mark.parametrize("path", [
-    "/matches/5/substitutions",
-    "/matches/not-an-id/substitutions",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/matches/5/substitutions",
+        "/matches/not-an-id/substitutions",
+    ],
+)
 def test_401_precedes_route_id_and_body_validation(client, service, path):
     response = client.put(path, json={})
     assert response.status_code == 401

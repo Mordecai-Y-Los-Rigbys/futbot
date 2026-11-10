@@ -61,8 +61,9 @@ def test_invalid_id_is_404(client, service, bad):
     service.get_substitutions.assert_not_called()
 
 
-def test_service_errors_pass_through(client, service):
+@pytest.mark.parametrize("code", ["matchNotStarted", "matchInPenalties", "noPausesLeft"])
+def test_service_errors_pass_through(client, service, code):
     client.cookies.set("session_id", "ok")
-    service.get_substitutions.side_effect = ApiError(409, "matchNotStarted", "no")
+    service.get_substitutions.side_effect = ApiError(409, code, "no")
     r = client.get("/matches/5/substitutions")
-    assert (r.status_code, r.json()["code"]) == (409, "matchNotStarted")
+    assert (r.status_code, r.json()["code"]) == (409, code)

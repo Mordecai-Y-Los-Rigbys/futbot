@@ -21,9 +21,17 @@ def repo(db):
     return SqlAlchemyTeamRepository(db)
 
 
-@pytest.mark.parametrize(("league_id", "owner_clause"), [(None, "team_members.match_id = 5"), (9, "team_members.league_id = 9")])
-@pytest.mark.parametrize(("substitutes", "role_clause"), [(False, "team_members.role != 'substitute'"), (True, "team_members.role = 'substitute'")])
-def test_get_team_player_ids_filters_owner_user_and_role(repo, db, league_id, owner_clause, substitutes, role_clause):
+@pytest.mark.parametrize(
+    ("league_id", "owner_clause"),
+    [(None, "team_members.match_id = 5"), (9, "team_members.league_id = 9")],
+)
+@pytest.mark.parametrize(
+    ("substitutes", "role_clause"),
+    [(False, "team_members.role != 'substitute'"), (True, "team_members.role = 'substitute'")],
+)
+def test_get_team_player_ids_filters_owner_user_and_role(
+    repo, db, league_id, owner_clause, substitutes, role_clause
+):
     db.scalars.return_value.all.return_value = [10, 11]
 
     assert repo.get_team_player_ids(5, league_id, 7, substitutes=substitutes) == {10, 11}
@@ -34,7 +42,10 @@ def test_get_team_player_ids_filters_owner_user_and_role(repo, db, league_id, ow
     assert role_clause in sql
 
 
-@pytest.mark.parametrize(("league_id", "owner_clause"), [(None, "team_members.match_id = 5"), (9, "team_members.league_id = 9")])
+@pytest.mark.parametrize(
+    ("league_id", "owner_clause"),
+    [(None, "team_members.match_id = 5"), (9, "team_members.league_id = 9")],
+)
 def test_get_member_id_returns_matching_team_member_row(repo, db, league_id, owner_clause):
     db.scalar.return_value = 123
 

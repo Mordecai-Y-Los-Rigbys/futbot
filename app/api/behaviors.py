@@ -1,13 +1,52 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_behavior_service, get_current_user_id
-from app.helpers.ids import parse_path_id as _parse_id
+from app.api.deps import (
+    get_behavior_service,
+    get_behavior_test_connection_service,
+    get_current_user_id,
+    get_json_body,
+)
 from app.api.pagination import parse_page
-from app.schemas.behavior import BehaviorDetail, BehaviorPage, BehaviorSummary
-from app.schemas.errors import Error, ListPageBadRequest
-from app.services.behavior_service import PAGE_SIZE, BehaviorService
+from app.helpers.ids import parse_path_id as _parse_id
+from app.schemas.behavior import (
+    BehaviorDetail,
+    BehaviorPage,
+    BehaviorSummary,
+    BehaviorTestConnectionResponse,
+    behavior_test_request_schema,
+)
+from app.schemas.errors import (
+    CreateBehaviorConflict,
+    Error,
+    TestBehaviorConflict,
+    UpdateBehaviorNotFound,
+    ValidationBadRequest,
+)
+from app.services.behavior_service import BEHAVIOR_NOT_FOUND_MESSAGE, PAGE_SIZE, BehaviorService
+from app.services.behavior_test_connection_service import BehaviorTestConnectionService
 
 router = APIRouter(prefix="/behaviors", tags=["behaviors"])
+
+
+@router.post(
+    "",
+    response_model=BehaviorDetail,
+    status_code=201,
+    operation_id="createBehavior",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        409: {"model": CreateBehaviorConflict},
+    },
+)
+def create_behavior(
+    user_id: int = Depends(get_current_user_id),  # se resuelve antes: 401 gana sobre 400
+    body: Any = Depends(get_json_body),
+    service: BehaviorService = Depends(get_behavior_service),
+) -> BehaviorDetail:
+    return BehaviorDetail.model_validate(service.create_behavior(user_id, body))
 
 
 # /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.
@@ -15,7 +54,7 @@ router = APIRouter(prefix="/behaviors", tags=["behaviors"])
     "/me",
     response_model=BehaviorPage,
     responses={
-        400: {"model": ListPageBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )
@@ -51,6 +90,59 @@ def get_behavior(
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
     behavior = service.get_owned_behavior(
-        user_id, _parse_id(behavior_id, "Comportamiento no encontrado.")
+        user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE)
     )
     return BehaviorDetail.model_validate(behavior)
+
+
+@router.put(
+    "/{behavior_id}",
+    response_model=BehaviorDetail,
+    operation_id="updateBehavior",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": UpdateBehaviorNotFound},
+        409: {"model": CreateBehaviorConflict},
+    },
+)
+def update_behavior(
+    behavior_id: str,
+    user_id: int = Depends(get_current_user_id),
+    body: Any = Depends(get_json_body),
+    service: BehaviorService = Depends(get_behavior_service),
+) -> BehaviorDetail:
+    parsed_id = _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE, "notFound")
+    return BehaviorDetail.model_validate(service.update_behavior(user_id, parsed_id, body))
+
+
+@router.post(
+    "/{id}/test-connections",
+    response_model=BehaviorTestConnectionResponse,
+    status_code=201,
+    operation_id="testBehavior",
+    summary="Pedir conexión para probar un comportamiento de jugador",
+    # El body se lee a mano (convención 9), así que FastAPI no lo documenta solo.
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": behavior_test_request_schema()}},
+        }
+    },
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": Error},
+        404: {"model": Error},
+        409: {"model": TestBehaviorConflict},
+    },
+)
+def test_behavior(
+    id: str,
+    user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    body: Any = Depends(get_json_body),
+    service: BehaviorTestConnectionService = Depends(get_behavior_test_connection_service),
+) -> BehaviorTestConnectionResponse:
+    token = service.connect(user_id, _parse_id(id, BEHAVIOR_NOT_FOUND_MESSAGE), body)
+    return BehaviorTestConnectionResponse(token_ws=token)

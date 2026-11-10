@@ -43,7 +43,7 @@ def repo():
         id=100,
         name="Partido amistoso 1",
         status="scheduled",
-        club1=FriendlyClubData(id=1, username="usuario1", club_name="Club Atletico"),
+        club1=FriendlyClubData(id=1, username="usuario1", club_name="Club Atletico", avatar=3),
         created_at=NOW,
     )
     return r
@@ -53,7 +53,12 @@ def test_success_returns_the_match_schema(repo, players, behaviors):
     out = FriendlyService(repo, players, behaviors).create_friendly(1, body())
     dumped = out.model_dump(by_alias=True)
     assert dumped["id"] == 100 and dumped["status"] == "scheduled"
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico"}
+    assert dumped["club1"] == {
+        "id": 1,
+        "username": "usuario1",
+        "name": "Club Atletico",
+        "avatar": 3,
+    }
     for k in ("leagueId", "club2", "scheduledAt", "result"):
         assert dumped[k] is None
     assert out.model_dump_json(by_alias=True).count("2026-10-03T18:00:00Z") == 1
@@ -73,7 +78,8 @@ def test_name_too_long_is_400_before_touching_the_repo(repo, players, behaviors)
     b["name"] = "x" * 21
     with pytest.raises(ApiError) as e:
         FriendlyService(repo, players, behaviors).create_friendly(1, b)
-    assert (e.value.status_code, e.value.code) == (400, "nameTooLong")
+    assert (e.value.status_code, e.value.code) == (400, "invalidFields")
+    assert e.value.errors == [{"field": "name", "reason": "tooLong"}]
     repo.user_is_playing.assert_not_called()
     repo.create_with_team.assert_not_called()
 

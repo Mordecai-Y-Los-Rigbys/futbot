@@ -1,34 +1,61 @@
 from app.domain.match import MatchStatus
 from app.errors import ApiError, ValidationApiError
 from app.repositories.match_abstract import AbstractMatchRepository
-from app.repositories.substitution_abstract import AbstractSubstitutionRepository
+from app.repositories.substitution_abstract import (
+    AbstractSubstitutionRepository,
+    SubstitutionData,
+)
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.schemas.substitution import Substitution, Substitutions
+from app.services.match_progress import MatchProgress, MatchProgressReader
 from app.services.substitution_validation import parse_substitute
+from app.simulation.match_rules import Phase
 
 
-def _to_response(item):
+def _to_response(item: SubstitutionData | None) -> Substitution | None:
     if item is None:
         return None
     return Substitution(starter_name=item.starter_name, substitute_name=item.substitute_name)
 
 
+def _pauses_not_started(progress: MatchProgress) -> int:
+    """Pausas que todavía no empezaron. La pausa en curso ya no cuenta: un cambio
+    pedido durante una pausa queda para la siguiente."""
+    if progress.phase is Phase.PAUSED:
+        return progress.periods - 1 - progress.period
+    return progress.periods - progress.period
+
+
 class SubstitutionService:
-    """Consulta y registro de la única sustitución pendiente de cada equipo."""
+    """Consulta y pedido de las sustituciones de un partido."""
 
     def __init__(
         self,
         matches: AbstractMatchRepository,
-        teams: AbstractTeamRepository,
         substitutions: AbstractSubstitutionRepository,
-        runtime=None,
+        progress: MatchProgressReader,
+        teams: AbstractTeamRepository,
     ) -> None:
         self.matches = matches
-        self.teams = teams
         self.substitutions = substitutions
-        self.runtime = runtime
+        self.progress = progress
+        self.teams = teams
 
     def get_substitutions(self, user_id: int, match_id: int) -> Substitutions:
+        """Sustitución de cada equipo: la APLICADA si el partido está en pausa, la
+        PENDIENTE (la que se aplica en la próxima pausa) si no lo está.
+
+        Orden: 404 > 403 > 409, y dentro del 409:
+        matchNotStarted > matchInPenalties > noPausesLeft.
+
+        Raises:
+            ApiError 404: el partido no existe.
+            ApiError 403: el usuario no es uno de los dos jugadores.
+            ApiError 409: matchNotStarted (el partido no está `started`),
+                matchInPenalties (tanda de penales) o noPausesLeft (fuera de una
+                pausa y en el último período: no puede haber una pendiente;
+                durante la última pausa se responde 200 con la aplicada).
+        """
         match = self.matches.get_players(match_id)
         if match is None:
             raise ApiError(404, None, "El partido no existe.")
@@ -37,22 +64,50 @@ class SubstitutionService:
         if match.status != MatchStatus.started:
             raise ApiError(409, "matchNotStarted", "El partido no está en juego.")
 
-        by_user = {i.user_id: i for i in self.substitutions.list_by_match(match_id)}
+        # None: el partido no se juega en este proceso. No sabemos la fase, así que
+        # se responde la pendiente y no se evalúa noPausesLeft.
+        progress = self.progress.progress(match_id)
+        paused = progress is not None and progress.phase is Phase.PAUSED
+        if progress is not None:
+            if progress.phase is Phase.PENALTIES:
+                raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
+            if not paused and progress.period >= progress.periods:
+                raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
+
+        rows = (
+            self.substitutions.list_applied_by_match(match_id)
+            if paused
+            else self.substitutions.list_by_match(match_id)
+        )
+        by_user = {i.user_id: i for i in rows}
         return Substitutions(
             club1=_to_response(by_user.get(match.user_1_id)),
             club2=_to_response(by_user.get(match.user_2_id)),
         )
 
     def request_substitution(self, user_id: int, match_id: int, body: object) -> None:
-        # 404 antes de validar el body; el router ya resolvió 401 e id de ruta.
+        """Guarda la sustitución pendiente del equipo del usuario (reemplaza la anterior).
+
+        Orden: 404 > 400 > 403 > 409, y dentro del 409:
+        matchNotStarted > matchInPenalties > noPausesLeft.
+
+        Raises:
+            ApiError 404: el partido no existe.
+            ValidationApiError: invalidFields. notStarter y notSubstitute solo se
+                evalúan si el usuario es jugador del partido.
+            ApiError 403: el usuario no es uno de los dos jugadores.
+            ApiError 409: matchNotStarted (el partido no está `started`),
+                matchInPenalties (tanda de penales) o noPausesLeft (no queda ninguna
+                pausa por empezar, o el partido no se juega en este proceso).
+        """
         match = self.matches.get_players(match_id)
         if match is None:
             raise ApiError(404, None, "El partido no existe.")
 
         request, errors = parse_substitute(body)
 
-        # Las reglas notStarter/notSubstitute dependen de un solo campo cada
-        # una y solo existen para un usuario que efectivamente juega el partido.
+        # notStarter y notSubstitute dependen de un solo campo cada una, y solo
+        # existen para un usuario que juega el partido.
         is_player = user_id in (match.user_1_id, match.user_2_id)
         starter_member_id = None
         substitute_member_id = None
@@ -89,16 +144,14 @@ class SubstitutionService:
         if not is_player:
             raise ApiError(403, None, "El usuario no juega este partido.")
 
-        # Precedencia interna del 409: estado, tanda, pausas restantes.
         if match.status != MatchStatus.started:
             raise ApiError(409, "matchNotStarted", "El partido no está en juego.")
 
-        runtime = self.runtime.get_runtime_state(match_id) if self.runtime else None
-        if runtime is not None and runtime.in_penalties:
-            raise ApiError(409, "matchInPenalties", "El partido está en tanda de penales.")
-        if runtime is None or runtime.pauses_left <= 0:
-            raise ApiError(409, "noPausesLeft", "El partido ya pasó su última pausa.")
+        # None: el partido no se juega en este proceso, así que nadie aplicaría el cambio.
+        progress = self.progress.progress(match_id)
+        if progress is not None and progress.phase is Phase.PENALTIES:
+            raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
+        if progress is None or _pauses_not_started(progress) <= 0:
+            raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
 
-        self.substitutions.upsert(
-            match_id, user_id, substitute_member_id, starter_member_id
-        )
+        self.substitutions.upsert(match_id, user_id, substitute_member_id, starter_member_id)

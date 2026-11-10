@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session, joinedload
@@ -6,19 +6,28 @@ from sqlalchemy.orm import Session, joinedload
 from app.domain.league import LeagueStatus
 from app.models.league import League
 from app.models.league_participant import LeagueParticipant
+from app.models.match import Match
 from app.models.session_league_unlock import SessionLeagueUnlock
 from app.models.team_member import TeamMember
+from app.models.user import User
 from app.repositories.league_abstract import (
     AbstractLeagueRepository,
     CreateLeagueData,
+    JoinLeagueData,
+    LeagueParticipantData,
+    JoinLeagueStateConflict,
     LeagueCreatorData,
+    LeagueDetailData,
+    LeagueJoinState,
+    LeagueFixtureClubData,
+    LeagueFixtureData,
+    LeagueFixtureMatchData,
+    LeagueLeaveInfo,
     LeagueListItemData,
     LeaguePageData,
-    LeagueLeaveInfo,
-    LeagueDetailData,
-    JoinLeagueData,
-    JoinLeagueStateConflict,
-    LeagueJoinState,
+    LeagueStartState,
+    PlanFixture,
+    StartLeagueConflict,
 )
 
 
@@ -46,10 +55,20 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
         ),
         status=getattr(record.status, "value", record.status),
         participants_count=participants_count,
+        min_participants=record.min_participants,
         max_participants=record.max_participants,
         private=record.private,
         created_at=created_at,
         allow_draws=record.allow_draws,
+    )
+    
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _to_club(user: User) -> LeagueFixtureClubData:
+    return LeagueFixtureClubData(
+        id=user.id, username=user.username, club_name=user.club_name, avatar=user.avatar
     )
 
 
@@ -97,6 +116,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             match_duration=data.match_duration,
             private=data.private,
             password=data.password,
+            allow_draws=data.allow_draws,
         )
         try:
             self.db.add(league)
@@ -125,7 +145,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
     def get_match_duration_minutes(self, league_id: int) -> int | None:
         # scalar() devuelve None si la liga no existe
         return self.db.scalar(select(League.match_duration).where(League.id == league_id))
-    
+
     def get_leave_info(self, league_id: int) -> LeagueLeaveInfo | None:
         row = self.db.execute(
             select(League.status, League.creator_id).where(League.id == league_id)
@@ -161,7 +181,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         except Exception:
             self.db.rollback()
             raise
-    
+
     def get_detail(self, league_id: int, user_id: int) -> LeagueDetailData | None:
         participants_count = (
             select(func.count(func.distinct(LeagueParticipant.user_id)))
@@ -189,9 +209,51 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         league, count, is_joined = row
         return LeagueDetailData(
             **_to_data(league, count).model_dump(),
-            min_participants=league.min_participants,
             joined=bool(is_joined),
         )
+        
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        status = self.db.scalar(select(League.status).where(League.id == league_id))
+        if status is None:
+            return None
+
+        matches = self.db.scalars(
+            select(Match)
+            .options(joinedload(Match.user_1), joinedload(Match.user_2))
+            .where(Match.league_id == league_id)
+            .order_by(Match.scheduled_at.asc(), Match.id.asc())
+        ).all()
+
+        return LeagueFixtureData(
+            status=status,
+            matches=[
+                LeagueFixtureMatchData(
+                    id=m.id,
+                    status=m.status,
+                    club_1=_to_club(m.user_1),
+                    club_2=_to_club(m.user_2),
+                    scheduled_at=_as_utc(m.scheduled_at),
+                    created_at=_as_utc(m.created_at),
+                    score_1=m.score_1,
+                    score_2=m.score_2,
+                )
+                for m in matches
+            ],
+        )
+
+    def list_participants(self, league_id: int) -> list[LeagueParticipantData]:
+        rows = self.db.execute(
+            select(User.id, User.username, User.club_name, User.avatar)
+            .join(LeagueParticipant, LeagueParticipant.user_id == User.id)
+            .where(LeagueParticipant.league_id == league_id)
+            .order_by(User.id.asc())
+        ).all()
+        return [
+            LeagueParticipantData(
+                id=row.id, username=row.username, club_name=row.club_name, avatar=row.avatar
+            )
+            for row in rows
+        ]
 
     # ------------------------------------------------------------------
     # Inscripción (POST /leagues/{id}/participants)
@@ -268,6 +330,64 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
                 self.db.add(
                     SessionLeagueUnlock(session_id=data.session_id, league_id=data.league_id)
                 )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+        return None
+
+    # ------------------------------------------------------------------
+    # Inicio (POST /leagues/{id}/start)
+    # ------------------------------------------------------------------
+
+    def _participant_ids(self, league_id: int) -> list[int]:
+        return list(
+            self.db.scalars(
+                select(LeagueParticipant.user_id).where(LeagueParticipant.league_id == league_id)
+            )
+        )
+
+    def _start_state(self, league: League, participants_count: int) -> LeagueStartState:
+        return LeagueStartState(
+            creator_id=league.creator_id,
+            status=league.status,
+            min_participants=league.min_participants,
+            participants_count=participants_count,
+            match_duration=league.match_duration,
+            allow_draws=league.allow_draws,
+        )
+
+    def get_start_state(self, league_id: int) -> LeagueStartState | None:
+        league = self.db.get(League, league_id)
+        if league is None:
+            return None
+        return self._start_state(league, len(self._participant_ids(league_id)))
+
+    def start(self, league_id: int, plan_fixture: PlanFixture) -> StartLeagueConflict | None:
+        try:
+            league = self.db.scalars(
+                select(League)
+                .where(League.id == league_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).one()
+            participant_ids = self._participant_ids(league_id)
+
+            conflict = self._start_state(league, len(participant_ids)).conflict()
+            if conflict is not None:
+                self.db.rollback()
+                return conflict
+
+            league.status = LeagueStatus.started
+            self.db.add_all(
+                Match(
+                    league_id=league_id,
+                    user_1_id=m.user_1_id,
+                    user_2_id=m.user_2_id,
+                    scheduled_at=m.scheduled_at,
+                )
+                for m in plan_fixture(participant_ids)
+            )
             self.db.commit()
         except Exception:
             self.db.rollback()
