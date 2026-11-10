@@ -37,10 +37,13 @@ def test_put_returns_204(client, service):
     )
 
 
-@pytest.mark.parametrize("path", [
-    "/matches/5/substitutions",
-    "/matches/not-an-id/substitutions",
-])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/matches/5/substitutions",
+        "/matches/not-an-id/substitutions",
+    ],
+)
 def test_401_precedes_route_id_and_body_validation(client, service, path):
     response = client.put(path, json={})
     assert response.status_code == 401
@@ -67,3 +70,10 @@ def test_missing_match_is_404(client, service):
         json={"starterId": 10, "substituteId": 13},
     )
     assert response.status_code == 404
+
+
+def test_openapi_operation():
+    operation = app.openapi()["paths"]["/matches/{match_id}/substitutions"]["put"]
+    assert operation["operationId"] == "setMatchSubstitution"
+    conflict = operation["responses"]["409"]["content"]["application/json"]["schema"]
+    assert conflict["$ref"].endswith("/SubstitutePlayerConflict")

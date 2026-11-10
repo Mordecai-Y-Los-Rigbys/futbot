@@ -1,4 +1,4 @@
-from sqlalchemy import select, update
+from sqlalchemy import func, select, true, update
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.domain.league import LeagueStatus
@@ -14,7 +14,19 @@ from app.repositories.match_abstract import (
     MatchPlayersData,
     MatchSetupData,
     MatchStateData,
+    PenaltyShootoutData,
 )
+
+
+def _penalties(match: Match) -> PenaltyShootoutData | None:
+    if match.penalty_winner is None:
+        return None
+    return PenaltyShootoutData(
+        score_1=match.penalty_score_1,
+        score_2=match.penalty_score_2,
+        winner=match.penalty_winner,
+        kicks=match.penalty_kicks,
+    )
 
 
 class SqlAlchemyMatchRepository(AbstractMatchRepository):
@@ -50,6 +62,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 if league is not None
                 else None
             ),
+            penalties=_penalties(match),
         )
 
     def get_state(self, match_id: int) -> MatchStateData | None:
@@ -70,8 +83,10 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
                 Match.user_2_id,
                 user_1.club_name.label("club_1_name"),
                 user_2.club_name.label("club_2_name"),
+                func.coalesce(League.allow_draws, true()).label("allow_draws"),
             )
             .join(user_1, user_1.id == Match.user_1_id)
+            .outerjoin(League, League.id == Match.league_id)
             .outerjoin(user_2, user_2.id == Match.user_2_id)  # outer: puede no haber rival
             .where(Match.id == match_id)
         ).one_or_none()
@@ -86,6 +101,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             user_2_id=row.user_2_id,
             club_1_name=row.club_1_name,
             club_2_name=row.club_2_name,
+            allow_draws=row.allow_draws,
         )
 
     def mark_started(self, match_id: int) -> None:
@@ -96,7 +112,21 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
         )
         self.db.commit()
 
-    def finish(self, match_id: int, score_1: int, score_2: int) -> bool:
+    def finish(
+        self,
+        match_id: int,
+        score_1: int,
+        score_2: int,
+        penalties: PenaltyShootoutData | None = None,
+    ) -> bool:
+        shootout = {}
+        if penalties is not None:
+            shootout = {
+                "penalty_score_1": penalties.score_1,
+                "penalty_score_2": penalties.score_2,
+                "penalty_winner": penalties.winner,
+                "penalty_kicks": penalties.kicks,
+            }
         league_id = self.db.scalar(select(Match.league_id).where(Match.id == match_id))
         try:
             if league_id is not None:
@@ -107,7 +137,7 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             self.db.execute(
                 update(Match)
                 .where(Match.id == match_id)
-                .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2)
+                .values(status=MatchStatus.finished, score_1=score_1, score_2=score_2, **shootout)
             )
             league_finished = league_id is not None and self._finish_league_if_done(league_id)
             self.db.commit()
@@ -148,4 +178,3 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             user_1_id=row.user_1_id,
             user_2_id=row.user_2_id,
         )
-

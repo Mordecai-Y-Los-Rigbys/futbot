@@ -44,9 +44,5 @@ class AbstractSubstitutionRepository(ABC):
         entra ya no es suplente) se descarta sin aplicarse. Devuelve lo aplicado."""
 
     @abstractmethod
-    def upsert(
-        self, match_id: int, user_id: int, member_in_id: int, member_out_id: int
-    ) -> None:
-        """Reemplaza la única sustitución pendiente de este equipo. Si los
-        integrantes ya no corresponden a una pendiente (cambió la alineación),
-        propaga IntegrityError."""
+    def upsert(self, match_id: int, user_id: int, member_in_id: int, member_out_id: int) -> None:
+        """Guarda la sustitución pendiente del equipo `user_id`: si ya tenía una, la reemplaza."""

@@ -20,7 +20,7 @@ class PlayerService:
             body: JSON del request, todavía sin validar.
 
         Raises:
-            ApiError 400: el body no cumple el contrato (ver parse_create_player).
+            ValidationApiError 400: invalidFields (ver parse_create_player).
 
         Returns:
             El jugador creado, con sus stats.

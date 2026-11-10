@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 from app.domain.league import LeagueStatus
 from app.domain.team_member import MemberRole
+from app.domain.match import MatchStatus
 
 
 class LeagueCreatorData(BaseModel):
@@ -23,6 +24,7 @@ class LeagueListItemData(BaseModel):
     creator: LeagueCreatorData
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
     allow_draws: bool
@@ -36,7 +38,6 @@ class LeagueParticipantData(LeagueCreatorData):
 
 
 class LeagueDetailData(LeagueListItemData):
-    min_participants: int
     joined: bool
 
 
@@ -59,6 +60,7 @@ class CreateLeagueData(BaseModel):
     match_duration: int
     private: bool
     password: str | None  # None si la liga es pública
+    allow_draws: bool
     members: list[CreateLeagueMemberData]
 
 
@@ -100,6 +102,29 @@ class JoinLeagueData(BaseModel):
     members: list[CreateLeagueMemberData]
     coach_behavior_id: int | None  # None: el equipo no tiene DT
     unlock_session: bool  # True si la liga es privada: queda desbloqueada en la sesión
+    
+
+class LeagueFixtureClubData(BaseModel):
+    id: int
+    username: str
+    club_name: str
+    avatar: int
+
+
+class LeagueFixtureMatchData(BaseModel):
+    id: int
+    status: MatchStatus
+    club_1: LeagueFixtureClubData
+    club_2: LeagueFixtureClubData
+    scheduled_at: datetime
+    created_at: datetime
+    score_1: int | None
+    score_2: int | None
+
+
+class LeagueFixtureData(BaseModel):
+    status: LeagueStatus
+    matches: list[LeagueFixtureMatchData]
 
 
 StartLeagueConflict = Literal["notInPreparation", "notEnoughParticipants"]
@@ -205,6 +230,13 @@ class AbstractLeagueRepository(ABC):
         """Participantes actuales de la liga (creador incluido), por id de usuario ascendente.
 
         Lista vacía si la liga no existe: el 404 lo resuelve quien llama.
+        """
+
+    @abstractmethod
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        """Estado de la liga y sus partidos, por scheduled_at y después id.
+
+        Devuelve None si la liga no existe.
         """
 
     @abstractmethod

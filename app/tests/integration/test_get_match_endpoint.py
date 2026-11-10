@@ -136,6 +136,33 @@ def test_finished_match_has_result(login_as, owner, rival, make_match):
     assert r.json()["result"] == {"score1": 2, "score2": 1, "penalties": None}
 
 
+def test_finished_match_with_shootout_has_the_penalties(login_as, owner, rival, make_match):
+    kicks = [
+        {"club": "club1", "kickerId": 3, "kickerName": "J3", "round": 1, "scored": True},
+        {"club": "club2", "kickerId": 13, "kickerName": "J13", "round": 1, "scored": False},
+    ]
+    match = make_match(
+        user_1_id=owner.id,
+        user_2_id=rival.id,
+        name="Amistoso",
+        status=MatchStatus.finished,
+        score_1=1,
+        score_2=1,
+        penalty_score_1=1,
+        penalty_score_2=0,
+        penalty_winner=1,
+        penalty_kicks=kicks,
+    )
+
+    response = login_as(owner).get(f"/matches/{match.id}")
+
+    assert response.json()["result"] == {
+        "score1": 1,
+        "score2": 1,
+        "penalties": {"score1": 1, "score2": 0, "winner": "club1", "kicks": kicks},
+    }
+
+
 def test_public_league_match_for_outsider(login_as, outsider, league_match):
     match = league_match(private=False)
     r = login_as(outsider).get(f"/matches/{match.id}")

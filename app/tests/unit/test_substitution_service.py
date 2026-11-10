@@ -5,11 +5,11 @@ import pytest
 from app.domain.match import MatchStatus
 from app.errors import ApiError
 from app.repositories.match_abstract import AbstractMatchRepository, MatchPlayersData
-from app.repositories.team_abstract import AbstractTeamRepository
 from app.repositories.substitution_abstract import (
     AbstractSubstitutionRepository,
     SubstitutionData,
 )
+from app.repositories.team_abstract import AbstractTeamRepository
 from app.services.match_progress import MatchProgress, MatchProgressReader
 from app.services.substitution_service import SubstitutionService
 from app.simulation.match_rules import Phase
@@ -40,9 +40,8 @@ def progress():
 
 
 def service(matches, subs, progress):
-    # El GET no usa el repositorio de equipos: alcanza con un mock.
     teams = create_autospec(AbstractTeamRepository, instance=True)
-    return SubstitutionService(matches, teams, subs, progress)
+    return SubstitutionService(matches, subs, progress, teams)
 
 
 def error_of(svc, user_id=1):
@@ -152,9 +151,7 @@ def test_a_match_with_a_single_period_has_no_pauses(matches, subs, progress):
 
 
 def test_in_penalties_is_409_and_goes_before_no_pauses_left(matches, subs, progress):
-    progress.progress.return_value = MatchProgress(
-        Phase.PLAYING, period=4, periods=4, in_penalties=True
-    )
+    progress.progress.return_value = MatchProgress(Phase.PENALTIES, period=4, periods=4)
     assert error_of(service(matches, subs, progress)) == (409, "matchInPenalties")
 
 

@@ -30,6 +30,10 @@ TICK_KEYS = {
     "score2",
     "penaltyScore1",
     "penaltyScore2",
+    "penaltyKicks",
+    "penaltyCurrent",
+    "penaltyCountdownSeconds",
+    "penaltyRemainingSeconds",
     "elapsedTime",
     "pauseRemainingSeconds",
     "phase",
@@ -91,7 +95,16 @@ class FakeManager:
         self.match_closed.append((match_id, code, reason))
 
 
-def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, duration=1, **kwargs):
+def build(
+    manager,
+    repo,
+    substitutions=None,
+    periods=1,
+    pause_seconds=15,
+    duration=1,
+    allow_draws=True,
+    **kwargs,
+):
     substitutions = substitutions if substitutions is not None else FakeSubstitutionRepo()
     setup = MatchSetup(
         make_team(),
@@ -102,8 +115,7 @@ def build(manager, repo, substitutions=None, periods=1, pause_seconds=15, durati
         club_2_name="Club Dos",
         periods=periods,
         pause_seconds=pause_seconds,
-        user_1_id=1,
-        user_2_id=2,
+        allow_draws=allow_draws,
     )
 
     @contextmanager
@@ -329,6 +341,7 @@ def swap_for_home_forward(player_id=99, out_player_id=HOME_FORWARD_ID):
         out_player_id=out_player_id,
         incoming=StarterData(
             player_id=player_id,
+            name=f"Jugador {player_id}",
             role=MemberRole.forward,
             power=60,
             agility=60,
@@ -555,3 +568,18 @@ def test_changes_from_another_thread_never_break_a_tick(monkeypatch):
     assert all(x in (original, a, b) for x in used)
     assert manager.match_closed == [(1, 1000, "matchEnd")]
 
+
+# --- penales -------------------------------------------------------------------
+
+
+def test_a_shootout_is_saved_with_the_result_and_sent_in_match_end():
+    ws, repo = FakeWs(), FakeMatchRepo()
+    repo.add(1)
+    run(build(FakeManager([ws]), repo, duration=0.05, allow_draws=False))  # 1 tick: 0 a 0
+
+    saved = repo.penalties[1]
+    sent = ws.received[-1]["event"]["result"]["penalties"]
+    assert repo.results[1] == (0, 0)
+    assert (saved.score_1, saved.score_2) == (sent["score1"], sent["score2"])
+    assert saved.kicks == sent["kicks"]
+    assert saved.winner == (1 if sent["winner"] == "club1" else 2)
