@@ -12,7 +12,6 @@ from app.schemas.auth import (
     RegisterUserRequest,
     User,
     ErrorResponse,
-    LogInBadRequest,
 )
 from app.schemas.errors import ValidationBadRequest
 from app.services.auth_service import AuthService
@@ -56,7 +55,7 @@ def register_user(
     status_code=status.HTTP_200_OK,
     response_model_by_alias=True,
     responses={
-        400: {"model": LogInBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": ErrorResponse},
     },
 )
