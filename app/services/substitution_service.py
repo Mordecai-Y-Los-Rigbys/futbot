@@ -8,7 +8,7 @@ from app.repositories.substitution_abstract import (
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.schemas.substitution import Substitution, Substitutions
 from app.services.field_validation import field_error
-from app.services.match_progress import MatchProgress, MatchProgressReader
+from app.services.match_progress import MatchProgressReader
 from app.services.substitution_validation import parse_substitute
 from app.simulation.match_rules import Phase
 
@@ -17,14 +17,6 @@ def _to_response(item: SubstitutionData | None) -> Substitution | None:
     if item is None:
         return None
     return Substitution(starter_name=item.starter_name, substitute_name=item.substitute_name)
-
-
-def _pauses_not_started(progress: MatchProgress) -> int:
-    """Pausas que todavía no empezaron. La pausa en curso ya no cuenta: un cambio
-    pedido durante una pausa queda para la siguiente."""
-    if progress.phase is Phase.PAUSED:
-        return progress.periods - 1 - progress.period
-    return progress.periods - progress.period
 
 
 class SubstitutionService:
@@ -53,9 +45,9 @@ class SubstitutionService:
             ApiError 404: el partido no existe.
             ApiError 403: el usuario no es uno de los dos jugadores.
             ApiError 409: matchNotStarted (el partido no está `started`),
-                matchInPenalties (tanda de penales) o noPausesLeft (fuera de una
-                pausa y en el último período: no puede haber una pendiente;
-                durante la última pausa se responde 200 con la aplicada).
+                matchInPenalties (tanda de penales) o noPausesLeft (`pausesLeft` en 0
+                y fuera de una pausa: no puede haber una pendiente; durante la última
+                pausa se responde 200 con la aplicada).
         """
         match = self.matches.get_players(match_id)
         if match is None:
@@ -72,7 +64,7 @@ class SubstitutionService:
         if progress is not None:
             if progress.phase is Phase.PENALTIES:
                 raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
-            if not paused and progress.period >= progress.periods:
+            if not paused and progress.pauses_left == 0:
                 raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
 
         rows = (
@@ -98,8 +90,8 @@ class SubstitutionService:
                 evalúan si el usuario es jugador del partido.
             ApiError 403: el usuario no es uno de los dos jugadores.
             ApiError 409: matchNotStarted (el partido no está `started`),
-                matchInPenalties (tanda de penales) o noPausesLeft (no queda ninguna
-                pausa por empezar, o el partido no se juega en este proceso).
+                matchInPenalties (tanda de penales) o noPausesLeft (`pausesLeft` en 0,
+                o el partido no se juega en este proceso).
         """
         match = self.matches.get_players(match_id)
         if match is None:
@@ -144,7 +136,7 @@ class SubstitutionService:
         progress = self.progress.progress(match_id)
         if progress is not None and progress.phase is Phase.PENALTIES:
             raise ApiError(409, "matchInPenalties", "El partido está en la tanda de penales.")
-        if progress is None or _pauses_not_started(progress) <= 0:
+        if progress is None or progress.pauses_left == 0:
             raise ApiError(409, "noPausesLeft", "Ya no quedan pausas en el partido.")
 
         self.substitutions.upsert(match_id, user_id, substitute_member_id, starter_member_id)

@@ -13,8 +13,9 @@ from app.simulation.match_rules import Phase
 @dataclass(frozen=True)
 class MatchProgress:
     phase: Phase
-    period: int  # en un countdown, el que arranca; en una pausa, el que terminó
-    periods: int  # cantidad total de períodos (pausas = periods - 1)
+    # Pausas que no empezaron: el `pausesLeft` del tick. Es la única fuente de la
+    # regla `noPausesLeft` (== 0): no se la recalcula desde los períodos.
+    pauses_left: int
 
 
 class MatchProgressReader(Protocol):
@@ -22,4 +23,3 @@ class MatchProgressReader(Protocol):
 
     def progress(self, match_id: int) -> MatchProgress | None:
         """None si el partido no se está jugando en este proceso."""
-

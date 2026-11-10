@@ -190,7 +190,7 @@ class MatchRunner:
                 swaps = await run_in_threadpool(self._start_pause, match_id)
                 result = self._put_on_field(match_id, session, result, swaps)
             # Después de aplicar los cambios: quien ve `paused` ya ve lo aplicado.
-            self._progress[match_id] = MatchProgress(result.phase, result.period, session.periods)
+            self._progress[match_id] = MatchProgress(result.phase, result.pauses_left)
 
             finished = result.phase is Phase.FINISHED
             if finished:
