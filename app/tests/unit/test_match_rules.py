@@ -1,6 +1,7 @@
 """Reglas de un solo período (sin pausas). Las pausas están en test_match_pauses.py."""
 
 import copy
+import functools
 import statistics
 import time
 
@@ -59,13 +60,10 @@ def no_time_budget(monkeypatch):
     equipos entre sí, prueban determinismo o simetría y no tienen que depender
     del reloj de la máquina. C.TEAM_TIME_BUDGET no se toca.
     """
-    real = match_rules.run_behaviors
     monkeypatch.setattr(
         match_rules,
         "run_behaviors",
-        lambda state, behaviors, clock, *args, **kwargs: real(
-            state, behaviors, clock, team_budget=3600.0
-        ),
+        functools.partial(match_rules.run_behaviors, team_budget=3600.0),
     )
 
 
