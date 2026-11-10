@@ -183,6 +183,7 @@ def test_one_character_over_the_limit_is_too_long(validation_client, field, valu
     "email",
     [
         pytest.param(build_email(255), id="valido-de-255"),
+        pytest.param("a@example.com".ljust(255), id="255-con-espacios-finales"),
         pytest.param("a" * 255, id="sin-formato-de-255"),
         pytest.param("a" * 290 + "@test.com", id="299-caracteres"),
     ],
