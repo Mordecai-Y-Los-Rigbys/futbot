@@ -8,8 +8,6 @@ from app.models.session import UserSession
 from app.models.session_league_unlock import SessionLeagueUnlock
 from app.repositories.league_access_sqlalchemy import SqlAlchemyLeagueAccessRepository
 from app.services.league_access_service import has_league_access
-from app.services.session_service import SessionService
-from app.repositories.session_sqlalchemy import SqlAlchemySessionRepository
 
 pytestmark = pytest.mark.integration
 
@@ -137,27 +135,68 @@ def test_creator_unlock_does_not_allow_leaving(create_user, make_league, login_a
     assert unlocked(db_session, api, league)
 
 
-@pytest.mark.parametrize("expired", [False, True])
+@pytest.mark.parametrize("expired", [False, True], ids=["logout", "vencimiento"])
 def test_session_end_removes_unlocks(access_case, db_session, login_as, expired):
     league, user, api = access_case
     other = login_as(user)
-    for client in [api, other]:
-        assert (
-            client.post(f"/leagues/{league.id}/access", json={"password": "secret"}).status_code
-            == 204
-        )
-    sid = api.cookies.get("session_id")
+    access_url = f"/leagues/{league.id}/access"
+    participants_url = f"/leagues/{league.id}/participants"
+
+    for active_client in (api, other):
+        response = active_client.post(access_url, json={"password": "secret"})
+        assert response.status_code == 204
+
+    sid = api.cookies["session_id"]
+
     if expired:
-        db_session.get(UserSession, sid).expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        session = db_session.get(UserSession, sid)
+        session.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         db_session.commit()
-        assert api.post(f"/leagues/{league.id}/access").status_code == 401
     else:
-        # No hay endpoint de log-out: se borra la sesión con el servicio.
-        SessionService(SqlAlchemySessionRepository(db_session)).delete(sid)
-        assert api.post(f"/leagues/{league.id}/access").status_code == 401
-    assert not unlocked(db_session, api, league)
+        assert api.post("/auth/log-out").status_code == 204
+
+    replay = api.get(participants_url, headers={"Cookie": f"session_id={sid}"})
+    assert replay.status_code == 401
+    assert replay.json()["code"] is None
+    assert db_session.get(SessionLeagueUnlock, (sid, league.id)) is None
+
     assert unlocked(db_session, other, league)
-    assert not allowed(db_session, login_as(user), user, league)
+    assert other.get(participants_url).status_code == 200
+
+
+def test_login_after_logout_requires_unlock_again(client, create_user, make_league):
+    league = make_league(create_user("owner"), private=True)
+    access_url = f"/leagues/{league.id}/access"
+    participants_url = f"/leagues/{league.id}/participants"
+    credentials = {"email": "reader@example.com", "password": "securepassword"}
+
+    registered = client.post(
+        "/auth/register",
+        json={
+            **credentials,
+            "username": "reader",
+            "clubName": "Club Reader",
+            "avatar": 1,
+        },
+    )
+    assert registered.status_code == 201
+    old_sid = client.cookies["session_id"]
+
+    assert client.post(access_url, json={"password": "secret"}).status_code == 204
+    assert client.get(participants_url).status_code == 200
+
+    assert client.post("/auth/log-out").status_code == 204
+    assert "session_id" not in client.cookies
+
+    assert client.post("/auth/log-in", json=credentials).status_code == 200
+    assert client.cookies["session_id"] != old_sid
+
+    denied = client.get(participants_url)
+    assert denied.status_code == 403
+    assert denied.json()["code"] == "leagueAccessRequired"
+
+    assert client.post(access_url, json={"password": "secret"}).status_code == 204
+    assert client.get(participants_url).status_code == 200
 
 
 def test_unicode_password(access_case, db_session):
