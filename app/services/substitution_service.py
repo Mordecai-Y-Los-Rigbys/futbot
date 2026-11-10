@@ -7,6 +7,7 @@ from app.repositories.substitution_abstract import (
 )
 from app.repositories.team_abstract import AbstractTeamRepository
 from app.schemas.substitution import Substitution, Substitutions
+from app.services.field_validation import field_error
 from app.services.match_progress import MatchProgress, MatchProgressReader
 from app.services.substitution_validation import parse_substitute
 from app.simulation.match_rules import Phase
@@ -118,14 +119,14 @@ class SubstitutionService:
                     match_id, match.league_id, user_id, request.starter_id, substitute=False
                 )
                 if starter_member_id is None:
-                    errors.append({"field": "starterId", "reason": "notStarter"})
+                    errors.append(field_error("starterId", "notStarter"))
 
             if request.substitute_id is not None:
                 substitute_member_id = self.teams.get_member_id(
                     match_id, match.league_id, user_id, request.substitute_id, substitute=True
                 )
                 if substitute_member_id is None:
-                    errors.append({"field": "substituteId", "reason": "notSubstitute"})
+                    errors.append(field_error("substituteId", "notSubstitute"))
 
         # El contrato exige el orden del schema: starterId, substituteId.
         field_order = {"starterId": 0, "substituteId": 1}

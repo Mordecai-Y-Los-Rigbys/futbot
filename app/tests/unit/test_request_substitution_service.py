@@ -7,6 +7,7 @@ from app.errors import ApiError, ValidationApiError
 from app.repositories.match_abstract import AbstractMatchRepository, MatchPlayersData
 from app.repositories.substitution_abstract import AbstractSubstitutionRepository
 from app.repositories.team_abstract import AbstractTeamRepository
+from app.services.field_validation import INVALID_JSON
 from app.services.match_progress import MatchProgress, MatchProgressReader
 from app.services.substitution_service import SubstitutionService
 from app.simulation.match_rules import Phase
@@ -48,6 +49,7 @@ def test_valid_request_persists_member_ids(setup):
     ("body", "expected"),
     [
         ({}, [("starterId", "required"), ("substituteId", "required")]),
+        (INVALID_JSON, [("starterId", "required"), ("substituteId", "required")]),
         ({"starterId": "10", "substituteId": 13}, [("starterId", "invalidType")]),
         ({"starterId": 0, "substituteId": 13}, [("starterId", "outOfRange")]),
         ({"starterId": 10, "substituteId": None}, [("substituteId", "invalidType")]),
