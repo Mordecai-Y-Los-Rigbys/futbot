@@ -511,3 +511,40 @@ def test_put_endpoint_persists_and_replaces_the_team_pending_substitution(
     assert len(rows) == 1
     assert rows[0].member_out_id == teams[1][1].id
     assert rows[0].member_in_id == teams[1][4].id
+
+    response = api.get(f"/matches/{match.id}/substitutions")
+    assert response.json()["club1"] == dict(
+        zip(("starterName", "substituteName"), names_of(db_session, teams[1], 1, 4))
+    )
+
+
+def field_errors(response):
+    assert response.status_code == 400
+    return [(error["field"], error["reason"]) for error in response.json()["errors"]]
+
+
+def test_put_starter_of_the_rival_is_not_starter(login, friendly_match, running):
+    match, teams = friendly_match
+    response = put_substitution(login(1), match, teams[2][0], teams[1][3])
+    assert field_errors(response) == [("starterId", "notStarter")]
+
+
+def test_put_starter_as_substitute_is_not_substitute(login, friendly_match, running):
+    match, teams = friendly_match
+    response = put_substitution(login(1), match, teams[1][0], teams[1][1])
+    assert field_errors(response) == [("substituteId", "notSubstitute")]
+
+
+def test_put_user_outside_the_match_is_403(login, make_user, friendly_match, running):
+    match, teams = friendly_match
+    make_user(3)
+    response = put_substitution(login(3), match, teams[1][0], teams[1][3])
+    assert (response.status_code, response.json()["code"]) == (403, None)
+
+
+def test_put_scheduled_match_is_409(login, friendly_match, db_session, running):
+    match, teams = friendly_match
+    match.status = MatchStatus.scheduled
+    db_session.commit()
+    response = put_substitution(login(1), match, teams[1][0], teams[1][3])
+    assert (response.status_code, response.json()["code"]) == (409, "matchNotStarted")
