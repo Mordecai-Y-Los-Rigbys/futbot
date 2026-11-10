@@ -109,11 +109,6 @@ class SubstitutionsConflict(BaseModel):
     message: str
 
 
-class LeagueDataConflict(BaseModel):
-    code: Literal["leagueNotStarted", "leagueCancelled"]
-    message: str
-
-
 # --- PUT /matches/{id}/behavior ------------------------------------------------
 
 
