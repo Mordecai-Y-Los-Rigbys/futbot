@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     CurrentSession,
@@ -12,6 +12,7 @@ from app.api.deps import (
     get_match_service,
     get_match_team_service,
     get_substitution_service,
+    get_match_player_behavior_service  
 )
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
@@ -27,11 +28,13 @@ from app.schemas.errors import (
 )
 from app.schemas.friendly import MatchResponse
 from app.schemas.lineup import MatchLineups
+from app.schemas.match_behavior import MatchPlayerBehavior
 from app.schemas.match_connection import JoinMatchResponse
 from app.schemas.match_team import MatchTeam, MatchTeamForbidden
 from app.schemas.substitution import Substitutions
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
+from app.services.match_player_behavior_service import MatchPlayerBehaviorService
 from app.services.match_service import MATCH_NOT_FOUND_MESSAGE, MatchService
 from app.services.match_team_service import MatchTeamService
 from app.services.substitution_service import SubstitutionService
@@ -189,6 +192,29 @@ def request_substitution(
     return Response(status_code=204)
 
 
+@router.get(
+    "/{match_id}/behavior",
+    response_model=MatchPlayerBehavior,
+    operation_id="getMatchPlayerBehavior",
+    summary="Obtener el behavior de un jugador durante el partido",
+    responses={
+        400: {"model": ValidationBadRequest},
+        401: {"model": Error},
+        403: {"model": MatchBehaviorForbidden},
+        404: {"model": Error},
+    },
+)
+def get_match_player_behavior(
+    match_id: str,  # str y no int: un "abc" daría 422 antes de llegar acá
+    player_id: str | None = Query(default=None, alias="playerId"),  # str: validado en el service
+    user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    service: MatchPlayerBehaviorService = Depends(get_match_player_behavior_service),
+) -> MatchPlayerBehavior:
+    return service.get_behavior(
+        user_id, parse_path_id(match_id, "El partido no existe."), player_id
+    )
+
+    
 @router.put(
     "/{match_id}/behavior",
     status_code=204,
