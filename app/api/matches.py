@@ -120,8 +120,8 @@ def join_match(
     body: Any = Depends(get_json_body),
     service: MatchConnectionService = Depends(get_match_connection_service),
 ) -> JoinMatchResponse:
-    token = service.connect(user_id, parse_path_id(match_id, "El partido no existe."), body)
-    return JoinMatchResponse(token_ws=token)
+    conn = service.connect(user_id, parse_path_id(match_id, "El partido no existe."), body)
+    return JoinMatchResponse(token_ws=conn.token, role=conn.role)
 
 
 @router.get(

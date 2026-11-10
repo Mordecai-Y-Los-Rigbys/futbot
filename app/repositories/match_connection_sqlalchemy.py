@@ -21,6 +21,8 @@ class SqlAlchemyMatchConnectionRepository(AbstractMatchConnectionRepository):
             select(
                 Match.id,
                 Match.status,
+                Match.user_1_id,
+                Match.user_2_id,
                 Match.league_id,
                 League.creator_id,
                 League.private,
@@ -34,6 +36,8 @@ class SqlAlchemyMatchConnectionRepository(AbstractMatchConnectionRepository):
         return MatchAccessData(
             id=row.id,
             status=row.status,
+            user_1_id=row.user_1_id,
+            user_2_id=row.user_2_id,
             league_id=row.league_id,
             league_creator_id=row.creator_id,
             league_private=bool(row.private),

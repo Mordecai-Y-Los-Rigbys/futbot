@@ -23,18 +23,19 @@ def frozen_now(monkeypatch):
 @pytest.fixture()
 def repo():
     r = MagicMock(spec=AbstractMatchConnectionRepository)
-    r.get_access.return_value = MatchAccessData(id=5, status="scheduled")
+    r.get_access.return_value = MatchAccessData(id=5, status="scheduled", user_1_id=1)
     r.is_league_participant.return_value = False
     return r
 
-
 def private_league(status="started", creator=1):
     return MatchAccessData(
-        id=5,
-        status=status,
-        league_id=9,
+        id=5, 
+        status=status, 
+        user_1_id=1, 
+        user_2_id=2,
+        league_id=9, 
         league_creator_id=creator,
-        league_private=True,
+        league_private=True, 
         league_password="secret",
     )
 
@@ -50,17 +51,17 @@ def error_of(service, user_id=7, match_id=5, body=None):
 
 @pytest.mark.parametrize("body", [None, {}, {"password": 123}, {"password": "x"}, [1], "x"])
 def test_friendly_ignores_body_entirely(repo, body):
-    token = MatchConnectionService(repo).connect(7, 5, body)
-    assert token
+    conn = MatchConnectionService(repo).connect(7, 5, body)
+    assert conn.token
     repo.is_league_participant.assert_not_called()
 
 
 def test_token_is_bound_to_user_and_match_with_ttl(repo):
-    token = MatchConnectionService(repo).connect(7, 5, None)
+    conn = MatchConnectionService(repo).connect(7, 5, None)
     data = repo.create_token.call_args.args[0]
-    assert (data.token, data.user_id, data.match_id) == (token, 7, 5)
+    assert (data.token, data.user_id, data.match_id) == (conn.token, 7, 5)
     assert data.created_at == NOW and data.expires_at - data.created_at == WS_TOKEN_TTL
-    assert len(token) <= 64
+    assert len(conn.token) <= 64
 
 
 def test_each_call_creates_a_different_token(repo):
@@ -86,7 +87,7 @@ def test_nonexistent_match_is_404(repo):
     "status, code", [("finished", "matchFinished"), ("cancelled", "matchCancelled")]
 )
 def test_finished_or_cancelled_is_409_without_token(repo, status, code):
-    repo.get_access.return_value = MatchAccessData(id=5, status=status)
+    repo.get_access.return_value = MatchAccessData(id=5, status=status, user_1_id=1)
     assert error_of(MatchConnectionService(repo)) == (409, code)
     repo.create_token.assert_not_called()
 
@@ -125,7 +126,12 @@ def test_participant_and_creator_need_no_password(repo):
 
 def test_public_league_ignores_password(repo):
     repo.get_access.return_value = MatchAccessData(
-        id=5, status="started", league_id=9, league_creator_id=1, league_private=False
+        id=5, 
+        status="started", 
+        user_1_id=1, 
+        league_id=9, 
+        league_creator_id=1, 
+        league_private=False
     )
     assert MatchConnectionService(repo).connect(7, 5, {"password": 123})
 
@@ -136,3 +142,48 @@ def test_precedence_400_403_409(repo):
     assert error_of(s, body={"password": 5})[0] == 400  # 400 > 409
     assert error_of(s, body={"password": "mala"})[0] == 403  # 403 > 409
     assert error_of(s, body={"password": "secret"})[0] == 409
+
+# --- role ---------------------------------------------------------------------
+
+
+def test_user_1_is_player(repo):
+    repo.get_access.return_value = MatchAccessData(id=5, status="started", user_1_id=7, user_2_id=8)
+    assert MatchConnectionService(repo).connect(7, 5, None).role == "player"
+
+
+def test_user_2_is_player(repo):
+    repo.get_access.return_value = MatchAccessData(id=5, status="started", user_1_id=8, user_2_id=7)
+    assert MatchConnectionService(repo).connect(7, 5, None).role == "player"
+
+
+def test_friendly_creator_without_rival_is_player(repo):
+    # user_2_id es None mientras nadie se une al amistoso
+    repo.get_access.return_value = MatchAccessData(id=5, status="scheduled", user_1_id=7, user_2_id=None)
+    assert MatchConnectionService(repo).connect(7, 5, None).role == "player"
+
+
+def test_user_outside_friendly_is_spectator(repo):
+    repo.get_access.return_value = MatchAccessData(id=5, status="scheduled", user_1_id=1, user_2_id=None)
+    assert MatchConnectionService(repo).connect(7, 5, None).role == "spectator"
+
+
+def test_league_participant_not_in_match_is_spectator(repo):
+    repo.get_access.return_value = private_league()  # jugadores 1 y 2
+    repo.is_league_participant.return_value = True
+    assert MatchConnectionService(repo).connect(7, 5, None).role == "spectator"
+
+
+def test_league_outsider_with_password_is_spectator(repo):
+    repo.get_access.return_value = private_league()
+    assert MatchConnectionService(repo).connect(7, 5, {"password": "secret"}).role == "spectator"
+
+
+def test_league_creator_not_playing_is_spectator(repo):
+    repo.get_access.return_value = private_league(creator=7)  # creador de la liga, no juega
+    assert MatchConnectionService(repo).connect(7, 5, None).role == "spectator"
+
+
+def test_league_match_player_is_player(repo):
+    repo.get_access.return_value = private_league()
+    repo.is_league_participant.return_value = True
+    assert MatchConnectionService(repo).connect(2, 5, None).role == "player"

@@ -9,6 +9,8 @@ from app.domain.match import MatchStatus
 class MatchAccessData(BaseModel):
     id: int
     status: MatchStatus
+    user_1_id: int
+    user_2_id: int | None = None   # NULL en un amistoso sin rival
     league_id: int | None = None
     league_creator_id: int | None = None
     league_private: bool = False

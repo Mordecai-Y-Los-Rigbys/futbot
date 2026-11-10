@@ -1,6 +1,6 @@
 import secrets
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from app.domain.match import MatchStatus
 from app.errors import ApiError, ValidationApiError
@@ -10,6 +10,15 @@ from app.repositories.match_connection_abstract import (
     MatchAccessData,
 )
 from app.services.match_timing import WS_TOKEN_TTL
+from dataclasses import dataclass
+
+MatchRole = Literal["player", "spectator"]
+
+
+@dataclass(frozen=True)
+class MatchConnection:
+    token: str
+    role: MatchRole
 
 
 def _utcnow() -> datetime:
@@ -22,8 +31,8 @@ class MatchConnectionService:
     def __init__(self, repo: AbstractMatchConnectionRepository) -> None:
         self.repo = repo
 
-    def connect(self, user_id: int, match_id: int, body: Any) -> str:
-        """Devuelve un tokenWs. Orden: 404 > 400 > 403 > 409."""
+    def connect(self, user_id: int, match_id: int, body: Any) -> MatchConnection:
+        """Devuelve tokenWs y rol. Orden: 404 > 400 > 403 > 409."""
         match = self.repo.get_access(match_id)
         if match is None:
             raise ApiError(404, None, "El partido no existe.")
@@ -47,7 +56,12 @@ class MatchConnectionService:
                 expires_at=now + WS_TOKEN_TTL,
             )
         )
-        return token
+        return MatchConnection(token=token, role=self._role(match, user_id))
+    
+    @staticmethod
+    def _role(match: MatchAccessData, user_id: int) -> MatchRole:
+        """Mismo criterio que MatchTeamService.get_team: user_1 o user_2 del partido."""
+        return "player" if user_id in (match.user_1_id, match.user_2_id) else "spectator"
 
     def _password_applies(self, match: MatchAccessData, user_id: int) -> bool:
         """Solo se evalúa en liga privada y con un usuario ajeno a ella."""
