@@ -178,9 +178,11 @@ def test_a_started_match_is_the_next_one(client, fixtures):
 
 def test_playable_is_true_for_both_clubs_and_false_for_others_at_once(client):
     # La cookie se lee al abrir cada conexión
-    with connect(login(client, "creator-session"), url()) as creator, connect(
-        login(client, "rival-session"), url()
-    ) as rival, connect(login(client), url()) as viewer:
+    with (
+        connect(login(client, "creator-session"), url()) as creator,
+        connect(login(client, "rival-session"), url()) as rival,
+        connect(login(client), url()) as viewer,
+    ):
         assert creator.receive_json()["match"]["playable"] is True
         assert rival.receive_json()["match"]["playable"] is True
         assert viewer.receive_json()["match"]["playable"] is False
@@ -249,9 +251,7 @@ def test_messages_of_one_league_do_not_reach_another(client, fixtures, manager):
         assert stays_silent(other)
 
 
-def test_last_match_sends_a_single_null_message_and_closes_1000(
-    client, leagues, fixtures, manager
-):
+def test_last_match_sends_a_single_null_message_and_closes_1000(client, leagues, fixtures, manager):
     with connect(login(client), url()) as ws:
         ws.receive_json()
         for match_id in (11, 12, 13):

@@ -182,8 +182,13 @@ class LeagueChannelManager:
         session_expires_at: datetime | None = None,
     ) -> LeagueChannelConnection:
         connection = LeagueChannelConnection(
-            league_id, user_id, session_id, websocket,
-            self._load_state, self._spec, session_expires_at,
+            league_id,
+            user_id,
+            session_id,
+            websocket,
+            self._load_state,
+            self._spec,
+            session_expires_at,
         )
         with self._lock:
             self._subscribers.setdefault(league_id, set()).add(connection)

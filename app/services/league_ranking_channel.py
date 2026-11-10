@@ -35,7 +35,7 @@ def build_ranking_payload(state: LeagueRankingState) -> dict:
 
 
 RANKING_CHANNEL = LeagueChannelSpec(
-    build_payload=build_ranking_payload,
+    build_payload=lambda state, _user_id: build_ranking_payload(state),
     close_reasons={
         LeagueStatus.finished: "leagueFinished",
         LeagueStatus.cancelled: "leagueCancelled",

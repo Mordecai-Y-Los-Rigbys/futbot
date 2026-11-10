@@ -18,7 +18,14 @@ from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.services.league_next_match_channel import LeagueNextMatchManager
-from app.tests.league_ws_helpers import ORIGIN, closing, connect, rejection, stays_silent, wait_until
+from app.tests.league_ws_helpers import (
+    ORIGIN,
+    closing,
+    connect,
+    rejection,
+    stays_silent,
+    wait_until,
+)
 
 pytestmark = pytest.mark.integration
 
