@@ -13,8 +13,8 @@ from app.schemas.auth import (
     User,
     ErrorResponse,
     LogInBadRequest,
-    RegisterUserBadRequest,
 )
+from app.schemas.errors import ValidationBadRequest
 from app.services.auth_service import AuthService
 from app.services.league_channel_manager import LeagueChannelManager
 from app.services.session_service import SessionService
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     status_code=status.HTTP_201_CREATED,
     response_model_by_alias=True,
     responses={
-        400: {"model": RegisterUserBadRequest},
+        400: {"model": ValidationBadRequest},
         409: {"model": ErrorResponse},
     },
 )
