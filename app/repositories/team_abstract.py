@@ -38,3 +38,17 @@ class AbstractTeamRepository(ABC):
         self, match_id: int, league_id: int | None, player_id: int, behavior_id: int
     ) -> None:
         """Le asigna el comportamiento al jugador en su equipo: el de la liga o el del amistoso."""
+
+    @abstractmethod
+    def get_member_id(
+        self,
+        match_id: int,
+        league_id: int | None,
+        user_id: int,
+        player_id: int,
+        *,
+        substitute: bool,
+    ) -> int | None:
+        """Fila de `team_members` del jugador en el equipo del usuario, si es suplente
+        (`substitute=True`) o titular (`substitute=False`) en la alineación actual.
+        None si no está en el equipo con ese rol."""

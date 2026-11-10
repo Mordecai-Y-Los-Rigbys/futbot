@@ -42,3 +42,7 @@ class AbstractSubstitutionRepository(ABC):
 
         Una pendiente que ya no es válida (el que sale ya no es titular o el que
         entra ya no es suplente) se descarta sin aplicarse. Devuelve lo aplicado."""
+
+    @abstractmethod
+    def upsert(self, match_id: int, user_id: int, member_in_id: int, member_out_id: int) -> None:
+        """Guarda la sustitución pendiente del equipo `user_id`: si ya tenía una, la reemplaza."""

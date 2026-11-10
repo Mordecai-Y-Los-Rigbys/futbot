@@ -22,6 +22,29 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def get_member_id(
+        self,
+        match_id: int,
+        league_id: int | None,
+        user_id: int,
+        player_id: int,
+        *,
+        substitute: bool,
+    ) -> int | None:
+        role_filter = (
+            TeamMember.role == MemberRole.substitute
+            if substitute
+            else TeamMember.role != MemberRole.substitute
+        )
+        return self.db.scalar(
+            select(TeamMember.id).where(
+                _team_owner(match_id, league_id),
+                TeamMember.user_id == user_id,
+                TeamMember.player_id == player_id,
+                role_filter,
+            )
+        )
+
     def get_starters(self, match_id: int, league_id: int | None, user_id: int) -> list[StarterData]:
         rows = self.db.execute(
             select(TeamMember.role, Player, Behavior.code)

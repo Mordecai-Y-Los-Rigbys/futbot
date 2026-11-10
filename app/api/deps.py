@@ -133,7 +133,10 @@ def get_substitution_service(
     runner: MatchRunner = Depends(get_match_runner),
 ) -> SubstitutionService:
     return SubstitutionService(
-        SqlAlchemyMatchRepository(db), SqlAlchemySubstitutionRepository(db), runner
+        SqlAlchemyMatchRepository(db),
+        SqlAlchemySubstitutionRepository(db),
+        runner,
+        SqlAlchemyTeamRepository(db),
     )
 
 
