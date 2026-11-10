@@ -27,6 +27,9 @@ def test_logout_only_invalidates_cookie_session(body_kind, create_user, login_as
 
     assert response.status_code == 204
     assert response.content == b""
+    set_cookie = response.headers["set-cookie"]
+    assert set_cookie.startswith('session_id="";')
+    assert "Max-Age=0" in set_cookie
     assert db_session.get(UserSession, sid) is None
 
     replay = api.get("/users/me", headers={"Cookie": f"session_id={sid}"})
