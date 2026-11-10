@@ -10,6 +10,7 @@ from app.api.deps import (
     get_match_behavior_service,
     get_match_connection_service,
     get_match_service,
+    get_match_team_service,
     get_substitution_service,
 )
 from app.helpers.ids import parse_path_id
@@ -27,10 +28,12 @@ from app.schemas.errors import (
 from app.schemas.friendly import MatchResponse
 from app.schemas.lineup import MatchLineups
 from app.schemas.match_connection import JoinMatchResponse
+from app.schemas.match_team import MatchTeam, MatchTeamForbidden
 from app.schemas.substitution import Substitutions
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.match_service import MATCH_NOT_FOUND_MESSAGE, MatchService
+from app.services.match_team_service import MatchTeamService
 from app.services.substitution_service import SubstitutionService
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -76,6 +79,25 @@ def get_match_lineups(
     return service.get_lineups(
         parse_path_id(match_id, MATCH_NOT_FOUND_MESSAGE), session.id, session.user_id
     )
+
+
+@router.get(
+    "/{match_id}/team",
+    response_model=MatchTeam,
+    operation_id="getMatchTeam",
+    summary="Obtener el equipo del usuario en un partido",
+    responses={
+        401: {"model": Error},
+        403: {"model": MatchTeamForbidden},
+        404: {"model": Error},
+    },
+)
+def get_match_team(
+    match_id: str,  # str y no int: un "abc" daría 422 antes de llegar acá
+    user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
+    service: MatchTeamService = Depends(get_match_team_service),
+) -> MatchTeam:
+    return service.get_team(user_id, parse_path_id(match_id, "El partido no existe."))
 
 
 @router.post(

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
+from app.domain.behavior import BehaviorType
 from app.domain.team_member import MemberRole
 
 
@@ -19,6 +20,24 @@ class LineupPlayerData(BaseModel):
     player_id: int
     name: str
     role: MemberRole
+
+
+class TeamBehaviorData(BaseModel):
+    id: int
+    name: str
+    type: BehaviorType
+
+
+class TeamMemberData(BaseModel):
+    player_id: int
+    name: str
+    role: MemberRole
+    behavior: TeamBehaviorData
+
+
+class MatchTeamData(BaseModel):
+    members: list[TeamMemberData]
+    coach_behavior: TeamBehaviorData | None
 
 
 class AbstractTeamRepository(ABC):
@@ -52,3 +71,13 @@ class AbstractTeamRepository(ABC):
         """Fila de `team_members` del jugador en el equipo del usuario, si es suplente
         (`substitute=True`) o titular (`substitute=False`) en la alineación actual.
         None si no está en el equipo con ese rol."""
+
+    @abstractmethod
+    def get_match_team(self, match_id: int, league_id: int | None, user_id: int) -> MatchTeamData:
+        """Equipo efectivo del usuario en el partido: titulares (forward,
+        midfield, defense) y después suplentes, cada uno con su behavior actual,
+        más el behavior del DT (None si el equipo no tiene).
+
+        Es de solo lectura y no mira el estado del partido ni las sustituciones
+        pendientes: solo lo que está guardado en `team_members`.
+        """

@@ -37,6 +37,7 @@ from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.match_runner import MatchRunner
 from app.services.match_service import MatchService
+from app.services.match_team_service import MatchTeamService
 from app.services.player_service import PlayerService
 from app.services.ranking_service import RankingService
 from app.services.session_service import SessionService
@@ -148,6 +149,10 @@ def get_match_behavior_service(
     return MatchBehaviorService(
         SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db), behaviors, runner
     )
+
+
+def get_match_team_service(db: Session = Depends(get_db)) -> MatchTeamService:
+    return MatchTeamService(SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db))
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:

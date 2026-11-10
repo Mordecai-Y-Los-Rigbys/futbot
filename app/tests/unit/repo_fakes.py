@@ -21,6 +21,9 @@ class FakeTeams(AbstractTeamRepository):
     def get_member_id(self, match_id, league_id, user_id, player_id, *, substitute):
         raise NotImplementedError
 
+    def get_match_team(self, match_id, league_id, user_id):
+        raise NotImplementedError
+
 
 class FakeRankingRepo(AbstractRankingRepository):
     def __init__(self, clubs=None, status=LeagueStatus.started):
