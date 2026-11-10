@@ -197,8 +197,8 @@ def test_login_after_logout_requires_unlock_again(client, create_user, make_leag
 
     assert client.post(access_url, json={"password": "secret"}).status_code == 204
     assert client.get(participants_url).status_code == 200
-    
-    
+
+
 def test_unicode_password(access_case, db_session):
     league, _, api = access_case
     league.password = "ñ🔐"

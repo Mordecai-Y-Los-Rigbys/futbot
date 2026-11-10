@@ -4,14 +4,11 @@ import pytest
 
 from app.models.session import UserSession
 
-
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.parametrize("body_kind", ["sin-body", "otra-sesion", "json-malformado"])
-def test_logout_only_invalidates_cookie_session(
-    body_kind, create_user, login_as, db_session
-):
+def test_logout_only_invalidates_cookie_session(body_kind, create_user, login_as, db_session):
     user = create_user("reader")
     api = login_as(user)
     other = login_as(user)
