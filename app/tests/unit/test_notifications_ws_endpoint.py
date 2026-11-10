@@ -215,9 +215,10 @@ def test_marking_them_seen_sends_the_updated_state(client, notifications, manage
 
 
 def test_users_who_are_not_notified_receive_nothing(client, notifications, manager):
-    with connect(login(client), URL) as mine, connect(
-        login(client, "other-session"), URL
-    ) as theirs:
+    with (
+        connect(login(client), URL) as mine,
+        connect(login(client, "other-session"), URL) as theirs,
+    ):
         mine.receive_json()
         theirs.receive_json()
         notifications.add(USER_ID, match_notification(1))
@@ -262,9 +263,10 @@ def test_log_out_closes_with_4401_session_ended(client, manager):
 
 def test_log_out_keeps_the_connections_of_other_sessions(client, sessions, manager):
     sessions.add("second-session", USER_ID)
-    with connect(login(client), URL) as closed, connect(
-        login(client, "second-session"), URL
-    ) as kept:
+    with (
+        connect(login(client), URL) as closed,
+        connect(login(client, "second-session"), URL) as kept,
+    ):
         closed.receive_json()
         kept.receive_json()
         manager.session_ended("user-session")

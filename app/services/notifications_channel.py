@@ -15,24 +15,24 @@ def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _to_notification(n: NotificationData) -> dict:
+def _to_notification(notification: NotificationData) -> dict:
     item = {
-        "id": n.id,
-        "kind": "leagueFinished" if n.match is None else "matchFinished",
-        "leagueId": n.league_id,
-        "leagueMatchId": n.league_match_id,
-        "seen": n.seen,
-        "createdAt": _iso(n.created_at),
+        "id": notification.id,
+        "kind": "leagueFinished" if notification.match is None else "matchFinished",
+        "leagueId": notification.league_id,
+        "leagueMatchId": notification.league_match_id,
+        "seen": notification.seen,
+        "createdAt": _iso(notification.created_at),
     }
-    if n.match is None:
-        item["leagueName"] = n.league_name
+    if notification.match is None:
+        item["leagueName"] = notification.league_name
     else:
-        item["club1"] = to_match_club(n.match.club1).model_dump(by_alias=True)
-        item["club2"] = to_match_club(n.match.club2).model_dump(by_alias=True)
+        item["club1"] = to_match_club(notification.match.club1).model_dump(by_alias=True)
+        item["club2"] = to_match_club(notification.match.club2).model_dump(by_alias=True)
         item["result"] = {
-            "score1": n.match.score_1,
-            "score2": n.match.score_2,
-            "penalties": penalties_payload(n.match.penalties),
+            "score1": notification.match.score_1,
+            "score2": notification.match.score_2,
+            "penalties": penalties_payload(notification.match.penalties),
         }
     return item
 
@@ -42,12 +42,12 @@ def build_notifications_payload(state: NotificationsState) -> dict:
     return {
         "type": "notifications",
         "new": state.has_unseen,
-        "notifications": [_to_notification(n) for n in state.notifications],
+        "notifications": [_to_notification(notification) for notification in state.notifications],
     }
 
 
 NOTIFICATIONS_CHANNEL = LeagueChannelSpec(
-    build_payload=build_notifications_payload,
+    build_payload=lambda state, _user_id: build_notifications_payload(state),
     close_reasons={},  # no cierra por estado
 )
 
