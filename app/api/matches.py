@@ -17,6 +17,7 @@ from app.schemas.errors import (
     Error,
     JoinMatchConflict,
     JoinMatchForbidden,
+    SubstitutePlayerConflict,
     SubstitutionsConflict,
     MatchAccessForbidden,
     MatchBehaviorConflict,
@@ -125,14 +126,14 @@ def get_substitutions(
     "/{match_id}/substitutions",
     status_code=204,
     response_class=Response,
-    operation_id="requestMatchSubstitution",
+    operation_id="setMatchSubstitution",
     summary="Pedir una sustitución para el equipo del usuario",
     responses={
         400: {"model": ValidationBadRequest},
         401: {"model": Error},
         403: {"model": Error},
         404: {"model": Error},
-        409: {"model": SubstitutionsConflict},
+        409: {"model": SubstitutePlayerConflict},
     },
     openapi_extra={
         "requestBody": {

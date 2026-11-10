@@ -109,6 +109,13 @@ class SubstitutionsConflict(BaseModel):
     message: str
 
 
+class SubstitutePlayerConflict(BaseModel):
+    # Mismos códigos que el GET, pero noPausesLeft también sale durante la última pausa.
+    # Se informa un solo motivo, el primero en este orden.
+    code: Literal["matchNotStarted", "matchInPenalties", "noPausesLeft"]
+    message: str
+
+
 # --- PUT /matches/{id}/behavior ------------------------------------------------
 
 

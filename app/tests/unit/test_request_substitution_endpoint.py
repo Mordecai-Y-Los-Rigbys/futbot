@@ -70,3 +70,10 @@ def test_missing_match_is_404(client, service):
         json={"starterId": 10, "substituteId": 13},
     )
     assert response.status_code == 404
+
+
+def test_openapi_operation():
+    operation = app.openapi()["paths"]["/matches/{match_id}/substitutions"]["put"]
+    assert operation["operationId"] == "setMatchSubstitution"
+    conflict = operation["responses"]["409"]["content"]["application/json"]["schema"]
+    assert conflict["$ref"].endswith("/SubstitutePlayerConflict")
