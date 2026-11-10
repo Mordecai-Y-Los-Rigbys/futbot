@@ -37,6 +37,7 @@ TICK_KEYS = {
     "penaltyRemainingSeconds",
     "elapsedTime",
     "pauseRemainingSeconds",
+    "pausesLeft",
     "phase",
     "event",
 }
@@ -400,7 +401,7 @@ def test_a_substitution_that_cannot_be_put_on_the_field_is_logged_and_the_match_
     assert "no se pudo poner en cancha" in caplog.text
 
 
-def test_progress_reports_the_phase_and_period_of_the_last_tick():
+def test_progress_reports_the_phase_and_pauses_left_of_the_last_tick():
     runner = build(FakeManager([FakeWs()]), FakeMatchRepo(), **PAUSED)
     seen = []
 
@@ -415,10 +416,10 @@ def test_progress_reports_the_phase_and_period_of_the_last_tick():
 
     asyncio.run(main())
     assert runner.progress(1) is None  # terminó: ya no se juega en este proceso
-    assert {p.periods for p in seen} == {4}
-    paused = [p for p in seen if p.phase is Phase.PAUSED]
-    # en una pausa, el período que terminó (nunca el último: no hay pausa después)
-    assert paused and {p.period for p in paused} <= {1, 2, 3}
+    assert {progress.pauses_left for progress in seen} == {0, 1, 2, 3}
+    paused = [progress for progress in seen if progress.phase is Phase.PAUSED]
+    # la pausa en curso no se cuenta: en la 1.ª quedan 2, en la 2.ª 1 y en la 3.ª 0
+    assert {progress.pauses_left for progress in paused} == {0, 1, 2}
 
 
 def test_late_subscriber_gets_the_current_pause_then_the_restarted_countdown_then_play():

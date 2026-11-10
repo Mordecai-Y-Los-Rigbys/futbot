@@ -35,7 +35,7 @@ def subs():
 @pytest.fixture()
 def progress():
     p = create_autospec(MatchProgressReader, instance=True)
-    p.progress.return_value = MatchProgress(Phase.PLAYING, period=1, periods=4)
+    p.progress.return_value = MatchProgress(Phase.PLAYING, pauses_left=3)
     return p
 
 
@@ -113,7 +113,7 @@ def test_outside_a_pause_it_returns_the_pending_substitution(matches, subs, prog
 
 
 def test_during_a_pause_it_returns_the_applied_substitution(matches, subs, progress):
-    progress.progress.return_value = MatchProgress(Phase.PAUSED, period=1, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PAUSED, pauses_left=2)
     subs.list_by_match.return_value = [
         SubstitutionData(user_id=1, starter_name="P1", substitute_name="P2")
     ]
@@ -127,31 +127,26 @@ def test_during_a_pause_it_returns_the_applied_substitution(matches, subs, progr
 
 
 def test_during_the_last_pause_it_is_200_with_the_applied_one(matches, subs, progress):
-    progress.progress.return_value = MatchProgress(Phase.PAUSED, period=3, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PAUSED, pauses_left=0)
     out = service(matches, subs, progress).get_substitutions(1, 5)
     assert out.club1 is None and out.club2 is None
 
 
 @pytest.mark.parametrize("phase", [Phase.COUNTDOWN, Phase.PLAYING])
 def test_after_the_last_pause_there_are_no_pauses_left(matches, subs, progress, phase):
-    progress.progress.return_value = MatchProgress(phase, period=4, periods=4)
+    progress.progress.return_value = MatchProgress(phase, pauses_left=0)
     assert error_of(service(matches, subs, progress)) == (409, "noPausesLeft")
     subs.list_by_match.assert_not_called()
 
 
 @pytest.mark.parametrize("period", [1, 2, 3])
 def test_before_the_last_period_it_is_not_no_pauses_left(matches, subs, progress, period):
-    progress.progress.return_value = MatchProgress(Phase.PLAYING, period=period, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PLAYING, pauses_left=4 - period)
     assert service(matches, subs, progress).get_substitutions(1, 5).club1 is None
 
 
-def test_a_match_with_a_single_period_has_no_pauses(matches, subs, progress):
-    progress.progress.return_value = MatchProgress(Phase.PLAYING, period=1, periods=1)
-    assert error_of(service(matches, subs, progress)) == (409, "noPausesLeft")
-
-
 def test_in_penalties_is_409_and_goes_before_no_pauses_left(matches, subs, progress):
-    progress.progress.return_value = MatchProgress(Phase.PENALTIES, period=4, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PENALTIES, pauses_left=0)
     assert error_of(service(matches, subs, progress)) == (409, "matchInPenalties")
 
 
@@ -159,7 +154,7 @@ def test_not_started_goes_before_the_phase_errors(matches, subs, progress):
     matches.get_players.return_value = MatchPlayersData(
         id=5, status=MatchStatus.finished, league_id=None, user_1_id=1, user_2_id=2
     )
-    progress.progress.return_value = MatchProgress(Phase.PLAYING, period=4, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PLAYING, pauses_left=0)
     assert error_of(service(matches, subs, progress)) == (409, "matchNotStarted")
 
 

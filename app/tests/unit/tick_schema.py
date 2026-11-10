@@ -123,6 +123,7 @@ class TickPayload(_Strict):
     penaltyRemainingSeconds: Optional[int] = Field(ge=0, le=8)
     elapsedTime: int = Field(ge=0)
     pauseRemainingSeconds: Optional[int] = Field(ge=0)
+    pausesLeft: int = Field(ge=0, le=3)  # obligatorio en todos los ticks
     phase: Literal["countdown", "playing", "paused", "penalties", "finished"]
     event: Optional[TickEvent]  # requerido: la clave siempre viaja, aunque sea null
 

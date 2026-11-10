@@ -519,16 +519,34 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
 
 
 class FakeProgress:
-    """El partido se está jugando en el 1.er período de 4 (le quedan 3 pausas)."""
+    """El runner del partido, con el progreso indicado.
+
+    Por defecto se está jugando el 1.er período de 4 (le quedan 3 pausas).
+    """
+
+    def __init__(self, progress=MatchProgress(Phase.PLAYING, pauses_left=3)):
+        self._progress = progress
 
     def progress(self, match_id):
-        return MatchProgress(Phase.PLAYING, period=1, periods=4)
+        return self._progress
 
 
 @pytest.fixture()
 def running():
     app.dependency_overrides[get_match_runner] = lambda: FakeProgress()
     yield
+    app.dependency_overrides.pop(get_match_runner, None)
+
+
+@pytest.fixture()
+def match_progress():
+    """Deja el runner con la fase y el `pausesLeft` que se le pasen."""
+
+    def set_progress(phase, pauses_left):
+        progress = MatchProgress(phase, pauses_left=pauses_left)
+        app.dependency_overrides[get_match_runner] = lambda: FakeProgress(progress)
+
+    yield set_progress
     app.dependency_overrides.pop(get_match_runner, None)
 
 
@@ -587,3 +605,59 @@ def test_put_scheduled_match_is_409(login, friendly_match, db_session, running):
     db_session.commit()
     response = put_substitution(login(1), match, teams[1][0], teams[1][3])
     assert (response.status_code, response.json()["code"]) == (409, "matchNotStarted")
+
+
+# --- consistencia con `pausesLeft` del tick (409 noPausesLeft) ---
+
+NO_PAUSES_LEFT = (409, "noPausesLeft")
+
+# (fase, pausesLeft del tick) → (PUT, GET). `noPausesLeft` es `pausesLeft == 0`; la única
+# excepción es el GET durante la última pausa, que muestra lo aplicado (200).
+PAUSES_LEFT_RESPONSES = [
+    (Phase.COUNTDOWN, 3, 204, 200),  # período 1
+    (Phase.PLAYING, 3, 204, 200),
+    (Phase.PAUSED, 2, 204, 200),  # 1.ª pausa
+    (Phase.COUNTDOWN, 2, 204, 200),  # período 2
+    (Phase.PLAYING, 2, 204, 200),
+    (Phase.PAUSED, 1, 204, 200),  # 2.ª pausa
+    (Phase.COUNTDOWN, 1, 204, 200),  # período 3
+    (Phase.PLAYING, 1, 204, 200),
+    (Phase.PAUSED, 0, NO_PAUSES_LEFT, 200),  # última pausa
+    (Phase.COUNTDOWN, 0, NO_PAUSES_LEFT, NO_PAUSES_LEFT),  # período 4
+    (Phase.PLAYING, 0, NO_PAUSES_LEFT, NO_PAUSES_LEFT),
+]
+
+
+def status_and_code(response):
+    if response.status_code == 409:
+        return (409, response.json()["code"])
+    return response.status_code
+
+
+@pytest.mark.parametrize(("phase", "pauses_left", "put", "get"), PAUSES_LEFT_RESPONSES)
+def test_rest_answers_follow_the_pauses_left_of_the_tick(
+    login, friendly_match, match_progress, phase, pauses_left, put, get
+):
+    match, teams = friendly_match
+    match_progress(phase, pauses_left)
+    api = login(1)
+
+    put_response = put_substitution(api, match, teams[1][0], teams[1][3])
+    get_response = api.get(f"/matches/{match.id}/substitutions")
+
+    assert status_and_code(put_response) == put
+    assert status_and_code(get_response) == get
+
+
+def test_in_penalties_wins_over_no_pauses_left_with_pauses_left_at_0(
+    login, friendly_match, match_progress
+):
+    match, teams = friendly_match
+    match_progress(Phase.PENALTIES, 0)
+    api = login(1)
+
+    put_response = put_substitution(api, match, teams[1][0], teams[1][3])
+    get_response = api.get(f"/matches/{match.id}/substitutions")
+
+    assert status_and_code(put_response) == (409, "matchInPenalties")
+    assert status_and_code(get_response) == (409, "matchInPenalties")

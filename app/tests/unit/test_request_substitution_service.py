@@ -32,7 +32,7 @@ def setup():
     set_team(teams, starters={10, 11, 12}, substitutes={13, 14, 15})
     substitutions = create_autospec(AbstractSubstitutionRepository, instance=True)
     progress = create_autospec(MatchProgressReader, instance=True)
-    progress.progress.return_value = MatchProgress(Phase.PLAYING, period=2, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PLAYING, pauses_left=2)
     return matches, teams, substitutions, progress
 
 
@@ -89,9 +89,9 @@ def test_non_player_with_valid_body_is_forbidden(setup):
 @pytest.mark.parametrize(
     ("match_progress", "code"),
     [
-        (MatchProgress(Phase.PENALTIES, period=4, periods=4), "matchInPenalties"),
-        (MatchProgress(Phase.PLAYING, period=4, periods=4), "noPausesLeft"),
-        (MatchProgress(Phase.PAUSED, period=3, periods=4), "noPausesLeft"),  # última pausa
+        (MatchProgress(Phase.PENALTIES, pauses_left=0), "matchInPenalties"),
+        (MatchProgress(Phase.PLAYING, pauses_left=0), "noPausesLeft"),
+        (MatchProgress(Phase.PAUSED, pauses_left=0), "noPausesLeft"),  # última pausa
         (None, "noPausesLeft"),
     ],
 )
@@ -108,7 +108,7 @@ def test_progress_conflicts(setup, match_progress, code):
 
 def test_a_pause_that_is_not_the_last_one_accepts_the_request(setup):
     matches, teams, repo, progress = setup
-    progress.progress.return_value = MatchProgress(Phase.PAUSED, period=2, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PAUSED, pauses_left=1)
     SubstitutionService(matches, repo, progress, teams).request_substitution(
         7, 5, {"starterId": 10, "substituteId": 13}
     )
@@ -118,7 +118,7 @@ def test_a_pause_that_is_not_the_last_one_accepts_the_request(setup):
 def test_match_not_started_has_precedence_over_progress_conflicts(setup):
     matches, teams, repo, progress = setup
     matches.get_players.return_value.status = MatchStatus.finished
-    progress.progress.return_value = MatchProgress(Phase.PENALTIES, period=4, periods=4)
+    progress.progress.return_value = MatchProgress(Phase.PENALTIES, pauses_left=0)
     with pytest.raises(ApiError) as exc:
         SubstitutionService(matches, repo, progress, teams).request_substitution(
             7, 5, {"starterId": 10, "substituteId": 13}

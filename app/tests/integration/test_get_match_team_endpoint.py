@@ -127,7 +127,7 @@ class FakeRunner:
         return True
 
     def progress(self, match_id):
-        return MatchProgress(Phase.PLAYING, period=1, periods=4)
+        return MatchProgress(Phase.PLAYING, pauses_left=3)
 
 
 @pytest.fixture()
