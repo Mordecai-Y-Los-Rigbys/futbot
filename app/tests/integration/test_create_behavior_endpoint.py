@@ -56,7 +56,9 @@ def test_broken_json_has_the_three_fields_required(login):
     ]
 
 
-def test_a_name_the_user_already_has_in_the_other_type_is_duplicate(login, make_behaviors):
+def test_a_name_the_user_already_has_in_the_other_type_is_duplicate(
+    login, make_behaviors, db_session
+):
     make_behaviors(1, ["Delantero"])  # playerBehavior
     make_behaviors(2, ["Mio"])
 
@@ -70,10 +72,23 @@ def test_a_name_the_user_already_has_in_the_other_type_is_duplicate(login, make_
         "codeError": None,
     }
     assert other_user.status_code == 201
+    assert count_behaviors(db_session, 1) == 1  # el rechazo no creó nada
 
 
-def test_a_code_too_long_is_409_without_location(login, db_session):
-    r = login(1).post(URL, json=body(code="x = 1\n" * 251))
+def test_a_name_with_spaces_around_is_the_same_name(login, make_behaviors):
+    make_behaviors(1, ["Delantero"])
+
+    response = login(1).post(URL, json=body(name=" Delantero "))
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "duplicateName"
+
+
+@pytest.mark.parametrize(
+    "code", ["x = 1\n" * 251, "x" * 20001], ids=["251 líneas", "20.001 caracteres"]
+)
+def test_a_code_too_long_is_409_without_location(login, db_session, code):
+    r = login(1).post(URL, json=body(code=code))
 
     assert r.status_code == 409
     assert (r.json()["code"], r.json()["codeError"]) == ("codeTooLong", None)
@@ -99,3 +114,12 @@ def test_the_unique_name_is_also_enforced_by_the_database(db_session, make_user)
         repository.create(1, data)
 
     assert repository.name_taken(1, "igual")  # la sesión sigue usable después del rollback
+
+
+def test_create_many_keeps_the_type_of_each_behavior(db_session, make_user):
+    make_user(1)
+    coach = CreateBehaviorData(name="DT", code="", type=BehaviorType.coach_behavior)
+
+    created = SqlAlchemyBehaviorRepository(db_session).create_many(1, [coach])
+
+    assert created[0].type == BehaviorType.coach_behavior

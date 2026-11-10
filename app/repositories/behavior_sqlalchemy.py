@@ -55,7 +55,9 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
         return BehaviorData.model_validate(record) if record is not None else None
 
     def create_many(self, user_id: int, behaviors: list[CreateBehaviorData]) -> list[BehaviorData]:
-        records = [Behavior(user_id=user_id, name=b.name, code=b.code) for b in behaviors]
+        records = [
+            Behavior(user_id=user_id, name=b.name, code=b.code, type=b.type) for b in behaviors
+        ]
         self.db.add_all(records)
         self.db.flush()
         return [BehaviorData.model_validate(r) for r in records]

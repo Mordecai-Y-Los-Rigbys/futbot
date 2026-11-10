@@ -3,7 +3,8 @@ from unittest.mock import create_autospec
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models.behavior import Behavior, BehaviorType
+from app.domain.behavior import BehaviorType
+from app.models.behavior import Behavior
 from app.repositories.behavior_abstract import BehaviorData
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 

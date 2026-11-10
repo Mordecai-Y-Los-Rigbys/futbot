@@ -1,7 +1,7 @@
 import pytest
 
 from app.errors import ValidationApiError
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 from app.services.match_behavior_validation import (
     ReassignBehaviorInput,
     parse_reassign_behavior,

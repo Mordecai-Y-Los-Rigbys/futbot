@@ -4,7 +4,6 @@ from app.domain.behavior import BehaviorType
 from app.errors import ValidationApiError
 from app.repositories.behavior_abstract import CreateBehaviorData, UpdateBehaviorData
 from app.services.field_validation import field_error
-from app.services.league_validation import INVALID_JSON
 
 CREATE_FIELDS = ("name", "code", "type")
 UPDATE_FIELDS = ("name", "code")  # el tipo no se puede cambiar
@@ -19,6 +18,7 @@ def parse_create_behavior(body: Any) -> CreateBehaviorData:
         ValidationApiError: 400 con todos los campos que fallan, en el orden del schema.
     """
     _ensure_object(body, CREATE_FIELDS)
+    body = _strip_name(body)
     _raise_errors(
         CREATE_FIELDS,
         {
@@ -37,13 +37,14 @@ def parse_update_behavior(body: Any) -> UpdateBehaviorData:
         ValidationApiError: 400 con todos los campos que fallan, en el orden del schema.
     """
     _ensure_object(body, UPDATE_FIELDS)
+    body = _strip_name(body)
     _raise_errors(UPDATE_FIELDS, {"name": _name_reason(body), "code": _string_reason(body, "code")})
     return UpdateBehaviorData(name=body["name"], code=body["code"])
 
 
 def _ensure_object(body: Any, fields: tuple[str, ...]) -> None:
     """Un body ilegible o que no es un objeto: todos los campos `required` (convención 9)."""
-    if body is INVALID_JSON or not isinstance(body, dict):
+    if not isinstance(body, dict):
         raise ValidationApiError([field_error(field, "required") for field in fields])
 
 
@@ -51,6 +52,16 @@ def _raise_errors(fields: tuple[str, ...], reasons: dict[str, str | None]) -> No
     errors = [field_error(field, reasons[field]) for field in fields if reasons[field]]
     if errors:
         raise ValidationApiError(errors)
+
+
+def _strip_name(body: dict) -> dict:
+    """Saca los espacios de los extremos del nombre, como en los otros nombres del sistema.
+
+    Se recorta una sola vez: el largo, el nombre repetido y lo que se guarda usan este valor.
+    """
+    if isinstance(body.get("name"), str):
+        return {**body, "name": body["name"].strip()}
+    return body
 
 
 def _string_reason(body: dict, key: str) -> str | None:
@@ -65,7 +76,7 @@ def _name_reason(body: dict) -> str | None:
     reason = _string_reason(body, "name")
     if reason:
         return reason
-    if not body["name"].strip():
+    if not body["name"]:
         return "required"
     if len(body["name"]) > MAX_NAME_LEN:
         return "tooLong"

@@ -2,7 +2,7 @@ import pytest
 
 from app.errors import ValidationApiError
 from app.services.behavior_validation import MAX_NAME_LEN, parse_update_behavior
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 
 VALID = {"name": "Delantero 2", "code": "go_to(1, 2)"}
 
@@ -45,3 +45,7 @@ def test_missing_fields_are_required_in_the_order_of_the_schema():
         {"field": "name", "reason": "required"},
         {"field": "code", "reason": "required"},
     ]
+
+
+def test_the_spaces_around_the_name_are_removed():
+    assert parse_update_behavior({**VALID, "name": "  Delantero 2 "}).name == "Delantero 2"
