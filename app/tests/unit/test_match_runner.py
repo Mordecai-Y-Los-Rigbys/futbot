@@ -9,6 +9,7 @@ from app.services.match_broadcast import TickContext, build_tick_payload, _closi
 from app.repositories.substitution_abstract import AppliedSwap
 from app.repositories.team_abstract import StarterData
 from app.domain.team_member import MemberRole
+from app.services import match_runner
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup
 from app.simulation import match_rules
@@ -364,6 +365,30 @@ def test_the_substitute_is_on_the_field_from_the_first_tick_of_the_pause():
     assert HOME_FORWARD_ID in ids(ws.received[0])  # antes de la pausa juega el titular
     assert 99 in ids(pause_ticks[0]) and HOME_FORWARD_ID not in ids(pause_ticks[0])
     assert 99 in ids(ws.received[-1])  # sigue jugando hasta el final
+
+
+def test_the_substitute_plays_with_its_behavior_from_the_first_play_tick_after_the_pause(
+    monkeypatch,
+):
+    used = spy_forward(monkeypatch)
+    incoming_behavior = compile_behavior("pass")
+    monkeypatch.setattr(match_runner, "compile_behavior", lambda code: incoming_behavior)
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward()]
+    ws = FakeWs()
+    mark = {}
+
+    def probe(tick):
+        if tick["phase"] == "paused" and "before_pause" not in mark:
+            mark["before_pause"] = len(used)
+
+    ws.probe = probe
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    before_pause = mark["before_pause"]
+    assert before_pause > 0
+    assert all(behavior is not incoming_behavior for behavior in used[:before_pause])
+    assert used[before_pause] is incoming_behavior
 
 
 def test_a_substitution_that_cannot_be_put_on_the_field_is_logged_and_the_match_goes_on(caplog):

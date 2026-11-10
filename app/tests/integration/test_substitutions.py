@@ -348,6 +348,45 @@ def test_apply_pending_swaps_the_roles_and_returns_the_incoming_player(db_sessio
     assert out_player not in {r.player_id for r in starters}
 
 
+def test_the_starter_that_leaves_keeps_its_behavior_on_the_bench(
+    db_session, league_match, make_behaviors
+):
+    match, teams = league_match
+    starter, bench_player = teams[1][0], teams[1][3]
+    bench_behavior = make_behaviors(1, ["suplente"])[0]
+    bench_player.behavior_id = bench_behavior.id
+    db_session.commit()
+    starter_behavior_id = starter.behavior_id
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
+
+    db_session.expire_all()
+    assert (starter.role, starter.behavior_id) == (MemberRole.substitute, starter_behavior_id)
+    assert (bench_player.role, bench_player.behavior_id) == (MemberRole.forward, bench_behavior.id)
+
+
+def test_after_three_substitutions_the_team_has_three_starters_and_three_substitutes(
+    db_session, league_match
+):
+    match, teams = league_match
+    repo = SqlAlchemySubstitutionRepository(db_session)
+    for out_idx, in_idx in ((0, 3), (1, 4), (2, 5)):
+        substitute(db_session, match, teams[1], out_idx=out_idx, in_idx=in_idx)
+        repo.apply_pending(match.id)
+
+    roles = roles_of(db_session, teams[1])
+    team = teams[1]
+    assert roles == {
+        team[0].player_id: MemberRole.substitute,
+        team[1].player_id: MemberRole.substitute,
+        team[2].player_id: MemberRole.substitute,
+        team[3].player_id: MemberRole.forward,
+        team[4].player_id: MemberRole.midfield,
+        team[5].player_id: MemberRole.defense,
+    }
+
+
 def test_apply_pending_moves_the_pending_to_applied(db_session, league_match):
     match, teams = league_match
     substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
