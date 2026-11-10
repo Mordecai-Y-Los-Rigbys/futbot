@@ -475,6 +475,7 @@ def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream(
     for tick in second.received:
         TickPayload.model_validate(tick)
 
+
 # --- aviso de cambios -----------------------------------------------------------
 
 

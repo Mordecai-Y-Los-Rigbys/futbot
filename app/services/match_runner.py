@@ -73,9 +73,9 @@ class MatchRunner:
         self._send_timeout = send_timeout
         self._tasks: dict[int, asyncio.Task] = {}
         self._on_match_change = on_match_change
+        self._on_match_finished = on_match_finished
         self._pending: dict[int, dict[int, CompiledBehavior]] = {}
         self._pending_lock = threading.Lock()
-        self._on_match_finished = on_match_finished
         self._progress: dict[int, MatchProgress] = {}
 
     def start(self, match_id: int) -> asyncio.Task:
@@ -293,4 +293,3 @@ def _penalties_data(result: TickResult) -> PenaltyShootoutData | None:
         winner=1 if shootout.winner is Team.HOME else 2,
         kicks=[penalty_kick_record(kick) for kick in shootout.kicks],
     )
-

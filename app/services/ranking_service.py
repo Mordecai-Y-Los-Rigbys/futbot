@@ -63,7 +63,7 @@ def to_league_ranking(clubs: list[ClubRankingData]) -> list[LeagueRankingEntry]:
         )
         for position, club in _rank(clubs)
     ]
-    
+
 
 class RankingService:
     """Ranking global y ranking de liga."""

@@ -90,9 +90,7 @@ def _fixture_handshake_scope() -> Iterator[LeagueFixtureHandshakeService]:
         )
 
 
-def get_fixture_handshake_scope() -> (
-    Callable[[], ContextManager[LeagueFixtureHandshakeService]]
-):
+def get_fixture_handshake_scope() -> Callable[[], ContextManager[LeagueFixtureHandshakeService]]:
     return _fixture_handshake_scope
 
 
@@ -123,9 +121,7 @@ def _ranking_handshake_scope() -> Iterator[LeagueRankingHandshakeService]:
         )
 
 
-def get_ranking_handshake_scope() -> (
-    Callable[[], ContextManager[LeagueRankingHandshakeService]]
-):
+def get_ranking_handshake_scope() -> Callable[[], ContextManager[LeagueRankingHandshakeService]]:
     return _ranking_handshake_scope
 
 

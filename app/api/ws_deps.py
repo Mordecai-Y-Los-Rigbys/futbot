@@ -84,7 +84,7 @@ def _load_setup(match_id: int) -> MatchSetup:
 def _substitution_repo_scope() -> Iterator[SqlAlchemySubstitutionRepository]:
     with SessionLocal() as db:
         yield SqlAlchemySubstitutionRepository(db)
-        
+
 
 def _league_of(match_id: int) -> int | None:
     """La liga del partido. None si es un amistoso."""
