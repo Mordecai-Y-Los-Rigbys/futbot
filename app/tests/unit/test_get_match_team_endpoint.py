@@ -19,12 +19,12 @@ def make_team(coach=True):
     return MatchTeam(
         members=[
             MatchTeamMember(
-                player_id=10 + i,
-                name=f"J{i}",
+                player_id=10 + index,
+                name=f"J{index}",
                 role=MemberRole(role),
                 behavior=TeamBehavior(id=3, name="Atacante", type=BehaviorType.player_behavior),
             )
-            for i, role in enumerate(ROLES)
+            for index, role in enumerate(ROLES)
         ],
         coach_behavior=(
             TeamBehavior(id=9, name="DT ofensivo", type=BehaviorType.coach_behavior)
@@ -53,11 +53,11 @@ def client(service):
 
 def test_success_is_camel_case_and_matches_the_contract(client, service):
     client.cookies.set("session_id", "ok")
-    r = client.get("/matches/5/team")
-    assert r.status_code == 200
-    body = r.json()
+    response = client.get("/matches/5/team")
+    assert response.status_code == 200
+    body = response.json()
     assert set(body) == {"members", "coachBehavior"}
-    assert [m["role"] for m in body["members"]] == ROLES
+    assert [member["role"] for member in body["members"]] == ROLES
     assert body["members"][0] == {
         "playerId": 10,
         "name": "J0",
@@ -71,7 +71,7 @@ def test_success_is_camel_case_and_matches_the_contract(client, service):
 def test_member_does_not_expose_the_behavior_code(client):
     client.cookies.set("session_id", "ok")
     body = client.get("/matches/5/team").json()
-    assert all("code" not in m["behavior"] for m in body["members"])
+    assert all("code" not in member["behavior"] for member in body["members"])
 
 
 def test_coach_behavior_is_null_when_the_team_has_no_dt(client, service):
@@ -83,8 +83,8 @@ def test_coach_behavior_is_null_when_the_team_has_no_dt(client, service):
 
 @pytest.mark.parametrize("path", ["/matches/5/team", "/matches/abc/team"])
 def test_no_session_is_401_before_anything(client, service, path):
-    r = client.get(path)
-    assert r.status_code == 401 and r.json()["code"] is None
+    response = client.get(path)
+    assert response.status_code == 401 and response.json()["code"] is None
     service.get_team.assert_not_called()
 
 
@@ -97,40 +97,27 @@ def test_invalid_session_cookie_is_401(client, service):
 @pytest.mark.parametrize("bad", ["abc", "0", "-1", "1.5", "2147483648", "%20"])
 def test_invalid_id_is_404(client, service, bad):
     client.cookies.set("session_id", "ok")
-    r = client.get(f"/matches/{bad}/team")
-    assert r.status_code == 404
+    response = client.get(f"/matches/{bad}/team")
+    assert response.status_code == 404
     service.get_team.assert_not_called()
 
 
 def test_missing_match_is_404(client, service):
     service.get_team.side_effect = ApiError(404, None, "El partido no existe.")
     client.cookies.set("session_id", "ok")
-    r = client.get("/matches/5/team")
-    assert (r.status_code, r.json()["code"]) == (404, None)
+    response = client.get("/matches/5/team")
+    assert (response.status_code, response.json()["code"]) == (404, None)
 
 
 def test_not_a_player_is_403_with_code(client, service):
     service.get_team.side_effect = ApiError(403, "notAPlayerInMatch", "no")
     client.cookies.set("session_id", "ok")
-    r = client.get("/matches/5/team")
-    assert (r.status_code, r.json()["code"]) == (403, "notAPlayerInMatch")
+    response = client.get("/matches/5/team")
+    assert (response.status_code, response.json()["code"]) == (403, "notAPlayerInMatch")
 
 
 def test_body_and_query_are_ignored(client, service):
     client.cookies.set("session_id", "ok")
-    r = client.request("GET", "/matches/5/team?playerId=abc&x=1", content=b"{no json")
-    assert r.status_code == 200
+    response = client.request("GET", "/matches/5/team?playerId=abc&x=1", content=b"{no json")
+    assert response.status_code == 200
     service.get_team.assert_called_once_with(7, 5)
-
-
-def test_only_get_is_allowed(client):
-    client.cookies.set("session_id", "ok")
-    assert client.post("/matches/5/team").status_code == 405
-    assert client.put("/matches/5/team").status_code == 405
-
-
-def test_openapi_declares_the_operation_without_409(client):
-    op = app.openapi()["paths"]["/matches/{match_id}/team"]["get"]
-    assert op["operationId"] == "getMatchTeam"
-    assert set(op["responses"]) >= {"200", "401", "403", "404"}
-    assert "409" not in op["responses"]

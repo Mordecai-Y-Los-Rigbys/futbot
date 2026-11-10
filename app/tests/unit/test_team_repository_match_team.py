@@ -64,7 +64,7 @@ def test_starters_come_first_in_contract_order_then_substitutes_by_id(repo, db):
 
     team = repo.get_match_team(5, None, 7)
 
-    assert [(m.role.value, m.player_id) for m in team.members] == [
+    assert [(member.role.value, member.player_id) for member in team.members] == [
         ("forward", 13),
         ("midfield", 11),
         ("defense", 12),

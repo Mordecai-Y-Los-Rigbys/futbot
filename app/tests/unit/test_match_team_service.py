@@ -21,31 +21,33 @@ ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitu
 def team_data(coach=True):
     members = [
         TeamMemberData(
-            player_id=10 + i,
-            name=f"J{i}",
+            player_id=10 + index,
+            name=f"J{index}",
             role=MemberRole(role),
-            behavior=TeamBehaviorData(id=100 + i, name=f"B{i}", type=BehaviorType.player_behavior),
+            behavior=TeamBehaviorData(
+                id=100 + index, name=f"B{index}", type=BehaviorType.player_behavior
+            ),
         )
-        for i, role in enumerate(ROLES)
+        for index, role in enumerate(ROLES)
     ]
-    dt = TeamBehaviorData(id=9, name="DT", type=BehaviorType.coach_behavior) if coach else None
-    return MatchTeamData(members=members, coach_behavior=dt)
+    coach = TeamBehaviorData(id=9, name="DT", type=BehaviorType.coach_behavior) if coach else None
+    return MatchTeamData(members=members, coach_behavior=coach)
 
 
 @pytest.fixture()
 def matches():
-    m = create_autospec(AbstractMatchRepository, instance=True)
-    m.get_players.return_value = MatchPlayersData(
+    mock = create_autospec(AbstractMatchRepository, instance=True)
+    mock.get_players.return_value = MatchPlayersData(
         id=5, league_id=None, status=MatchStatus.started, user_1_id=1, user_2_id=2
     )
-    return m
+    return mock
 
 
 @pytest.fixture()
 def teams():
-    t = create_autospec(AbstractTeamRepository, instance=True)
-    t.get_match_team.return_value = team_data()
-    return t
+    mock = create_autospec(AbstractTeamRepository, instance=True)
+    mock.get_match_team.return_value = team_data()
+    return mock
 
 
 @pytest.fixture()
@@ -54,9 +56,9 @@ def service(matches, teams):
 
 
 def error_of(service, user_id=1, match_id=5):
-    with pytest.raises(ApiError) as e:
+    with pytest.raises(ApiError) as error:
         service.get_team(user_id, match_id)
-    return e.value.status_code, e.value.code
+    return error.value.status_code, error.value.code
 
 
 def test_nonexistent_match_is_404_and_reads_no_team(service, matches, teams):
@@ -111,7 +113,7 @@ def test_a_stranger_cannot_use_the_missing_rival_slot(service, matches):
 
 def test_response_keeps_starters_first_then_substitutes(service):
     out = service.get_team(1, 5)
-    assert [m.role.value for m in out.members] == ROLES
+    assert [member.role.value for member in out.members] == ROLES
     first = out.members[0]
     assert (first.player_id, first.name) == (10, "J0")
     assert (first.behavior.id, first.behavior.name, first.behavior.type) == (
