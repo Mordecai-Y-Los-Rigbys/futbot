@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_behavior_service, get_session_service
+from app.domain.behavior import BehaviorType
 from app.main import app  # ajustá al módulo donde creás la app
 from app.repositories.behavior_abstract import BehaviorData
 from app.services.behavior_service import PAGE_SIZE, BehaviorService
@@ -102,12 +103,13 @@ def test_response_body_uses_service_result(as_user, behavior_service):
     assert r.json()["total"] == 3
 
 
-def test_items_only_have_id_and_name(as_user, behavior_service):
-    behavior_service.list_behaviors.return_value = ([behavior(1, "a")], 1)
+def test_items_only_have_id_name_and_type(as_user, behavior_service):
+    coach = BehaviorData(id=1, user_id=1, name="a", code="x", type=BehaviorType.coach_behavior)
+    behavior_service.list_behaviors.return_value = ([coach], 1)
 
     r = as_user(1).get(URL)
 
-    assert set(r.json()["items"][0].keys()) == {"id", "name"}
+    assert r.json()["items"] == [{"id": 1, "name": "a", "type": "coachBehavior"}]
 
 
 def test_empty_result(as_user):
@@ -164,28 +166,31 @@ def test_size_param_has_no_effect(as_user, behavior_service, size_param):
 
 
 @pytest.mark.parametrize("page", ["abc", "1.5", "", " ", "1e3", "+2", "١٢"])
-def test_page_not_an_integer(as_user, behavior_service, page):
+def test_page_not_an_integer_is_invalid_type(as_user, behavior_service, page):
     r = as_user(1).get(URL, params={"page": page})
 
     assert r.status_code == 400
-    assert r.json()["code"] == "pageNotAnInteger"
-    assert set(r.json().keys()) == {"code", "message"}
+    assert r.json()["code"] == "invalidFields"
+    assert r.json()["errors"] == [{"field": "page", "reason": "invalidType"}]
+    assert set(r.json().keys()) == {"code", "message", "errors"}
     behavior_service.list_behaviors.assert_not_called()
 
 
 @pytest.mark.parametrize("page", ["0", "-1", "-999"])
-def test_page_below_minimum(as_user, behavior_service, page):
+def test_page_below_minimum_is_out_of_range(as_user, behavior_service, page):
     r = as_user(1).get(URL, params={"page": page})
 
     assert r.status_code == 400
-    assert r.json()["code"] == "pageBelowMinimum"
+    assert r.json()["code"] == "invalidFields"
+    assert r.json()["errors"] == [{"field": "page", "reason": "outOfRange"}]
     behavior_service.list_behaviors.assert_not_called()
 
 
 @pytest.mark.parametrize("page", ["2147483648", "9" * 30, "9" * 5000])
-def test_page_too_large(as_user, behavior_service, page):
+def test_page_too_large_is_out_of_range(as_user, behavior_service, page):
     r = as_user(1).get(URL, params={"page": page})
 
     assert r.status_code == 400
-    assert r.json()["code"] == "pageTooLarge"
+    assert r.json()["code"] == "invalidFields"
+    assert r.json()["errors"] == [{"field": "page", "reason": "outOfRange"}]
     behavior_service.list_behaviors.assert_not_called()

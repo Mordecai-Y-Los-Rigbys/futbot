@@ -9,7 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
     func,
-    true
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,8 +46,8 @@ class League(Base):
     private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     password: Mapped[str | None] = mapped_column(String(72), nullable=True)
     allow_draws: Mapped[bool] = mapped_column(
-    Boolean, nullable=False, default=True, server_default=true()
-)
+        Boolean, nullable=False, default=True, server_default=true()
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

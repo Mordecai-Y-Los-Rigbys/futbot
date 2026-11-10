@@ -24,9 +24,7 @@ def team_data(coach=True):
             player_id=10 + i,
             name=f"J{i}",
             role=MemberRole(role),
-            behavior=TeamBehaviorData(
-                id=100 + i, name=f"B{i}", type=BehaviorType.player_behavior
-            ),
+            behavior=TeamBehaviorData(id=100 + i, name=f"B{i}", type=BehaviorType.player_behavior),
         )
         for i, role in enumerate(ROLES)
     ]

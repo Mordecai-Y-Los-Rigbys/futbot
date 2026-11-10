@@ -9,7 +9,7 @@ from app.errors import ApiError
 from app.repositories.behavior_abstract import AbstractBehaviorRepository, BehaviorData
 from app.repositories.match_abstract import AbstractMatchRepository, MatchPlayersData
 from app.repositories.team_abstract import AbstractTeamRepository, StarterData
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_runner import MatchRunner
 from app.simulation.behaviors.sandbox import CompiledBehavior
@@ -34,6 +34,7 @@ def teams():
     t.get_starters.return_value = [
         StarterData(
             player_id=3,
+            name="Jugador 3",
             role=MemberRole.forward,
             power=60,
             agility=60,

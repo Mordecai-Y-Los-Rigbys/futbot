@@ -1,32 +1,33 @@
 from dataclasses import dataclass
+from typing import Any
+
+from app.services.field_validation import (
+    FieldErrors,
+    all_required,
+    field_error,
+    id_reason,
+    is_readable,
+)
+
+FIELDS = ("starterId", "substituteId")
 
 
 @dataclass(frozen=True)
 class SubstituteInput:
-    starter_id: int | None
+    starter_id: int | None  # None si el campo es inválido
     substitute_id: int | None
 
 
-def parse_substitute(body: object) -> tuple[SubstituteInput, list[dict[str, str]]]:
-    """Valida ambos IDs; conserva los campos válidos para sus reglas propias."""
-    data = body if isinstance(body, dict) else {}
-    errors: list[dict[str, str]] = []
-    values: dict[str, int | None] = {}
+def parse_substitute(body: Any) -> tuple[SubstituteInput, FieldErrors]:
+    """Valida los dos ids sin cortar en el primer error. Devuelve también los ids
+    válidos (None el inválido), para que cada uno se chequee contra el equipo."""
+    if not is_readable(body):
+        return SubstituteInput(None, None), all_required(FIELDS)
 
-    for field in ("starterId", "substituteId"):
-        if field not in data:
-            errors.append({"field": field, "reason": "required"})
-            values[field] = None
-            continue
-        value = data[field]
-        if isinstance(value, bool) or not isinstance(value, int):
-            errors.append({"field": field, "reason": "invalidType"})
-            values[field] = None
-            continue
-        if not 1 <= value <= 2_147_483_647:
-            errors.append({"field": field, "reason": "outOfRange"})
-            values[field] = None
-            continue
-        values[field] = value
-
-    return SubstituteInput(values["starterId"], values["substituteId"]), errors
+    reasons = {field: id_reason(body, field) for field in FIELDS}
+    errors = [field_error(field, reason) for field, reason in reasons.items() if reason]
+    request = SubstituteInput(
+        starter_id=None if reasons["starterId"] else body["starterId"],
+        substitute_id=None if reasons["substituteId"] else body["substituteId"],
+    )
+    return request, errors

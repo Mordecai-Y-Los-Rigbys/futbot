@@ -243,7 +243,9 @@ def test_no_409_in_any_match_status(login_as, db_session, make_user, make_behavi
 # --- cambios durante el partido -----------------------------------------------
 
 
-def test_before_the_match_returns_the_standing_lineup(login_as, db_session, make_user, make_behaviors):
+def test_before_the_match_returns_the_standing_lineup(
+    login_as, db_session, make_user, make_behaviors
+):
     make_user(1), make_user(2)
     match = Match(user_1_id=1, user_2_id=2, status=MatchStatus.scheduled)
     db_session.add(match)
@@ -254,23 +256,28 @@ def test_before_the_match_returns_the_standing_lineup(login_as, db_session, make
     assert [m["playerId"] for m in body["members"]] == [t.player_id for t in team]
 
 
-def test_behavior_reassignment_shows_the_new_behavior(login_as, db_session, friendly_match, make_user, make_behaviors):
+def test_behavior_reassignment_shows_the_new_behavior(
+    login_as, db_session, friendly_match, make_user, make_behaviors
+):
     match, teams = friendly_match
     new = make_behaviors(1, ["nuevo"], code="pass")[0]
     teams[1][0].behavior_id = new.id  # lo que hace PUT /matches/{id}/behavior
     db_session.commit()
     body = get_team(login_as(make_user(1)), match.id).json()
-    assert body["members"][0]["behavior"] == {"id": new.id, "name": "nuevo", "type": "playerBehavior"}
+    assert body["members"][0]["behavior"] == {
+        "id": new.id,
+        "name": "nuevo",
+        "type": "playerBehavior",
+    }
 
 
 def request_substitution(db, match, team, out_idx=0, in_idx=3):
     user_id = team[out_idx].user_id
-    sub = db.get(Substitution, (match.id, user_id, False))
+    sub = db.get(Substitution, (match.id, user_id))
     if sub is None:
         sub = Substitution(
             match_id=match.id,
             user_id=user_id,
-            applied=False,
             member_in_id=team[in_idx].id,
             member_out_id=team[out_idx].id,
         )
@@ -293,7 +300,7 @@ def test_applied_substitution_swaps_roles(login_as, db_session, friendly_match, 
     match, teams = friendly_match
     team = teams[1]
     request_substitution(db_session, match, team, out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)  # empieza la pausa
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)  # empieza la pausa
 
     members = {
         m["playerId"]: m["role"]
@@ -303,12 +310,14 @@ def test_applied_substitution_swaps_roles(login_as, db_session, friendly_match, 
     assert members[team[0].player_id] == "substitute"  # el titular que sale pasa a substitute
 
 
-def test_after_the_pause_only_the_last_request_is_reflected(login_as, db_session, friendly_match, make_user):
+def test_after_the_pause_only_the_last_request_is_reflected(
+    login_as, db_session, friendly_match, make_user
+):
     match, teams = friendly_match
     team = teams[1]
     request_substitution(db_session, match, team, out_idx=0, in_idx=3)
     request_substitution(db_session, match, team, out_idx=1, in_idx=4)  # reemplaza a la anterior
-    SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
 
     members = {
         m["playerId"]: m["role"]
@@ -323,7 +332,7 @@ def test_after_the_pause_only_the_last_request_is_reflected(login_as, db_session
 def test_substituted_lineup_keeps_starters_first(login_as, db_session, friendly_match, make_user):
     match, teams = friendly_match
     request_substitution(db_session, match, teams[1], out_idx=2, in_idx=5)
-    SqlAlchemySubstitutionRepository(db_session).apply_by_match(match.id)
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
     body = get_team(login_as(make_user(1)), match.id).json()
     assert [m["role"] for m in body["members"]] == ROLE_NAMES
 

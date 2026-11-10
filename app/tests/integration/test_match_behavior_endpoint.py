@@ -66,6 +66,20 @@ def test_behavior_of_the_rival_is_409(league_match, login_as, make_user, make_be
     assert (r.status_code, r.json()["code"]) == (409, "playerOrBehaviorNotOwned")
 
 
+def test_deleted_behavior_is_409_not_owned(
+    league_match, login_as, make_user, make_behaviors, runner
+):
+    match, teams = league_match
+    deleted = make_behaviors(1, ["eliminado"], code="pass")[0]
+    api = login_as(make_user(1))
+    assert api.delete(f"/behaviors/{deleted.id}").status_code == 204
+
+    r = put(api, match, teams[1][0].player_id, deleted.id)
+
+    assert (r.status_code, r.json()["code"]) == (409, "playerOrBehaviorNotOwned")
+    assert runner.queued == []
+
+
 @pytest.mark.parametrize(
     "owner, code", [(1, "behaviorTypeMismatch"), (2, "playerOrBehaviorNotOwned")]
 )

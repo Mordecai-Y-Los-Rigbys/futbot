@@ -1,33 +1,32 @@
 """Loop en tiempo real: una tarea asyncio por partido, a 20 ticks por segundo."""
 
 import asyncio
+import dataclasses
 import logging
 import secrets
 import threading
 import time
-from dataclasses import dataclass
-from threading import Lock
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager
 
 from starlette.concurrency import run_in_threadpool
 
-from app.repositories.match_abstract import AbstractMatchRepository
-from app.repositories.substitution_abstract import AbstractSubstitutionRepository
+from app.repositories.match_abstract import PenaltyShootoutData
+from app.repositories.substitution_abstract import AbstractSubstitutionRepository, AppliedSwap
 from app.services.match_broadcast import (
     SEND_TIMEOUT,
     TickContext,
     broadcast_tick,
     build_tick_payload,
+    penalty_kick_record,
 )
-from app.services.match_connection_manager import MatchConnectionManager
-from app.services.match_setup_service import MatchSetup, to_player_setup
-from app.simulation.behaviors.sandbox import CompiledBehavior
+from app.services.match_progress import MatchProgress
+from app.simulation.behaviors.sandbox import CompiledBehavior, compile_behavior
 from app.simulation import constants as C
-from app.simulation.behaviors.sandbox import compile_behavior
-from app.simulation.match_rules import MatchSession, Phase, TickResult, build_session
-from app.simulation.state import Team
+from app.simulation.match_rules import Event, MatchSession, Phase, TickResult, build_session
+from app.simulation.physics import PlayerSetup
+from app.simulation.state import Stats, Team
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +35,6 @@ END_REASON = "matchEnd"
 ERROR_CODE = 1011
 ERROR_REASON = "matchError"
 MAX_TICK_COMPUTE = 0.1  # segundos: criterio de rendimiento
-
-
-@dataclass(frozen=True)
-class MatchRuntimeState:
-    pauses_left: int  # pausas que todavía NO empezaron (sin contar la actual)
-    in_penalties: bool = False
-    in_pause: bool = False
 
 
 class MatchRunner:
@@ -78,10 +70,9 @@ class MatchRunner:
         self._seed_factory = seed_factory
         self._send_timeout = send_timeout
         self._tasks: dict[int, asyncio.Task] = {}
-        self._runtime_states: dict[int, MatchRuntimeState] = {}
-        self._runtime_lock = Lock()
         self._pending: dict[int, dict[int, CompiledBehavior]] = {}
         self._pending_lock = threading.Lock()
+        self._progress: dict[int, MatchProgress] = {}
 
     def start(self, match_id: int) -> asyncio.Task:
         """Arranca el partido (idempotente). Hay que llamarlo con el event loop corriendo."""
@@ -93,10 +84,6 @@ class MatchRunner:
         task.add_done_callback(lambda t, mid=match_id: self._forget(mid, t))
         return task
 
-    def get_runtime_state(self, match_id: int) -> MatchRuntimeState | None:
-        with self._runtime_lock:
-            return self._runtime_states.get(match_id)
-            
     def queue_behavior(self, match_id: int, player_id: int, behavior: CompiledBehavior) -> bool:
         """Deja pendiente el cambio de comportamiento de un jugador. Se aplica antes del
         próximo tick. Devuelve False si el partido no se está jugando en este proceso."""
@@ -111,6 +98,13 @@ class MatchRunner:
         task = self._tasks.get(match_id)
         return task is not None and not task.done()
 
+    def progress(self, match_id: int) -> MatchProgress | None:
+        """Fase y período del último tick emitido. None si el partido no se está
+        jugando en este proceso. Lo lee la API (ver MatchProgressReader)."""
+        if not self.is_running(match_id):
+            return None
+        return self._progress.get(match_id)
+
     async def shutdown(self) -> None:
         """Cancela los partidos en curso y apaga el pool de threads. Se llama al apagar la app."""
         tasks = list(self._tasks.values())
@@ -122,10 +116,9 @@ class MatchRunner:
     def _forget(self, match_id: int, task: asyncio.Task) -> None:
         if self._tasks.get(match_id) is task:
             del self._tasks[match_id]
-            with self._runtime_lock:
-                self._runtime_states.pop(match_id, None)
             with self._pending_lock:
                 self._pending.pop(match_id, None)
+            self._progress.pop(match_id, None)
 
     async def _run(self, match_id: int) -> None:
         try:
@@ -143,13 +136,14 @@ class MatchRunner:
                 setup.countdown_seconds,
                 setup.periods,
                 setup.pause_seconds,
+                setup.allow_draws,
             )
             context = TickContext(
                 club_1=setup.club_1_name,
                 club_2=setup.club_2_name,
                 countdown_seconds=round(setup.countdown_seconds),
             )
-            await self._play(match_id, session, context, setup)
+            await self._play(match_id, session, context)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -169,28 +163,14 @@ class MatchRunner:
         with self._repo_scope() as repo:
             repo.save_seed(match_id, seed)
 
-    async def _play(
-        self, match_id: int, session: MatchSession, context: TickContext, setup: MatchSetup
-    ) -> None:
+    async def _play(self, match_id: int, session: MatchSession, context: TickContext) -> None:
         loop = asyncio.get_running_loop()
         started = False
-        previous_phase: Phase | None = None
         start = self._monotonic()
         while True:
-            if session.next_tick_starts_pause:
-                # Antes del primer tick de la pausa, para que ya muestre al suplente.
-                await self._start_pause(match_id, session, setup)
             began = self._monotonic()
             self._apply_pending(match_id, session)
             result = await loop.run_in_executor(self._executor, session.advance)
-            in_pause = result.phase is Phase.PAUSED
-            with self._runtime_lock:
-                self._runtime_states[match_id] = MatchRuntimeState(
-                    # pauses_remaining cuenta la pausa actual: se resta.
-                    pauses_left=session.pauses_remaining - (1 if in_pause else 0),
-                    in_penalties=(result.phase.value == "penalties"),
-                    in_pause=in_pause,
-                )
             compute = self._monotonic() - began
             if compute > MAX_TICK_COMPUTE:
                 logger.warning(
@@ -201,10 +181,12 @@ class MatchRunner:
                 await run_in_threadpool(self._mark_started, match_id)
                 started = True
 
-            if previous_phase is Phase.PAUSED and result.phase is not Phase.PAUSED:
-                # Terminó una pausa: se consume la sustitución de cada equipo.
-                await run_in_threadpool(self._end_pause, match_id)
-            previous_phase = result.phase
+            if result.event is Event.PAUSE:
+                # Empieza una pausa: se aplica la sustitución pendiente de cada equipo.
+                swaps = await run_in_threadpool(self._start_pause, match_id)
+                result = self._put_on_field(match_id, session, result, swaps)
+            # Después de aplicar los cambios: quien ve `paused` ya ve lo aplicado.
+            self._progress[match_id] = MatchProgress(result.phase, result.period, session.periods)
 
             finished = result.phase is Phase.FINISHED
             if finished:
@@ -225,46 +207,52 @@ class MatchRunner:
         with self._repo_scope() as repo:
             repo.mark_started(match_id)
 
-    async def _start_pause(self, match_id: int, session: MatchSession, setup: MatchSetup) -> None:
-        """Aplica la sustitución de cada equipo. Si falla, el partido sigue sin cambios."""
-        try:
-            substitutions = await run_in_threadpool(self._apply_substitutions, match_id)
-            for user_id, player, behavior in substitutions:
-                if user_id == setup.user_1_id:
-                    team = Team.HOME
-                elif user_id == setup.user_2_id:
-                    team = Team.AWAY
-                else:
-                    logger.warning("El usuario %s no juega el partido %s", user_id, match_id)
-                    continue
-                session.substitute(team, player.role, player, behavior)
-        except Exception:
-            logger.exception("No se pudieron aplicar los cambios del partido %s", match_id)
-
-    def _apply_substitutions(self, match_id: int) -> list:
-        with self._substitution_scope() as repo:
-            applied = repo.apply_by_match(match_id)
-        return [
-            (
-                item.user_id,
-                to_player_setup(item.incoming),
-                compile_behavior(item.incoming.behavior_code),
-            )
-            for item in applied
-        ]
-
-    def _end_pause(self, match_id: int) -> None:
-        # Se borran solo las aplicadas; las pendientes (pedidas durante la
-        # pausa) quedan para la pausa siguiente.
+    def _start_pause(self, match_id: int) -> list[AppliedSwap]:
+        """Aplica en la base las sustituciones pendientes. Si falla, el partido sigue
+        sin cambios."""
         try:
             with self._substitution_scope() as repo:
-                repo.delete_applied_by_match(match_id)
+                return repo.apply_pending(match_id)
         except Exception:
-            logger.exception("No se pudieron borrar los cambios del partido %s", match_id)
+            logger.exception("No se pudieron aplicar los cambios del partido %s", match_id)
+            return []
+
+    def _put_on_field(
+        self, match_id: int, session: MatchSession, result: TickResult, swaps: list[AppliedSwap]
+    ) -> TickResult:
+        """Pone en cancha a los suplentes que entran. Devuelve el tick con el estado
+        actualizado, así el primer tick de la pausa ya muestra a los que entraron."""
+        if not swaps:
+            return result
+        for swap in swaps:
+            incoming = swap.incoming
+            try:
+                session.substitute(
+                    Team.HOME if swap.club == "club1" else Team.AWAY,
+                    swap.out_player_id,
+                    PlayerSetup(
+                        incoming.player_id,
+                        incoming.role,
+                        Stats(
+                            power=incoming.power,
+                            agility=incoming.agility,
+                            control=incoming.control,
+                            strength=incoming.strength,
+                            speed=incoming.speed,
+                        ),
+                        incoming.name,
+                    ),
+                    compile_behavior(incoming.behavior_code),
+                )
+            except Exception:
+                logger.exception(
+                    "Partido %s: no se pudo poner en cancha a %s", match_id, incoming.player_id
+                )
+        return dataclasses.replace(result, state=session.state)
 
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
-            repo.finish(match_id, result.score_1, result.score_2)
+            repo.finish(match_id, result.score_1, result.score_2, _penalties_data(result))
 
     def _apply_pending(self, match_id: int, session: MatchSession) -> None:
         """Aplica los cambios de behavior pendientes antes del próximo tick."""
@@ -277,3 +265,16 @@ class MatchRunner:
                 logger.warning(
                     "Partido %s: el jugador %s ya no está en cancha", match_id, player_id
                 )
+
+
+def _penalties_data(result: TickResult) -> PenaltyShootoutData | None:
+    shootout = result.shootout
+    if shootout is None:
+        return None
+    return PenaltyShootoutData(
+        score_1=shootout.score_1,
+        score_2=shootout.score_2,
+        winner=1 if shootout.winner is Team.HOME else 2,
+        kicks=[penalty_kick_record(kick) for kick in shootout.kicks],
+    )
+
