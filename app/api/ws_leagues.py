@@ -7,8 +7,10 @@ from starlette.concurrency import run_in_threadpool
 from app.api.ws_league_deps import (
     get_fixture_handshake_scope,
     get_league_fixture_manager,
+    get_league_next_match_manager,
     get_league_participants_manager,
     get_league_ranking_manager,
+    get_next_match_handshake_scope,
     get_participants_handshake_scope,
     get_ranking_handshake_scope,
 )
@@ -95,5 +97,15 @@ async def league_ranking_stream(
     league_id: str,
     handshake_scope: HandshakeScope = Depends(get_ranking_handshake_scope),
     manager: LeagueChannelManager = Depends(get_league_ranking_manager),
+) -> None:
+    await _stream(websocket, league_id, handshake_scope, manager)
+
+
+@router.websocket("/ws/leagues/{league_id}/matches/next")
+async def league_next_match_stream(
+    websocket: WebSocket,
+    league_id: str,
+    handshake_scope: HandshakeScope = Depends(get_next_match_handshake_scope),
+    manager: LeagueChannelManager = Depends(get_league_next_match_manager),
 ) -> None:
     await _stream(websocket, league_id, handshake_scope, manager)
