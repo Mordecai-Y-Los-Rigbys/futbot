@@ -18,7 +18,7 @@ class GlobalRankingPage(CamelModel):
     page: int
     page_size: int
     total: int
-    
+
 
 class LeagueRankingEntry(CamelModel):
     position: int

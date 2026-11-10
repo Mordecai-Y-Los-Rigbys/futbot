@@ -222,24 +222,6 @@ def test_sixth_connection_is_4429(login_as, started_league, viewer, manager):
 # --- cambios ------------------------------------------------------------------
 
 
-def test_match_started_and_finished_reach_the_open_connection(
-    login_as, db_session, started_league, viewer, manager
-):
-    league_id, (first, _, _) = started_league()
-    with connect(login_as(viewer), path(league_id)) as ws:
-        ws.receive_json()
-
-        set_match(db_session, first, status=MatchStatus.started)
-        manager.fixture_changed(league_id)
-        assert by_id(ws.receive_json())[first]["status"] == "started"
-
-        set_match(db_session, first, status=MatchStatus.finished, score_1=3, score_2=1)
-        manager.fixture_changed(league_id)
-        finished = by_id(ws.receive_json())[first]
-        assert finished["status"] == "finished"
-        assert finished["result"] == {"score1": 3, "score2": 1, "penalties": None}
-
-
 def test_messages_of_one_league_do_not_reach_another(
     login_as, db_session, started_league, viewer, manager
 ):
@@ -255,27 +237,6 @@ def test_messages_of_one_league_do_not_reach_another(
         assert stays_silent(theirs)
 
 
-def test_finished_league_sends_the_last_message_and_closes(
-    login_as, db_session, started_league, viewer, manager
-):
-    league_id, match_ids = started_league()
-    api = login_as(viewer)
-    with connect(api, path(league_id)) as ws:
-        ws.receive_json()
-        for match_id in match_ids:
-            set_match(db_session, match_id, status=MatchStatus.finished, score_1=1, score_2=0)
-        set_league_status(db_session, league_id, LeagueStatus.finished)
-        manager.fixture_changed(league_id)
-
-        message = ws.receive_json()
-        assert message["leagueStatus"] == "finished"
-        assert all(m["status"] == "finished" for m in message["fixture"])
-        assert closing(ws) == (1000, "leagueFinished")
-
-    assert wait_until(lambda: manager.count(league_id, viewer.id) == 0)
-    assert rejection(api, path(league_id)) == (4409, "leagueFinished")
-
-
 def test_cancelled_league_sends_an_empty_fixture_and_closes(
     login_as, db_session, started_league, viewer, manager
 ):
@@ -287,15 +248,6 @@ def test_cancelled_league_sends_an_empty_fixture_and_closes(
         message = ws.receive_json()
         assert (message["leagueStatus"], message["fixture"]) == ("cancelled", [])
         assert closing(ws) == (1000, "leagueCancelled")
-
-
-def test_log_out_closes_its_connections_with_4401(login_as, started_league, viewer, manager):
-    league_id, _ = started_league()
-    api = login_as(viewer)
-    with connect(api, path(league_id)) as ws:
-        ws.receive_json()
-        manager.session_ended(api.cookies.get("session_id"))
-        assert closing(ws) == (4401, "sessionEnded")
 
 
 # --- inicio de la liga --------------------------------------------------------

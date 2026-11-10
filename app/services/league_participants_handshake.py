@@ -4,15 +4,7 @@ from app.domain.league import LeagueStatus
 from app.errors import ApiError
 from app.repositories.league_access_abstract import LeagueAccessRepository
 from app.repositories.league_participants_abstract import LeagueParticipantsRepository
-from app.services.league_channel_handshake import (  # noqa: F401  (re-exportados)
-    LEAGUE_NOT_FOUND_MESSAGE,
-    MAX_SESSION_ID_LEN,
-    LeagueChannelGrant,
-    LeagueChannelHandshakeService,
-    ValidSessions,
-)
-
-ParticipantsGrant = LeagueChannelGrant
+from app.services.league_channel_handshake import LeagueChannelHandshakeService, ValidSessions
 
 
 def reject_unless_preparation(status: LeagueStatus | None) -> ApiError | None:
@@ -34,4 +26,3 @@ class LeagueParticipantsHandshakeService(LeagueChannelHandshakeService):
         super().__init__(
             allowed_origins, sessions, access, participants, reject_unless_preparation
         )
-        self.participants = participants

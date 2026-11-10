@@ -74,7 +74,9 @@ def league_match(db_session, create_user, make_league):
 def test_private_league_outsider_flow(login_as, create_user, league_match):
     api = login_as(create_user("outsider"))
     url = f"/matches/{league_match.id}/connections"
-    assert api.post(url, json={"password": 1}).json()["code"] == "invalidFieldType"
+    resp = api.post(url, json={"password": 1})
+    assert resp.status_code == 400 and resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [{"field": "password", "reason": "invalidType"}]
     assert api.post(url, json={"password": "mala"}).status_code == 403
     assert api.post(url, json={"password": "secret"}).status_code == 201
 

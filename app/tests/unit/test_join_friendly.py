@@ -5,7 +5,7 @@ import pytest
 
 from app.api.deps import get_friendly_service
 from app.api.ws_deps import get_friendly_expiry, get_friendly_start
-from app.errors import ApiError
+from app.errors import ApiError, ValidationApiError
 from app.main import app
 from app.repositories.friendly_abstract import (
     AbstractFriendlyRepository,
@@ -13,10 +13,11 @@ from app.repositories.friendly_abstract import (
     FriendlyJoinState,
     FriendlyMatchData,
 )
-from app.schemas.errors import Error, JoinFriendlyMatchBadRequest, JoinFriendlyMatchConflict
+from app.schemas.errors import Error, JoinFriendlyMatchConflict, ValidationBadRequest
 from app.services.friendly_service import FriendlyService
 from app.services.friendly_validation import JoinFriendlyInput, parse_join_friendly
-from app.services.league_validation import INVALID_JSON, MemberInput
+from app.services.field_validation import INVALID_JSON, MemberInput
+from app.tests.unit.member_cases import MEMBERS_IDS, MEMBERS_PARAMS, MISSING, err
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
 
 ROLES = ["forward", "midfield", "defense", "substitute", "substitute", "substitute"]
@@ -81,18 +82,6 @@ def body():
     return {"members": members()}
 
 
-def with_member(index=0, **changes):
-    b = body()
-    b["members"][index].update(changes)
-    return b
-
-
-def without_key(key):
-    b = body()
-    del b["members"][0][key]
-    return b
-
-
 def club(id, username, name, avatar):
     return FriendlyClubData(id=id, username=username, club_name=name, avatar=avatar)
 
@@ -117,55 +106,11 @@ def state(**fields):
 # --- validación (parse_join_friendly) -----------------------------------------
 
 
-def code_of(raw):
-    with pytest.raises(ApiError) as exc:
+def errors_of(raw):
+    with pytest.raises(ValidationApiError) as exc:
         parse_join_friendly(raw)
-    assert exc.value.status_code == 400
-    return exc.value.code
-
-
-INVALID_TYPE = [
-    {"members": "x"},
-    {"members": 5},
-    {"members": {}},
-    {"members": None},
-    {"members": [5, 5, 5, 5, 5, 5]},
-    with_member(playerId="abc"),
-    with_member(playerId=1.5),
-    with_member(playerId=True),
-    with_member(playerId=None),
-    with_member(playerId=0),
-    with_member(playerId=-1),
-    with_member(playerId=2147483648),
-    with_member(behaviorId="abc"),
-    with_member(behaviorId=1.5),
-    with_member(behaviorId=0),
-    with_member(behaviorId=-1),
-    with_member(behaviorId=2147483648),
-    with_member(role=5),
-    with_member(role=None),
-    with_member(role=["forward"]),
-]
-
-INCOMPLETE = [
-    {},
-    {"name": "x"},
-    without_key("playerId"),
-    without_key("role"),
-    without_key("behaviorId"),
-]
-
-INVALID_TEAM = [
-    {"members": members()[:5]},
-    {"members": members() + [{"playerId": 99, "role": "substitute", "behaviorId": 21}]},
-    {"members": []},
-    with_member(index=1, playerId=11),  # playerId repetido
-    with_member(index=1, role="forward"),  # dos forwards, ningún midfield
-    with_member(index=2, role="substitute"),  # cuatro suplentes, ningún defense
-    with_member(role="goalkeeper"),  # string de rol desconocido
-    with_member(role=""),
-    with_member(role="FORWARD"),
-]
+    assert (exc.value.status_code, exc.value.code) == (400, "invalidFields")
+    return exc.value.errors
 
 
 def test_valid_body_is_parsed():
@@ -188,43 +133,15 @@ def test_name_is_ignored():
     assert len(parse_join_friendly(b).members) == 6
 
 
-@pytest.mark.parametrize("raw", [None, INVALID_JSON, [], [1], "x", 5, True])
-def test_unreadable_body_is_incomplete_form(raw):
-    assert code_of(raw) == "incompleteForm"
+@pytest.mark.parametrize("raw", [None, INVALID_JSON, {}, {"name": "x"}, [], [1], "x", 5, True])
+def test_unreadable_body_or_missing_members_is_required(raw):
+    assert errors_of(raw) == [err("members", "required")]
 
 
-@pytest.mark.parametrize("raw", INVALID_TYPE)
-def test_invalid_field_type(raw):
-    assert code_of(raw) == "invalidFieldType"
-
-
-@pytest.mark.parametrize("raw", INCOMPLETE)
-def test_incomplete_form(raw):
-    assert code_of(raw) == "incompleteForm"
-
-
-@pytest.mark.parametrize("raw", INVALID_TEAM)
-def test_invalid_team(raw):
-    assert code_of(raw) == "invalidTeam"
-
-
-def test_type_error_beats_incomplete_form():
-    b = body()
-    b["members"][0]["playerId"] = "abc"
-    del b["members"][1]["role"]
-    assert code_of(b) == "invalidFieldType"
-
-
-def test_incomplete_form_beats_invalid_team():
-    b = {"members": members()[:5]}
-    del b["members"][0]["behaviorId"]
-    assert code_of(b) == "incompleteForm"
-
-
-def test_type_error_beats_invalid_team():
-    b = {"members": members()[:5]}
-    b["members"][0]["playerId"] = "abc"
-    assert code_of(b) == "invalidFieldType"
+@pytest.mark.parametrize("members, expected", MEMBERS_PARAMS, ids=MEMBERS_IDS)
+def test_members_reasons(members, expected):
+    raw = {} if members is MISSING else {"members": members}
+    assert errors_of(raw) == expected
 
 
 # --- servicio -----------------------------------------------------------------
@@ -351,22 +268,23 @@ def test_404_beats_400_for_invalid_route_id(repo):
 def test_400_beats_409(repo):
     repo.get_friendly_state.return_value = state(rival_id=3)  # notJoinable
     err = error_of(repo, raw_body={})
-    assert (err.status_code, err.code) == (400, "incompleteForm")
+    assert (err.status_code, err.code) == (400, "invalidFields")
     repo.user_is_playing.assert_not_called()
 
 
 @pytest.mark.parametrize(
-    "raw_body, code",
+    "raw_body, reason",
     [
-        ({"members": "x"}, "invalidFieldType"),
-        ({}, "incompleteForm"),
-        (None, "incompleteForm"),
+        ({"members": "x"}, "invalidType"),
+        ({}, "required"),
+        (None, "required"),
         ({"members": []}, "invalidTeam"),
     ],
 )
-def test_400_codes_reach_the_caller_without_side_effects(repo, raw_body, code):
-    err = error_of(repo, raw_body=raw_body)
-    assert (err.status_code, err.code) == (400, code)
+def test_400_reaches_the_caller_without_side_effects(repo, raw_body, reason):
+    exc = error_of(repo, raw_body=raw_body)
+    assert (exc.status_code, exc.code) == (400, "invalidFields")
+    assert exc.errors == [err("members", reason)]
     repo.user_is_playing.assert_not_called()
     repo.join_friendly.assert_not_called()
 
@@ -531,28 +449,32 @@ def test_endpoint_nonexistent_match_is_404(auth_join_api, repo, expiry):
 
 
 @pytest.mark.parametrize(
-    "kwargs, code",
+    "kwargs, errors",
     [
-        ({}, "incompleteForm"),  # sin body
-        ({"content": "{", "headers": {"Content-Type": "application/json"}}, "incompleteForm"),
-        ({"json": []}, "incompleteForm"),
-        ({"json": "x"}, "incompleteForm"),
-        ({"json": 5}, "incompleteForm"),
-        ({"json": {}}, "incompleteForm"),
-        ({"json": {"members": "x"}}, "invalidFieldType"),
+        ({}, [err("members", "required")]),  # sin body
+        (
+            {"content": "{", "headers": {"Content-Type": "application/json"}},
+            [err("members", "required")],
+        ),
+        ({"json": []}, [err("members", "required")]),
+        ({"json": "x"}, [err("members", "required")]),
+        ({"json": 5}, [err("members", "required")]),
+        ({"json": {}}, [err("members", "required")]),
+        ({"json": {"members": "x"}}, [err("members", "invalidType")]),
         (
             {"json": {"members": [{"playerId": "abc", "role": "forward", "behaviorId": 1}]}},
-            "invalidFieldType",
+            [err("members[0].playerId", "invalidType")],
         ),
-        ({"json": {"members": []}}, "invalidTeam"),
+        ({"json": {"members": []}}, [err("members", "invalidTeam")]),
     ],
 )
-def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, kwargs, code):
+def test_body_errors_are_400_never_422(auth_join_api, repo, expiry, kwargs, errors):
     resp = auth_join_api.post(URL, **kwargs)
     assert resp.status_code == 400
-    assert resp.json()["code"] == code
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == errors
     assert resp.json()["message"]
-    JoinFriendlyMatchBadRequest.model_validate(resp.json())
+    ValidationBadRequest.model_validate(resp.json())
     repo.join_friendly.assert_not_called()
     assert nothing_scheduled(expiry)
 

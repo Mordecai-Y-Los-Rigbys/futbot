@@ -24,7 +24,7 @@ class AbstractRankingRepository(ABC):
     def list_club_totals(self) -> list[ClubRankingData]:
         """Un elemento por club con al menos un partido finalizado de una liga
         pública que ya no está en `preparation`. Sin orden garantizado."""
-        
+
     @abstractmethod
     def list_league_club_totals(self, league_id: int) -> list[ClubRankingData]:
         """Un elemento por participante de la liga, con sus totales sobre los

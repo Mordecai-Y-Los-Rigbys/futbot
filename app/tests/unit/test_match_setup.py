@@ -5,10 +5,11 @@ import pytest
 from app.domain.team_member import MemberRole
 from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import MatchSetupData
-from app.repositories.team_abstract import AbstractTeamRepository, StarterData
+from app.repositories.team_abstract import StarterData
 from app.services.match_setup_service import MatchSetupService
 from app.simulation.constants import STARTER_ROLES, FRIENDLY_MATCH_DURATION
 from app.tests.unit.match_ws_fakes import FakeMatchRepo
+from app.tests.unit.repo_fakes import FakeTeams
 
 
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
@@ -61,7 +62,7 @@ class FakeLeagues(AbstractLeagueRepository):
 
     def join(self, data):
         raise NotImplementedError
-    
+
     def get_fixture(self, league_id):
         raise NotImplementedError
 
@@ -72,22 +73,6 @@ class FakeLeagues(AbstractLeagueRepository):
         raise NotImplementedError
 
     def start(self, league_id, plan_fixture):
-        raise NotImplementedError
-
-
-class FakeTeams(AbstractTeamRepository):
-    def __init__(self, starters=None):
-        self.starters = starters or {}  # {user_id: [StarterData]}
-        self.calls = []
-
-    def get_starters(self, match_id, league_id, user_id):
-        self.calls.append((match_id, league_id, user_id))
-        return self.starters.get(user_id, [])
-
-    def get_lineup(self, match_id, league_id, user_id):
-        raise NotImplementedError
-
-    def set_behavior(self, match_id, league_id, player_id, behavior_id):
         raise NotImplementedError
 
 
@@ -175,7 +160,7 @@ def test_league_that_does_not_exist_is_a_lookup_error():
 
 def test_team_without_starters_is_an_error():
     service, _, _ = build(setup_data(), starters={1: full_team(10), 2: []})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="equipo del usuario 2"):
         service.load_match_setup(1)
 
 

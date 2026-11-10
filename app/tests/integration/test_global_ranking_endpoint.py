@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +8,7 @@ from app.models.match import Match
 
 pytestmark = pytest.mark.integration
 
-F = MatchStatus.finished
+FINISHED = MatchStatus.finished
 DATE = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
@@ -24,8 +24,8 @@ def public_league(creator, make_league):
 
 @pytest.fixture()
 def add_match(db_session):
-    def _add(league, u1, u2, s1=0, s2=0, penalty_winner=None, status=F):
-        finished = status == F
+    def _add(league, u1, u2, s1=0, s2=0, penalty_winner=None, status=FINISHED):
+        finished = status == FINISHED
         match = Match(
             league_id=league.id if league else None,
             user_1_id=u1.id,
@@ -37,6 +37,7 @@ def add_match(db_session):
             penalty_score_1=(4 if penalty_winner == 1 else 3) if penalty_winner else None,
             penalty_score_2=(3 if penalty_winner == 1 else 4) if penalty_winner else None,
             penalty_winner=penalty_winner,
+            penalty_kicks=[] if penalty_winner else None,
         )
         db_session.add(match)
         db_session.commit()
@@ -125,12 +126,25 @@ def test_only_finished_public_league_matches_count(
     assert r.json()["total"] == 2
 
 
+def test_finished_public_league_matches_count(login_as, creator, make_league, add_match, users):
+    finished_league = make_league(creator, "Terminada", status="finished")
+    add_match(finished_league, users[0], users[1], 1, 0)
+    assert names(get(login_as(creator))) == ["Club a", "Club b"]
+
+
 def test_entry_values_regular_win(login_as, creator, public_league, add_match, users):
     add_match(public_league, users[0], users[1], 3, 1)
     items = get(login_as(creator)).json()["items"]
     assert items[0] == {
-        "position": 1, "name": "Club a", "avatar": 1, "score": 3, "goalDifference": 2,
-        "goals": 3, "wonRegular": 1, "wonPenalties": 0, "lost": 0,
+        "position": 1,
+        "name": "Club a",
+        "avatar": 1,
+        "score": 3,
+        "goalDifference": 2,
+        "goals": 3,
+        "wonRegular": 1,
+        "wonPenalties": 0,
+        "lost": 0,
     }
     assert items[1]["score"] == 0 and items[1]["lost"] == 1
     assert items[1]["goalDifference"] == -2 and items[1]["goals"] == 1
@@ -142,7 +156,9 @@ def test_penalty_win_gives_2_points_and_no_penalty_goals(
 ):
     add_match(public_league, users[0], users[1], 2, 2, penalty_winner=winner)
     items = {i["name"]: i for i in get(login_as(creator)).json()["items"]}
-    won, lost = (items["Club a"], items["Club b"]) if winner == 1 else (items["Club b"], items["Club a"])
+    won, lost = (
+        (items["Club a"], items["Club b"]) if winner == 1 else (items["Club b"], items["Club a"])
+    )
     assert (won["score"], won["wonPenalties"], won["wonRegular"]) == (2, 1, 0)
     assert (lost["score"], lost["lost"], lost["wonPenalties"]) == (0, 1, 0)
     assert won["goals"] == lost["goals"] == 2  # los penales no suman goles
@@ -169,18 +185,15 @@ def test_orders_by_score_then_goal_difference(login_as, creator, public_league, 
 def test_won_penalties_break_ties_after_won_regular(
     login_as, creator, public_league, add_match, users
 ):
-    a, b, c, d = users
-    # a: gana por penales (2) + empata (1) = 3 pts. c: gana 1-0... se evita: c: 3 empates
-    # c y d empatan tres veces entre sí en dos ligas distintas no hace falta: usamos 3 ligas.
-    add_match(public_league, a, b, 1, 1, penalty_winner=1)  # a 2 pts
-    add_match(public_league, a, c, 1, 1)  # a 3 pts, goles 2, DG 0
-    add_match(public_league, c, d, 1, 1)  # c: 2 pts
-    add_match(public_league, c, d, 1, 1)
-    add_match(public_league, c, d, 1, 1)  # c: 4 pts
-    r = get(login_as(creator))
-    scores = {i["name"]: i["score"] for i in r.json()["items"]}
-    assert scores["Club a"] == 3 and scores["Club c"] == 4
-    assert names(r)[0] == "Club c"
+    club_a, club_b, club_c, club_d = users
+    add_match(public_league, club_a, club_b, 1, 1, penalty_winner=1)  # a: gana por penales, 2 pts
+    add_match(public_league, club_a, club_b, 0, 0)  # a: 3 pts, 1 gol, DG 0
+    add_match(public_league, club_c, club_d, 1, 1)
+    add_match(public_league, club_c, club_d, 0, 0)
+    add_match(public_league, club_c, club_d, 0, 0)  # c: 3 empates, 3 pts, 1 gol, DG 0
+    items = get(login_as(creator)).json()["items"]
+    assert [item["name"] for item in items] == ["Club a", "Club c", "Club d", "Club b"]
+    assert [item["position"] for item in items] == [1, 2, 2, 4]
 
 
 def test_tied_clubs_are_ordered_by_id_and_paginate_stably(
@@ -227,9 +240,27 @@ def test_endpoint_is_read_only(login_as, creator, public_league, add_match, user
 @pytest.mark.parametrize(
     "fields",
     [
-        dict(status=F, score_1=1, score_2=1, penalty_winner=1),  # falta el resultado de la tanda
-        dict(status=F, score_1=2, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=1),  # no empató
-        dict(status=F, score_1=1, score_2=1, penalty_score_1=3, penalty_score_2=2, penalty_winner=3),
+        dict(
+            status=FINISHED, score_1=1, score_2=1, penalty_winner=1
+        ),  # falta el resultado de la tanda
+        dict(
+            status=FINISHED,
+            score_1=2,
+            score_2=1,
+            penalty_score_1=3,
+            penalty_score_2=2,
+            penalty_winner=1,
+            penalty_kicks=[],
+        ),  # no empató
+        dict(
+            status=FINISHED,
+            score_1=1,
+            score_2=1,
+            penalty_score_1=3,
+            penalty_score_2=2,
+            penalty_winner=3,
+            penalty_kicks=[],
+        ),
     ],
 )
 def test_invalid_penalty_combinations_are_rejected(db_session, users, fields):

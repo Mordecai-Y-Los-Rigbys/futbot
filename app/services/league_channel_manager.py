@@ -172,19 +172,6 @@ class LeagueChannelManager:
                 )
             self._reserved[key] = current + 1
 
-    def _new_connection(
-        self,
-        league_id: int,
-        user_id: int,
-        session_id: str,
-        websocket: WebSocket,
-        session_expires_at: datetime | None,
-    ) -> LeagueChannelConnection:
-        return LeagueChannelConnection(
-            league_id, user_id, session_id, websocket,
-            self._load_state, self._spec, session_expires_at,
-        )
-
     def subscribe(
         self,
         league_id: int,
@@ -193,8 +180,9 @@ class LeagueChannelManager:
         websocket: WebSocket,
         session_expires_at: datetime | None = None,
     ) -> LeagueChannelConnection:
-        connection = self._new_connection(
-            league_id, user_id, session_id, websocket, session_expires_at
+        connection = LeagueChannelConnection(
+            league_id, user_id, session_id, websocket,
+            self._load_state, self._spec, session_expires_at,
         )
         with self._lock:
             self._subscribers.setdefault(league_id, set()).add(connection)

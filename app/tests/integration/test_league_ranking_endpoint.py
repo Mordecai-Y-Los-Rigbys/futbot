@@ -22,6 +22,7 @@ def make_match(db_session):
             penalty_score_1=p1,
             penalty_score_2=p2,
             penalty_winner=winner,
+            penalty_kicks=[] if winner else None,
             scheduled_at=datetime.now(timezone.utc),
         )
         db_session.add(match)
