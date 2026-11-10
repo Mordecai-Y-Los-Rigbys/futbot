@@ -130,19 +130,19 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
         ).all()
 
         # Orden en Python (no en SQL): titulares por rol, suplentes por id de fila.
-        rows = sorted(rows, key=lambda r: (_ROLE_ORDER[MemberRole(r.role)], r.member_id))
+        rows = sorted(rows, key=lambda row: (_ROLE_ORDER[MemberRole(row.role)], row.member_id))
         members = [
             TeamMemberData(
-                player_id=r.player_id,
-                name=r.player_name,
-                role=MemberRole(r.role),
+                player_id=row.player_id,
+                name=row.player_name,
+                role=MemberRole(row.role),
                 behavior=TeamBehaviorData(
-                    id=r.behavior_id,
-                    name=r.behavior_name,
-                    type=BehaviorType(r.behavior_type),
+                    id=row.behavior_id,
+                    name=row.behavior_name,
+                    type=BehaviorType(row.behavior_type),
                 ),
             )
-            for r in rows
+            for row in rows
         ]
         return MatchTeamData(
             members=members, coach_behavior=self._coach_behavior(league_id, user_id)

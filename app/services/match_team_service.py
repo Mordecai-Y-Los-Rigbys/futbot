@@ -1,12 +1,10 @@
 from app.errors import ApiError
 from app.repositories.match_abstract import AbstractMatchRepository
-from app.repositories.team_abstract import AbstractTeamRepository
+from app.repositories.team_abstract import AbstractTeamRepository, TeamBehaviorData
 from app.schemas.match_team import MatchTeam, MatchTeamMember, TeamBehavior
 
 
-def _behavior(data) -> TeamBehavior | None:
-    if data is None:
-        return None
+def _behavior(data: TeamBehaviorData) -> TeamBehavior:
     return TeamBehavior(id=data.id, name=data.name, type=data.type)
 
 
@@ -33,12 +31,12 @@ class MatchTeamService:
         return MatchTeam(
             members=[
                 MatchTeamMember(
-                    player_id=m.player_id,
-                    name=m.name,
-                    role=m.role,
-                    behavior=_behavior(m.behavior),
+                    player_id=member.player_id,
+                    name=member.name,
+                    role=member.role,
+                    behavior=_behavior(member.behavior),
                 )
-                for m in team.members
+                for member in team.members
             ],
-            coach_behavior=_behavior(team.coach_behavior),
+            coach_behavior=_behavior(team.coach_behavior) if team.coach_behavior else None,
         )
