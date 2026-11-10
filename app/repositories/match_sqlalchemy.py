@@ -178,4 +178,3 @@ class SqlAlchemyMatchRepository(AbstractMatchRepository):
             user_1_id=row.user_1_id,
             user_2_id=row.user_2_id,
         )
-

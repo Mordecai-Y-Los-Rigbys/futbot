@@ -1,16 +1,17 @@
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.league_validation import (
-    INVALID_JSON,
-    MAX_NAME_LEN,
-    MEMBER_KEYS,
+from app.errors import ValidationApiError
+from app.services.field_validation import (
     MemberInput,
-    _bad,
-    _check_team,
-    _check_members_types,
-    _invalid_type,
+    all_required,
+    field_error,
+    is_readable,
+    members_errors,
+    str_reason,
+    to_members,
 )
+from app.services.league_validation import MAX_NAME_LEN
 
 REQUIRED = ("name", "members")
 
@@ -21,66 +22,41 @@ class CreateFriendlyInput:
     members: list[MemberInput]
 
 
-def _check_types(body: dict) -> None:
-    """invalidFieldType: tipos incorrectos o IDs fuera de rango."""
-    if "name" in body and not isinstance(body["name"], str):
-        _invalid_type("`name` debe ser un string.")
-    _check_members_types(body)
-
-
-def parse_create_friendly(body: Any) -> CreateFriendlyInput:
-    """Todos los 400, en orden: invalidFieldType > incompleteForm >
-    nameTooLong > invalidTeam."""
-    if body is INVALID_JSON or (body is not None and not isinstance(body, dict)):
-        raise _bad("invalidFieldType", "El body debe ser un objeto JSON válido.")
-    body = body or {}
-
-    _check_types(body)
-
-    missing = [f for f in REQUIRED if f not in body]
-    if missing:
-        raise _bad("incompleteForm", f"Falta `{missing[0]}`.")
-    if body["name"] == "":
-        raise _bad("incompleteForm", "`name` no puede estar vacío.")
-    for m in body["members"]:
-        for k in MEMBER_KEYS:
-            if k not in m:
-                raise _bad("incompleteForm", f"Cada elemento de `members` necesita `{k}`.")
-
-    if len(body["name"]) > MAX_NAME_LEN:
-        raise _bad("nameTooLong", f"`name` no puede superar {MAX_NAME_LEN} caracteres.")
-
-    _check_team(body["members"])
-
-    return CreateFriendlyInput(
-        name=body["name"],
-        members=[MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]],
-    )
-
-
 @dataclass(frozen=True)
 class JoinFriendlyInput:
     members: list[MemberInput]
 
 
+def parse_create_friendly(body: Any) -> CreateFriendlyInput:
+    """Valida el body de POST /friendlies (todos los campos que fallan, convención 6).
+
+    Raises:
+        ValidationApiError 400: invalidFields con todos los campos que fallan.
+    """
+    if not is_readable(body):
+        raise ValidationApiError(all_required(REQUIRED))
+
+    name_reason = str_reason(body, "name", MAX_NAME_LEN)
+    errors = [field_error("name", name_reason)] if name_reason else []
+    errors += members_errors(body)
+    if errors:
+        raise ValidationApiError(errors)
+
+    return CreateFriendlyInput(name=body["name"], members=to_members(body["members"]))
+
+
 def parse_join_friendly(body: Any) -> JoinFriendlyInput:
-    """Todos los 400, en orden: invalidFieldType > incompleteForm > invalidTeam.
-    Un body ilegible, vacío o que no es un objeto cuenta como si faltara
-    `members` (convención 9) y se evalúa antes que cualquier regla de campo."""
-    if body is None or body is INVALID_JSON or not isinstance(body, dict):
-        raise _bad("incompleteForm", "Falta `members`.")
+    """Valida el body de POST /friendlies/{id}/members. Un body ilegible cuenta
+    como si faltara `members` (convención 9).
 
-    _check_members_types(body)
+    Raises:
+        ValidationApiError 400: invalidFields con todos los campos que fallan.
+    """
+    if not is_readable(body):
+        raise ValidationApiError(all_required(("members",)))
 
-    if "members" not in body:
-        raise _bad("incompleteForm", "Falta `members`.")
-    for m in body["members"]:
-        for k in MEMBER_KEYS:
-            if k not in m:
-                raise _bad("incompleteForm", f"Cada elemento de `members` necesita `{k}`.")
+    errors = members_errors(body)
+    if errors:
+        raise ValidationApiError(errors)
 
-    _check_team(body["members"])
-
-    return JoinFriendlyInput(
-        members=[MemberInput(m["playerId"], m["behaviorId"], m["role"]) for m in body["members"]]
-    )
+    return JoinFriendlyInput(members=to_members(body["members"]))

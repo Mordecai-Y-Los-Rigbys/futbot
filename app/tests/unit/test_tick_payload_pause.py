@@ -37,9 +37,7 @@ def test_last_pause_tick_has_one_remaining():
 
 
 def test_halftime_reason():
-    p = build_tick_payload(
-        result(event=Event.PAUSE, **pause_kw(15, PauseReason.HALFTIME)), CTX
-    )
+    p = build_tick_payload(result(event=Event.PAUSE, **pause_kw(15, PauseReason.HALFTIME)), CTX)
     assert p["event"]["reason"] == "halftime"
     TickPayload.model_validate(p)
 

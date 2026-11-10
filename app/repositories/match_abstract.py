@@ -31,7 +31,6 @@ class PenaltyShootoutData(BaseModel):
 
 class MatchPlayersData(BaseModel):
     id: int
-    league_id: int | None = None
     status: MatchStatus
     user_1_id: int
     user_2_id: int | None

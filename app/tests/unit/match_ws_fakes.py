@@ -105,5 +105,4 @@ class FakeSubstitutionRepo(AbstractSubstitutionRepository):
         return swaps
 
     def upsert(self, match_id, user_id, member_in_id, member_out_id):
-        return None
-
+        raise NotImplementedError

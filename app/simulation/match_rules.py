@@ -21,7 +21,6 @@ el primer tick de la pausa: la pelota nunca queda dentro del arco en `paused`.
 """
 
 import copy
-import dataclasses
 import enum
 import math
 from collections.abc import Mapping, Sequence
@@ -38,7 +37,7 @@ from app.simulation.physics import (
     step,
 )
 from app.simulation.penalties import PenaltyKick, Shootout, ShootoutStatus
-from app.simulation.state import Goal, MatchState, PlayerKey, PlayerState, Team
+from app.simulation.state import Goal, MatchState, PlayerKey, Team
 from app.domain.team_member import MemberRole
 
 
@@ -89,10 +88,6 @@ class TickResult:
     pause_duration_seconds: int | None = None  # solo en ticks `paused`
     shootout: ShootoutStatus | None = None  # solo en la tanda y en su tick final
     penalty_kick: PenaltyKick | None = None  # solo si event == PENALTY_KICK
-    # Pausas que todavía no empezaron. No cuenta la pausa en curso: el tick con el
-    # evento `pause` ya trae el valor decrementado. Es la única fuente de la regla:
-    # el `pausesLeft` del tick y el 409 `noPausesLeft` salen de acá.
-    pauses_left: int = 0
 
 
 @dataclass(frozen=True)
@@ -103,7 +98,6 @@ class _Segment:
     ticks: int
     period: int
     restart: bool = False  # su primer tick reinicia el partido (saque normal)
-    pauses_left: int = 0  # pausas que no empezaron cuando salen los ticks de este tramo
 
 
 class MatchSession:
@@ -143,7 +137,6 @@ class MatchSession:
         self._score_2 = 0
         self._pending_reset = False
         self._finished = False
-        self._last_phase: Phase | None = None
 
     def _build_segments(self) -> list[_Segment]:
         base = self._play_ticks // self._periods
@@ -158,13 +151,6 @@ class MatchSession:
             # el último período absorbe el resto de la división
             ticks = base if period < self._periods else self._play_ticks - base * (period - 1)
             segments.append(_Segment(Phase.PLAYING, ticks, period, restart))
-        # Pausas por empezar en cada tramo: las pausas que vienen después de él. Una
-        # pausa no se cuenta a sí misma, así que su primer tick ya trae el valor nuevo.
-        pending = 0
-        for index in range(len(segments) - 1, -1, -1):
-            segments[index] = dataclasses.replace(segments[index], pauses_left=pending)
-            if segments[index].phase is Phase.PAUSED:
-                pending += 1
         return segments
 
     @property
@@ -183,24 +169,6 @@ class MatchSession:
     @property
     def total_ticks(self) -> int:
         return sum(s.ticks for s in self._segments)
-
-    @property
-    def pauses_remaining(self) -> int:
-        """Pausas disponibles, contando también el último tick de la pausa actual."""
-        remaining = sum(
-            1 for segment in self._segments[self._seg_index:] if segment.phase is Phase.PAUSED
-        )
-        # advance() adelanta el índice al producir el último tick del segmento.
-        # Ese tick sigue perteneciendo a la pausa y todavía admite solicitudes.
-        if (
-            self._last_phase is Phase.PAUSED
-            and (
-                self._seg_index >= len(self._segments)
-                or self._segments[self._seg_index].phase is not Phase.PAUSED
-            )
-        ):
-            remaining += 1
-        return remaining
 
     @property
     def pause_starts(self) -> list[float]:
@@ -233,14 +201,11 @@ class MatchSession:
             self._restart()
 
         if segment.phase is Phase.PAUSED:
-            result = self._pause_tick(seq, segment, offset)
-        elif segment.phase is Phase.COUNTDOWN:
+            return self._pause_tick(seq, segment, offset)
+        if segment.phase is Phase.COUNTDOWN:
             event = Event.PERIOD_START if offset == 0 else None
-            result = self._result(seq, segment, event)
-        else:
-            result = self._play(seq, segment)
-        self._last_phase = result.phase
-        return result
+            return self._result(seq, segment, event)
+        return self._play(seq, segment)
 
     def replace_behavior(self, player_id: int, behavior: CompiledBehavior) -> None:
         """Reemplaza el comportamiento de un jugador en tiempo real."""
@@ -284,6 +249,7 @@ class MatchSession:
         player = state.players[index]
         player.player_id = incoming.player_id
         player.stats = incoming.stats
+        player.name = incoming.name
         player.move = None
         player.next_kick_tick = C.NO_KICK_COOLDOWN
         player.regain_blocked_until = C.NOT_REGAIN_BLOCKED
@@ -374,7 +340,6 @@ class MatchSession:
             period=self._periods,
             shootout=penalty.status,
             penalty_kick=penalty.kick if event is Event.PENALTY_KICK else None,
-            pauses_left=0,  # la tanda viene después del último período: ya empezaron todas
         )
 
     def _reset_after_goal(self) -> None:
@@ -434,7 +399,6 @@ class MatchSession:
             pause_reason=pause_reason,
             pause_remaining_seconds=pause_remaining,
             pause_duration_seconds=round(self._pause_seconds) if paused else None,
-            pauses_left=segment.pauses_left,
         )
 
 

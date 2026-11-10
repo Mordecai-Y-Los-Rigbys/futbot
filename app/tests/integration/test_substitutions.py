@@ -4,19 +4,18 @@ Las reglas que miran otras tablas las hace cumplir un trigger de Postgres,
 así que no se pueden probar con el SQLite de los unit tests.
 """
 
-from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
+from app.api.ws_deps import get_match_runner
 from app.domain.match import MatchStatus
+from app.main import app
 from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
-from app.api.ws_deps import get_match_runner
-from app.main import app
 from app.models.substitution import AppliedSubstitution, Substitution
 from app.models.team_member import MemberRole, TeamMember
 from app.repositories.substitution_sqlalchemy import SqlAlchemySubstitutionRepository
@@ -29,12 +28,16 @@ pytestmark = pytest.mark.integration
 
 
 def substitute(db, match, team, out_idx=0, in_idx=3):
+    """Pide un cambio del equipo de `team`: sale team[out_idx] y entra
+    team[in_idx]. Si el equipo ya tenía uno en el partido, lo reemplaza."""
     user_id = team[out_idx].user_id
     sub = db.get(Substitution, (match.id, user_id))
     if sub is None:
         sub = Substitution(
-            match_id=match.id, user_id=user_id,
-            member_in_id=team[in_idx].id, member_out_id=team[out_idx].id,
+            match_id=match.id,
+            user_id=user_id,
+            member_in_id=team[in_idx].id,
+            member_out_id=team[out_idx].id,
         )
         db.add(sub)
     else:
@@ -48,6 +51,7 @@ def by_user(db, match):
     rows = SqlAlchemySubstitutionRepository(db).list_by_match(match.id)
     return {r.user_id: r for r in rows}
 
+
 def names_of(db, team, out_idx, in_idx):
     return (
         db.get(Player, team[out_idx].player_id).name,
@@ -56,40 +60,17 @@ def names_of(db, team, out_idx, in_idx):
 
 
 def assert_rejected(db, match, member_in, member_out, user_id=None):
-    db.add(Substitution(
-        match_id=match.id,
-        user_id=member_in.user_id if user_id is None else user_id,
-        member_in_id=member_in.id,
-        member_out_id=member_out.id,
-    ))
+    db.add(
+        Substitution(
+            match_id=match.id,
+            user_id=member_in.user_id if user_id is None else user_id,
+            member_in_id=member_in.id,
+            member_out_id=member_out.id,
+        )
+    )
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
-
-
-@contextmanager
-def match_progress(
-    phase=Phase.PLAYING, period=1, periods=4, in_penalties=False, pauses_left=None
-):
-    """El runner del partido, con el progreso indicado (por defecto: jugando el período 1 de 4).
-
-    Si no se indica `pauses_left`, es el del calendario estándar (una pausa entre
-    períodos consecutivos): las que vienen después del punto indicado, sin contar
-    la pausa en curso.
-    """
-    if pauses_left is None:
-        pauses_left = max(0, periods - period - (1 if phase is Phase.PAUSED else 0))
-    progress = MatchProgress(phase, period, periods, pauses_left, in_penalties)
-
-    class Runner:
-        def progress(self, match_id):
-            return progress
-
-    app.dependency_overrides[get_match_runner] = lambda: Runner()
-    try:
-        yield
-    finally:
-        app.dependency_overrides.pop(get_match_runner, None)
 
 
 def remaining(db):
@@ -98,6 +79,7 @@ def remaining(db):
 
 
 # --- caso válido ---
+
 
 def test_valid_substitution_in_league_match(db_session, league_match):
     match, teams = league_match
@@ -114,6 +96,7 @@ def test_valid_substitution_in_friendly(db_session, friendly_match):
 
 
 # --- una sola por equipo y partido ---
+
 
 def test_requesting_again_replaces_the_previous_substitution(db_session, league_match):
     match, teams = league_match
@@ -169,6 +152,7 @@ def test_the_same_team_can_have_one_in_each_match(db_session, league_match):
 
 # --- el partido debe estar en juego ---
 
+
 @pytest.mark.parametrize("status", [MatchStatus.scheduled, MatchStatus.cancelled])
 def test_match_not_started_is_rejected(db_session, league_match, status):
     match, teams = league_match
@@ -200,6 +184,7 @@ def test_replacing_after_the_match_finished_is_rejected(db_session, league_match
 
 # --- mismo equipo ---
 
+
 def test_members_of_different_teams_are_rejected(db_session, league_match):
     match, teams = league_match
     assert_rejected(db_session, match, teams[2][3], teams[1][0], user_id=1)
@@ -217,6 +202,7 @@ def test_user_id_must_be_the_owner_of_the_members(db_session, league_match):
 
 
 # --- el equipo debe ser del partido ---
+
 
 def test_team_of_another_league_is_rejected(db_session, league_match, make_behaviors):
     match, _ = league_match
@@ -251,6 +237,7 @@ def test_team_of_a_user_not_in_the_match_is_rejected(
 
 # --- cascade ---
 
+
 def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
     match, teams = friendly_match
     substitute(db_session, match, teams[1])
@@ -260,6 +247,7 @@ def test_substitutions_are_deleted_with_the_match(db_session, friendly_match):
 
 
 # --- list_by_match ---
+
 
 def test_list_by_match_returns_one_per_team_with_names(db_session, league_match):
     match, teams = league_match
@@ -321,12 +309,11 @@ def test_list_by_match_ignores_other_matches_and_empty_teams(db_session, league_
     substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
     rows = by_user(db_session, match)
     assert set(rows) == {1}  # el equipo 2 no aparece y no se cuelan los del otro partido
-    assert (rows[1].starter_name, rows[1].substitute_name) == names_of(
-        db_session, teams[1], 0, 3
-    )
+    assert (rows[1].starter_name, rows[1].substitute_name) == names_of(db_session, teams[1], 0, 3)
 
 
 # --- apply_pending (empieza cada pausa) ---
+
 
 def applied_by_user(db, match):
     rows = SqlAlchemySubstitutionRepository(db).list_applied_by_match(match.id)
@@ -359,6 +346,45 @@ def test_apply_pending_swaps_the_roles_and_returns_the_incoming_player(db_sessio
     starters = SqlAlchemyTeamRepository(db_session).get_starters(match.id, match.league_id, 1)
     assert in_player in {r.player_id for r in starters}
     assert out_player not in {r.player_id for r in starters}
+
+
+def test_the_starter_that_leaves_keeps_its_behavior_on_the_bench(
+    db_session, league_match, make_behaviors
+):
+    match, teams = league_match
+    starter, bench_player = teams[1][0], teams[1][3]
+    bench_behavior = make_behaviors(1, ["suplente"])[0]
+    bench_player.behavior_id = bench_behavior.id
+    db_session.commit()
+    starter_behavior_id = starter.behavior_id
+    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
+
+    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
+
+    db_session.expire_all()
+    assert (starter.role, starter.behavior_id) == (MemberRole.substitute, starter_behavior_id)
+    assert (bench_player.role, bench_player.behavior_id) == (MemberRole.forward, bench_behavior.id)
+
+
+def test_after_three_substitutions_the_team_has_three_starters_and_three_substitutes(
+    db_session, league_match
+):
+    match, teams = league_match
+    repo = SqlAlchemySubstitutionRepository(db_session)
+    for out_idx, in_idx in ((0, 3), (1, 4), (2, 5)):
+        substitute(db_session, match, teams[1], out_idx=out_idx, in_idx=in_idx)
+        repo.apply_pending(match.id)
+
+    roles = roles_of(db_session, teams[1])
+    team = teams[1]
+    assert roles == {
+        team[0].player_id: MemberRole.substitute,
+        team[1].player_id: MemberRole.substitute,
+        team[2].player_id: MemberRole.substitute,
+        team[3].player_id: MemberRole.forward,
+        team[4].player_id: MemberRole.midfield,
+        team[5].player_id: MemberRole.defense,
+    }
 
 
 def test_apply_pending_moves_the_pending_to_applied(db_session, league_match):
@@ -417,9 +443,7 @@ def test_a_request_made_during_the_pause_stays_pending_for_the_next_one(db_sessi
 
     assert set(by_user(db_session, match)) == {1}  # pendiente
     applied = applied_by_user(db_session, match)[1]  # sigue mostrándose la aplicada
-    assert (applied.starter_name, applied.substitute_name) == names_of(
-        db_session, teams[1], 0, 3
-    )
+    assert (applied.starter_name, applied.substitute_name) == names_of(db_session, teams[1], 0, 3)
 
 
 def test_an_invalid_pending_substitution_is_discarded(db_session, league_match):
@@ -439,26 +463,21 @@ def test_an_invalid_pending_substitution_is_discarded(db_session, league_match):
 def test_apply_pending_does_not_touch_other_matches(db_session, league_match):
     match, teams = league_match
     other = Match(
-        league_id=match.league_id, user_1_id=1, user_2_id=2,
+        league_id=match.league_id,
+        user_1_id=1,
+        user_2_id=2,
         status=MatchStatus.started,
         scheduled_at=datetime(2026, 1, 8, tzinfo=timezone.utc),
     )
     db_session.add(other)
     db_session.commit()
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    repo = SqlAlchemySubstitutionRepository(db_session)
-    repo.apply_pending(match.id)
-    # pendiente del otro partido, con un par que sigue siendo válido tras el swap
-    substitute(db_session, other, teams[1], out_idx=1, in_idx=4)
+    substitute(db_session, match, teams[1])
+    substitute(db_session, other, teams[1])
     other_id = other.id
 
     SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
 
     assert remaining(db_session) == {(other_id, 1)}
-
-
-def test_apply_pending_for_a_nonexistent_match_returns_nothing(db_session, league_match):
-    assert SqlAlchemySubstitutionRepository(db_session).apply_pending(999999) == []
 
 
 def test_applied_substitutions_are_deleted_with_the_match(db_session, friendly_match):
@@ -487,8 +506,7 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
     match, teams = friendly_match
     substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
 
-    with match_progress():  # started, fuera de pausa, quedan pausas
-        r = login(2).get(f"/matches/{match.id}/substitutions")
+    r = login(2).get(f"/matches/{match.id}/substitutions")
 
     assert r.status_code == 200
     assert r.json()["club2"] is None
@@ -497,314 +515,75 @@ def test_endpoint_returns_the_substitution_of_each_team(login, friendly_match, d
     )
 
 
+# --- PUT /matches/{id}/substitutions --------------------------------------------
+
+
+class FakeProgress:
+    """El partido se está jugando en el 1.er período de 4 (le quedan 3 pausas)."""
+
+    def progress(self, match_id):
+        return MatchProgress(Phase.PLAYING, period=1, periods=4)
+
+
+@pytest.fixture()
+def running():
+    app.dependency_overrides[get_match_runner] = lambda: FakeProgress()
+    yield
+    app.dependency_overrides.pop(get_match_runner, None)
+
+
+def put_substitution(api, match, starter, substitute):
+    body = {"starterId": starter.player_id, "substituteId": substitute.player_id}
+    return api.put(f"/matches/{match.id}/substitutions", json=body)
+
+
 def test_put_endpoint_persists_and_replaces_the_team_pending_substitution(
-    login, friendly_match, db_session
+    login, friendly_match, db_session, running
 ):
     match, teams = friendly_match
+    api = login(1)
 
-    with match_progress():
-        api = login(1)
-        first = api.put(
-            f"/matches/{match.id}/substitutions",
-            json={
-                "starterId": teams[1][0].player_id,
-                "substituteId": teams[1][3].player_id,
-            },
-        )
-        assert first.status_code == 204
+    assert put_substitution(api, match, teams[1][0], teams[1][3]).status_code == 204
+    assert put_substitution(api, match, teams[1][1], teams[1][4]).status_code == 204
 
-        second = api.put(
-            f"/matches/{match.id}/substitutions",
-            json={
-                "starterId": teams[1][1].player_id,
-                "substituteId": teams[1][4].player_id,
-            },
-        )
-        assert second.status_code == 204
-
-    rows = db_session.scalars(
-        select(Substitution).where(Substitution.match_id == match.id)
-    ).all()
+    rows = db_session.scalars(select(Substitution).where(Substitution.match_id == match.id)).all()
     assert len(rows) == 1
     assert rows[0].member_out_id == teams[1][1].id
     assert rows[0].member_in_id == teams[1][4].id
 
-
-# --- apply_pending sobre el equipo y el PUT durante la pausa ------------------
-
-
-def member_roles(db, team):
-    db.expire_all()
-    return [db.get(TeamMember, m.id).role for m in team]
+    response = api.get(f"/matches/{match.id}/substitutions")
+    assert response.json()["club1"] == dict(
+        zip(("starterName", "substituteName"), names_of(db_session, teams[1], 1, 4))
+    )
 
 
-def test_applying_twice_does_not_swap_back(db_session, friendly_match):
+def field_errors(response):
+    assert response.status_code == 400
+    return [(error["field"], error["reason"]) for error in response.json()["errors"]]
+
+
+def test_put_starter_of_the_rival_is_not_starter(login, friendly_match, running):
     match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    repo = SqlAlchemySubstitutionRepository(db_session)
-
-    assert len(repo.apply_pending(match.id)) == 1
-    assert repo.apply_pending(match.id) == []
-
-    assert member_roles(db_session, teams[1])[0] is MemberRole.substitute
-    assert member_roles(db_session, teams[1])[3] is MemberRole.forward
+    response = put_substitution(login(1), match, teams[2][0], teams[1][3])
+    assert field_errors(response) == [("starterId", "notStarter")]
 
 
-def test_there_are_always_three_starters_and_three_substitutes_after_three_substitutions(
-    db_session, friendly_match
-):
+def test_put_starter_as_substitute_is_not_substitute(login, friendly_match, running):
     match, teams = friendly_match
-    team = teams[1]
-    repo = SqlAlchemySubstitutionRepository(db_session)
-
-    for out_idx, in_idx in ((0, 3), (1, 4), (2, 5)):  # una por pausa
-        substitute(db_session, match, team, out_idx=out_idx, in_idx=in_idx)
-        repo.apply_pending(match.id)  # empieza la pausa
-
-        roles = member_roles(db_session, team)
-        assert sorted(r.value for r in roles if r is not MemberRole.substitute) == [
-            "defense",
-            "forward",
-            "midfield",
-        ]
-        assert roles.count(MemberRole.substitute) == 3
+    response = put_substitution(login(1), match, teams[1][0], teams[1][1])
+    assert field_errors(response) == [("substituteId", "notSubstitute")]
 
 
-def test_after_applying_the_team_repository_sees_the_new_lineup(db_session, friendly_match):
+def test_put_user_outside_the_match_is_403(login, make_user, friendly_match, running):
     match, teams = friendly_match
-    team = teams[1]
-    substitute(db_session, match, team, out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-
-    teams_repo = SqlAlchemyTeamRepository(db_session)
-    starters = teams_repo.get_team_player_ids(match.id, None, 1, substitutes=False)
-    substitutes = teams_repo.get_team_player_ids(match.id, None, 1, substitutes=True)
-
-    assert team[3].player_id in starters
-    assert team[0].player_id in substitutes
+    make_user(3)
+    response = put_substitution(login(3), match, teams[1][0], teams[1][3])
+    assert (response.status_code, response.json()["code"]) == (403, None)
 
 
-def test_put_during_a_pause_stays_pending_and_coexists_with_the_applied(
-    login, friendly_match, db_session
-):
+def test_put_scheduled_match_is_409(login, friendly_match, db_session, running):
     match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)  # empieza la pausa
-
-    with match_progress(Phase.PAUSED, period=2):
-        r = login(1).put(
-            f"/matches/{match.id}/substitutions",
-            json={"starterId": teams[1][1].player_id, "substituteId": teams[1][4].player_id},
-        )
-
-    assert r.status_code == 204
-    assert remaining(db_session) == {(match.id, 1)}  # la pendiente
-    assert db_session.get(AppliedSubstitution, (match.id, 1)) is not None  # la aplicada sigue
-
-
-def test_pending_requested_during_the_pause_is_applied_in_the_next_one(
-    db_session, friendly_match
-):
-    match, teams = friendly_match
-    repo = SqlAlchemySubstitutionRepository(db_session)
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    repo.apply_pending(match.id)  # pausa 1
-    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)  # durante la pausa
-    assert remaining(db_session) == {(match.id, 1)}
-
-    swaps = repo.apply_pending(match.id)  # pausa 2
-
-    assert len(swaps) == 1 and swaps[0].incoming.player_id == teams[1][4].player_id
-    assert member_roles(db_session, teams[1])[1] is MemberRole.substitute
-    assert member_roles(db_session, teams[1])[4] is MemberRole.midfield
-
-
-def test_two_puts_during_a_pause_leave_only_the_last_pending(login, friendly_match, db_session):
-    match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-
-    with match_progress(Phase.PAUSED, period=1):
-        api = login(1)
-        for out_idx, in_idx in ((1, 4), (2, 5)):
-            api.put(
-                f"/matches/{match.id}/substitutions",
-                json={"starterId": teams[1][out_idx].player_id,
-                      "substituteId": teams[1][in_idx].player_id},
-            )
-
-    db_session.expire_all()
-    pending = db_session.get(Substitution, (match.id, 1))
-    assert (pending.member_out_id, pending.member_in_id) == (teams[1][2].id, teams[1][5].id)
-    assert db_session.get(AppliedSubstitution, (match.id, 1)) is not None  # la aplicada no cambia
-
-
-def test_put_during_the_last_pause_is_409_noPausesLeft(login, friendly_match, db_session):
-    match, teams = friendly_match
-    with match_progress(Phase.PAUSED, period=3):
-        r = login(1).put(
-            f"/matches/{match.id}/substitutions",
-            json={"starterId": teams[1][0].player_id, "substituteId": teams[1][3].player_id},
-        )
-    assert (r.status_code, r.json()["code"]) == (409, "noPausesLeft")
-    assert remaining(db_session) == set()
-
-
-def test_get_during_a_pause_shows_the_applied_even_if_a_new_one_is_pending(
-    login, friendly_match, db_session
-):
-    match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)
-
-    with match_progress(Phase.PAUSED, period=1):
-        during = login(1).get(f"/matches/{match.id}/substitutions").json()
-    with match_progress(Phase.PLAYING, period=2):
-        after = login(1).get(f"/matches/{match.id}/substitutions").json()
-
-    expected_applied = dict(zip(("starterName", "substituteName"), names_of(db_session, teams[1], 0, 3)))
-    expected_pending = dict(zip(("starterName", "substituteName"), names_of(db_session, teams[1], 1, 4)))
-    assert during["club1"] == expected_applied
-    assert after["club1"] == expected_pending
-
-
-def test_get_during_the_last_pause_is_200_and_after_it_is_409(login, friendly_match, db_session):
-    match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-
-    with match_progress(Phase.PAUSED, period=3):
-        assert login(1).get(f"/matches/{match.id}/substitutions").status_code == 200
-    with match_progress(Phase.PLAYING, period=4):
-        r = login(1).get(f"/matches/{match.id}/substitutions")
-    assert (r.status_code, r.json()["code"]) == (409, "noPausesLeft")
-
-
-@pytest.mark.parametrize(("state", "code"), [
-    (dict(in_penalties=True), "matchInPenalties"),
-    (dict(period=4), "noPausesLeft"),
-])
-def test_get_progress_conflicts(login, friendly_match, state, code):
-    match, _ = friendly_match
-    with match_progress(**state):
-        r = login(1).get(f"/matches/{match.id}/substitutions")
-    assert (r.status_code, r.json()["code"]) == (409, code)
-
-
-def test_applied_and_pending_of_the_same_team_can_coexist(db_session, friendly_match):
-    match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-    substitute(db_session, match, teams[1], out_idx=1, in_idx=4)
-    assert remaining(db_session) == {(match.id, 1)}
-    assert db_session.get(AppliedSubstitution, (match.id, 1)) is not None
-
-
-def test_pending_with_a_starter_coming_in_is_rejected(db_session, league_match):
-    match, teams = league_match
-    assert_rejected(db_session, match, teams[1][1], teams[1][0])  # entra un titular
-
-
-def test_pending_with_a_substitute_going_out_is_rejected(db_session, league_match):
-    match, teams = league_match
-    assert_rejected(db_session, match, teams[1][3], teams[1][4])  # sale un suplente
-
-
-def test_stale_pending_after_the_roles_were_swapped_is_rejected(db_session, friendly_match):
-    match, teams = friendly_match
-    substitute(db_session, match, teams[1], out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-    # un PUT validado antes de la pausa llega después: el que "entra" ya es titular
-    assert_rejected(db_session, match, teams[1][3], teams[1][0])
-
-
-def test_put_with_a_stale_lineup_is_rejected_by_the_trigger_and_mapped(
-    login, friendly_match, db_session, monkeypatch
-):
-    match, teams = friendly_match
-    team = teams[1]
-    out_player, in_player = team[0].player_id, team[3].player_id
-    starter_ids = {m.player_id for m in team[:3]}
-    substitute_ids = {m.player_id for m in team[3:]}
-
-    # La pausa ya aplicó el cambio: team[3] es titular y team[0] suplente.
-    substitute(db_session, match, team, out_idx=0, in_idx=3)
-    SqlAlchemySubstitutionRepository(db_session).apply_pending(match.id)
-
-    # El servicio todavía ve la alineación vieja (un PUT validado antes de la pausa).
-    def stale_ids(self, match_id, league_id, user_id, *, substitutes):
-        return substitute_ids if substitutes else starter_ids
-
-    monkeypatch.setattr(SqlAlchemyTeamRepository, "get_team_player_ids", stale_ids)
-
-    with match_progress():
-        r = login(1).put(
-            f"/matches/{match.id}/substitutions",
-            json={"starterId": out_player, "substituteId": in_player},
-        )
-
-    assert r.status_code == 400
-    assert [(e["field"], e["reason"]) for e in r.json()["errors"]] == [
-        ("starterId", "notStarter"), ("substituteId", "notSubstitute")
-    ]
-    assert remaining(db_session) == set()  # no quedó ninguna pendiente
-
-
-# --- consistencia con `pausesLeft` del tick (409 noPausesLeft) ---
-
-# (fase, período, pausesLeft del tick) → (PUT, GET). `noPausesLeft` es `pausesLeft == 0`;
-# la única excepción es el GET durante la última pausa, que muestra lo aplicado (200).
-PAUSES_LEFT_RESPONSES = [
-    (Phase.COUNTDOWN, 1, 3, 204, 200),
-    (Phase.PLAYING, 1, 3, 204, 200),
-    (Phase.PAUSED, 1, 2, 204, 200),
-    (Phase.COUNTDOWN, 2, 2, 204, 200),
-    (Phase.PLAYING, 2, 2, 204, 200),
-    (Phase.PAUSED, 2, 1, 204, 200),
-    (Phase.COUNTDOWN, 3, 1, 204, 200),
-    (Phase.PLAYING, 3, 1, 204, 200),
-    (Phase.PAUSED, 3, 0, 409, 200),  # durante la última pausa
-    (Phase.COUNTDOWN, 4, 0, 409, 409),
-    (Phase.PLAYING, 4, 0, 409, 409),
-]
-
-
-@pytest.mark.parametrize(("phase", "period", "pauses_left", "put", "get"), PAUSES_LEFT_RESPONSES)
-def test_rest_answers_follow_the_pauses_left_of_the_tick(
-    login, friendly_match, phase, period, pauses_left, put, get
-):
-    match, teams = friendly_match
-    body = {"starterId": teams[1][0].player_id, "substituteId": teams[1][3].player_id}
-    with match_progress(phase, period, pauses_left=pauses_left):
-        api = login(1)
-        put_response = api.put(f"/matches/{match.id}/substitutions", json=body)
-        get_response = api.get(f"/matches/{match.id}/substitutions")
-
-    def code(response, expected):
-        if expected == 409:
-            assert response.json()["code"] == "noPausesLeft"
-        return response.status_code
-
-    assert code(put_response, put) == put
-    assert code(get_response, get) == get
-
-
-@pytest.mark.parametrize(("period", "pauses_left"), [(1, 0), (4, 2)])
-def test_rest_reads_pauses_left_and_does_not_recompute_it_from_the_period(
-    login, friendly_match, period, pauses_left
-):
-    match, teams = friendly_match
-    body = {"starterId": teams[1][0].player_id, "substituteId": teams[1][3].player_id}
-    with match_progress(Phase.PLAYING, period, pauses_left=pauses_left):
-        r = login(1).put(f"/matches/{match.id}/substitutions", json=body)
-    assert (r.status_code == 409) == (pauses_left == 0)
-    if r.status_code == 409:
-        assert r.json()["code"] == "noPausesLeft"
-
-
-def test_in_penalties_wins_over_no_pauses_left_with_pauses_left_at_0(login, friendly_match):
-    match, _ = friendly_match
-    with match_progress(Phase.PENALTIES, 4, pauses_left=0, in_penalties=True):
-        r = login(1).get(f"/matches/{match.id}/substitutions")
-    assert (r.status_code, r.json()["code"]) == (409, "matchInPenalties")
+    match.status = MatchStatus.scheduled
+    db_session.commit()
+    response = put_substitution(login(1), match, teams[1][0], teams[1][3])
+    assert (response.status_code, response.json()["code"]) == (409, "matchNotStarted")

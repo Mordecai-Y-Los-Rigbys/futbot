@@ -1,88 +1,144 @@
 asyncapi: 3.0.0
 info:
   title: FutBot - Tiempo real
-  version: 0.3.0
-  description: >
-    Canal WebSocket de FutBot. Complementa a `futbot-openapi.yaml`
-    (API REST).
+  version: 0.10.0
+  description: |
+    Canales WebSocket de FutBot. Complementa a `futbot-openapi.yaml`
+    (API REST), que es la fuente de verdad ante cualquier diferencia:
+    las reglas de acceso (convenciones 11 y 12), de sustituciones y de
+    duración de los partidos se definen allí y este documento las
+    refleja.
 
+    Hay siete conexiones, cada una con su propio mensaje:
 
-    Hay una sola conexión: `/ws/matches/{id}`, la transmisión de un
-    partido en particular. Es la misma para partidos de liga y
-    amistosos: el origen del partido no afecta esta transmisión.
-    Tiene un solo mensaje, `tick`: se emite en cada tick de la
-    simulación y trae siempre el estado completo del partido
-    (posiciones, marcador, tiempo transcurrido y fase, todos al mismo
-    nivel, sin sub-objetos) más, opcionalmente, un `event` con lo que
-    haya pasado puntualmente en ese tick (gol, inicio de período,
-    pausa, fin de partido).
-
+    - `/ws/matches/{id}`: la transmisión de un partido en particular.
+      Es la misma para partidos de liga y amistosos: el origen del
+      partido no afecta esta transmisión, y la reciben igual los
+      jugadores y los espectadores de partidos de liga. Su único
+      mensaje, `tick`, se emite en cada tick de la simulación y trae
+      siempre el estado completo del partido (posiciones, marcador,
+      tiempo transcurrido y fase, todos al mismo nivel, sin
+      sub-objetos) más, opcionalmente, un `event` con lo que haya
+      pasado puntualmente en ese tick (gol, inicio de período, pausa,
+      fin de partido).
+    - `/ws/behaviors/{id}/test`: la transmisión de la prueba de un
+      comportamiento de jugador: un 3 contra 3 con jugadores del
+      usuario. Su único mensaje, `testTick`, tiene la misma idea que
+      `tick` (estado completo y `event` opcional) pero es un mensaje
+      propio: no es un partido.
+    - Cuatro canales de liga, uno por pantalla:
+      `/ws/leagues/{id}/participants`, `/ws/leagues/{id}/fixture`,
+      `/ws/leagues/{id}/ranking` y `/ws/leagues/{id}/matches/next`.
+      Participantes, fixture y ranking también se leen por REST
+      (`GET /leagues/{id}/participants`, `/fixture` y `/ranking`)
+      cuando la liga ya no cambia (participantes con la liga iniciada;
+      fixture y ranking con la liga terminada): los canales sirven
+      mientras cambian. El partido siguiente existe SOLO por
+      WebSocket, con la liga en curso: no hay REST. Al conectar envían
+      el estado actual y después cada cambio, siempre con el estado
+      completo más el estado de la liga. A diferencia de los canales
+      de partido y de prueba, se autentican con la cookie de sesión
+      `session_id` y no usan `tokenWs`. Ver "Canales de liga" en el
+      canal de participantes.
+    - `/ws/notifications`: las notificaciones del usuario (fin de un
+      partido de una liga en la que participa y fin de la liga). No
+      depende de una liga: es una sola conexión por usuario y se
+      autentica igual que los canales de liga, con la cookie de
+      sesión.
 
     ESTADOS DEL PARTIDO: un partido (de liga o amistoso) tiene un único
     conjunto de estados: `scheduled`, `started`, `finished` y
     `cancelled` (`MatchStatus` del OpenAPI). Un amistoso no tiene
     estados propios: "esperando rival" es un partido `scheduled` sin
     rival, y la cuenta regresiva es un partido `scheduled` con rival.
+    La prueba de un comportamiento no tiene estados: no es un
+    partido.
 
+    DURACIÓN: en una liga, la duración de cada partido es el
+    `matchDuration` de la liga (1 a 10 minutos de juego, sin contar
+    las pausas). Un amistoso dura siempre 3 minutos de juego, y sus
+    3 pausas caen a los 45 segundos, al 1 minuto 30 y a los 2 minutos
+    15 de juego.
 
     FLUJO DEL PARTIDO AMISTOSO:
 
     1. El creador llama `POST /friendlies` (REST): se crea el partido
-    en `scheduled`, sin rival, visible en `GET /friendlies`. El amistoso
-    es el partido: la respuesta trae su `id`, el mismo que se usa en
-    todos los pasos siguientes.
-
+       en `scheduled`, sin rival, visible en `GET /friendlies`. El
+       amistoso es el partido: la respuesta trae su `id`, el mismo que
+       se usa en todos los pasos siguientes.
     2. El creador pide su `tokenWs` con `POST /matches/{id}/connections`
-    (REST) y abre `/ws/matches/{id}?token=<tokenWs>`. Mientras el rival
-    no se une, el partido no emite ningún `tick`: el creador conectado
-    no recibe nada, y ese silencio es el estado "esperando rival". La
-    espera del creador tiene un máximo de 15 minutos contados desde la
-    creación del partido (`createdAt`), no desde que abre el
-    WebSocket: si vence sin que se una nadie, el servidor pasa el
-    partido a `cancelled` y cierra la conexión con `1000` /
-    `waitExpired` (ver "Comportamiento de la conexión").
-
+       (REST) y abre `/ws/matches/{id}?token=<tokenWs>`. Mientras el
+       rival no se une, el partido no emite ningún `tick`: el creador
+       conectado no recibe nada, y ese silencio es el estado
+       "esperando rival". La espera del creador tiene un máximo de 15
+       minutos contados desde la creación del partido (`createdAt`),
+       no desde que abre el WebSocket: si vence sin que se una nadie,
+       el servidor pasa el partido a `cancelled` y cierra la conexión
+       con `1000` / `waitExpired` (ver "Comportamiento de la
+       conexión").
     3. Otro usuario (el rival) llama `POST /friendlies/{id}/members`
-    (REST) con su equipo: queda registrado como segundo participante
-    (`club2`), el partido deja de aparecer en `GET /friendlies` y sigue
-    `scheduled`. En ese momento el servidor arranca la simulación
-    automáticamente, sin esperar a que nadie se conecte al WebSocket.
-    No existe endpoint ni acción manual para iniciarla. Si la unión
-    coincide con el vencimiento de la espera, gana el que llega primero
-    a la base: si gana el vencimiento, la unión responde 409 y no se
-    arranca nada.
-
+       (REST) con su equipo: queda registrado como segundo
+       participante (`club2`), el partido deja de aparecer en
+       `GET /friendlies` y sigue `scheduled`. En ese momento el
+       servidor arranca la simulación automáticamente, sin esperar a
+       que nadie se conecte al WebSocket. No existe endpoint ni acción
+       manual para iniciarla. Si la unión coincide con el vencimiento
+       de la espera, gana el que llega primero a la base: si gana el
+       vencimiento, la unión responde 409 y no se arranca nada.
     4. El rival pide su `tokenWs` con `POST /matches/{id}/connections`
-    y abre el mismo canal. Antes del primer tick hay 3 segundos de silencio y el primer `tick` sale con `phase: countdown`
-    y `event: periodStart` (período 1, `countdownSeconds: 5`). La
-    cuenta regresiva es larga a propósito, para dar tiempo al rival a
-    recibir la respuesta del REST, pedir su token y conectarse antes de
-    que empiece el juego.
-
+       y abre el mismo canal. Antes del primer tick hay 3 segundos de
+       silencio y el primer `tick` sale con `phase: countdown` y
+       `event: periodStart` (período 1, `countdownSeconds: 5`). La
+       cuenta regresiva es larga a propósito, para dar tiempo al rival
+       a recibir la respuesta del REST, pedir su token y conectarse
+       antes de que empiece el juego.
     5. Al terminar la cuenta regresiva, los `tick` pasan a
-    `phase: playing` y el partido pasa a `started`.
+       `phase: playing` y el partido pasa a `started`.
 
+    CONEXIÓN NO OBLIGATORIA (PARTIDOS): conectarse al WebSocket de un
+    partido no es condición para que el partido se juegue. Si un
+    participante no se conecta, o se desconecta, el partido no se
+    cancela ni se bloquea y su equipo juega con los comportamientos
+    por defecto (los behaviors asignados en `members` y el
+    `coachBehaviorId` al armar el equipo). Las sustituciones pendientes
+    también se aplican con el usuario conectado o no. El cierre de una
+    conexión solo libera al suscriptor: no modifica el estado del
+    partido. Lo mismo vale para las conexiones de los espectadores,
+    que nunca afectan al partido.
 
-    CONEXIÓN NO OBLIGATORIA: conectarse al WebSocket no es condición
-    para que el partido se juegue. Si un participante no se conecta, o
-    se desconecta, el partido no se cancela ni se bloquea y su equipo
-    juega con los comportamientos por defecto (los behaviors asignados
-    en `members` al armar el equipo). El cierre de una conexión solo
-    libera al suscriptor: no modifica el estado del partido. Quien se
-    conecta tarde o se reconecta recibe la transmisión desde el `tick`
-    actual, sin replay de ticks anteriores; el campo `phase`, presente
-    en todos los `tick`, le indica en qué fase está. La única excepción
-    de partido sin jugarse es la espera vencida de un amistoso sin
-    rival: el servidor cancela el partido por su cuenta (no por una
-    desconexión) y cierra las conexiones.
+    Quien se conecta tarde o se reconecta recibe la transmisión desde
+    el `tick` actual, sin replay de ticks anteriores; el campo
+    `phase`, presente en todos los `tick`, le indica en qué fase está.
+    La única excepción de partido sin jugarse es la espera vencida de
+    un amistoso sin rival: el servidor cancela el partido por su
+    cuenta (no por una desconexión) y cierra las conexiones.
 
+    FLUJO DE LA PRUEBA DE UN COMPORTAMIENTO:
+
+    1. El usuario llama `POST /behaviors/{id}/test-connections` (REST)
+       sobre un behavior suyo de tipo `playerBehavior`, con la
+       alineación de la prueba (`members`), y recibe su `tokenWs`.
+    2. Abre `/ws/behaviors/{id}/test?token=<tokenWs>`. A diferencia del
+       partido, la prueba la arranca la conexión: como hay un solo
+       usuario y no hay nadie a quien esperar, el servidor inicia una
+       prueba nueva al aceptar el handshake. Si la conexión se cierra,
+       la prueba termina y no se retoma: reconectar inicia una prueba
+       nueva.
+    3. Reglas de la prueba: se juega un 3 contra 3 con la alineación
+       del POST, con las reglas de un amistoso (3 minutos de juego, se
+       admiten empates) pero en un solo período, sin pausas ni
+       intervenciones: no hay sustituciones ni cambios de
+       comportamiento en vivo, y los comportamientos de DT están
+       deshabilitados. Hay una cuenta regresiva de 3 segundos antes de
+       empezar. Tras cada gol, todos vuelven a sus posiciones
+       iniciales. Hay una sola ejecución a la vez por usuario.
 
     Todos los nombres de propiedades y valores de enum van en camelCase.
   x-project: "Laboratorio 2026 - Ingeniería del Software 1"
 
 servers:
   local:
-    host: "(no definido todavía)"
+    host: localhost:8000
     protocol: ws
     description: Servidor local
 
@@ -105,13 +161,139 @@ channels:
       Un único mensaje, `tick`, con el estado completo del partido en
       cada tick de la simulación. El servidor no emite `tick` hasta que
       la simulación arranca (en un amistoso, hasta que el rival se une
-      por REST).
+      por REST). El servidor sigue emitiendo ticks durante las pausas.
 
       Los mensajes de aplicación son SOLO servidor -> cliente: el
       cliente no envía nada por este canal (las acciones como
       reasignar behavior o sustituir jugadores son REST). Si el
       cliente envía algún mensaje, el servidor lo ignora en silencio:
       no se procesa, no altera el partido y no cierra la conexión.
+
+      Jugadores y espectadores. Reciben exactamente la misma
+      transmisión: los mismos `tick` y los mismos eventos, sin
+      filtrar ni agregar nada. La diferencia es solo de permisos: un
+      espectador (cualquier usuario con acceso a la liga, solo en
+      partidos de liga; un amistoso no se puede ver) no interactúa
+      con el partido, porque las acciones (equipo, behavior,
+      sustituciones) son REST y solo de los jugadores: un espectador
+      recibe 403 en `GET /matches/{id}/team`,
+      `GET/PUT /matches/{id}/behavior` y
+      `GET/PUT /matches/{id}/substitutions`. Mirar un partido no es
+      jugarlo y nunca afecta al partido. `POST /matches/{id}/connections`
+      informa en `role` si el token es de `player` o de `spectator`
+      (convención 12 del OpenAPI): el front lo usa para mostrar u
+      ocultar los controles del partido, entre ellos el de
+      sustituciones.
+
+      La ejecución del comportamiento del DT de cada equipo ocurre
+      dentro de la simulación (un tick de DT, con el `coachBehaviorId`
+      del equipo, antes del tick de los jugadores del equipo) y no
+      agrega mensajes ni campos a este canal.
+
+      Pausas. Cada partido tiene 3 pausas, ubicadas a 1/4, 1/2 y 3/4
+      de su duración, por lo que el partido se divide en 4 períodos.
+      Durante una pausa el reloj se detiene (`elapsedTime` no avanza)
+      y el partido continúa solo cuando la pausa termina. La pausa se
+      informa con `phase: paused` y con el evento `pause` en el tick
+      en que empieza. Cada pausa dura 15 segundos. Al terminar la
+      pausa, un `tick` con `phase: countdown` y el evento
+      `periodStart` (períodos 2 a 4) abre la cuenta regresiva de 5
+      segundos y después el partido vuelve a `playing`.
+
+      Sustituciones. Se piden con PUT /matches/{id}/substitutions.
+      Cada equipo tiene a lo sumo UNA pendiente: cada PUT reemplaza a
+      la anterior, así que si se piden varias vale la última. La
+      sustitución siempre queda pendiente y se aplica al empezar la
+      próxima pausa, con el usuario conectado o no. Nunca se aplica
+      en el momento: un pedido que llega durante una pausa queda
+      pendiente para la pausa siguiente. Hasta que se aplica,
+      GET /matches/{id}/team sigue mostrando la alineación anterior.
+
+      Qué devuelve GET /matches/{id}/substitutions depende de la fase
+      del tick:
+
+      - Durante una pausa (`phase: paused`): la sustitución APLICADA
+        al empezar esa pausa, o `null` si el equipo no tenía ninguna
+        pendiente (o se descartó por inválida al aplicarse). Un PUT
+        hecho durante la pausa no se ve en este GET hasta que la
+        pausa termina, porque queda pendiente para la siguiente.
+      - Fuera de una pausa (cualquier otra fase): la sustitución
+        PENDIENTE del equipo, o `null` si no tiene.
+
+      Al terminar la pausa el GET vuelve a mostrar la pendiente. Con
+      `pausesLeft` en 0 y fuera de una pausa (período 4) ya no puede
+      haber pendiente y el GET responde 409 `noPausesLeft`.
+
+      No se pueden pedir si el partido no está en juego, durante la
+      tanda de penales, ni durante o después de la última pausa (409
+      `matchNotStarted`, `matchInPenalties` y `noPausesLeft`). El
+      campo `pausesLeft` de cada `tick` informa cuántas pausas
+      faltan por empezar: con 0 ya no se pueden pedir sustituciones.
+      Una pendiente que ya no es válida al aplicarse se descarta. Los
+      titulares efectivos se consultan con GET /matches/{id}/lineups;
+      como las sustituciones se aplican al empezar cada pausa, el
+      cliente lo vuelve a pedir al terminar cada pausa.
+
+      Tanda de penales (penal australiano). En una liga con
+      `allowDraws: false`, un partido que termina empatado en el
+      juego se define por una tanda de penales (`phase: penalties`).
+      Cada penal es un duelo entre un pateador y un defensor:
+
+      - Pateador: un titular del club que patea. Cada club patea 5
+        penales: sus tres titulares patean en ciclo y los clubes se
+        alternan; el primer penal es de `club1`. Arranca en la
+        posición de delantero, en el medio de la cancha, con la
+        pelota, y ataca el arco rival.
+      - Defensor: el titular con rol `defense` del club rival.
+        Arranca en la posición de defensor. Pateador y defensor
+        obedecen sus comportamientos, igual que en el partido.
+      - Cuenta previa: antes de cada penal (incluido el primero) hay
+        3 segundos de espera. Los dos jugadores y la pelota quedan
+        quietos en sus posiciones iniciales y los `tick` se siguen
+        transmitiendo, con `penaltyCountdownSeconds` contando hacia
+        atrás.
+      - Duración: el pateador tiene 8 segundos de juego para
+        convertir (`penaltyRemainingSeconds`). No es un tiro único:
+        puede driblear y tocar la pelota las veces que quiera
+        dentro del tiempo.
+      - Fin del penal: termina cuando el pateador convierte un gol
+        (`scored: true`), cuando se agotan los 8 segundos
+        (`scored: false`) o cuando la pelota entra en el arco del
+        propio equipo pateador. En este último caso el penal se corta
+        antes de tiempo, no se cuenta ningún gol y es `scored: false`.
+      - Al terminar un penal, los dos jugadores y la pelota vuelven
+        a sus posiciones iniciales (como tras un gol) y, si la tanda
+        sigue, empieza la cuenta previa del siguiente.
+      - Durante la tanda, `players` trae solo a los dos jugadores en
+        juego en el penal en curso (pateador y defensor).
+      - Quién patea y quién defiende viaja en `penaltyCurrent`, con
+        sus nombres, en cada tick de la tanda (incluida la cuenta
+        previa del penal).
+      - La tanda termina antes cuando ya quedó decidida, es decir,
+        cuando un club ya no puede ser alcanzado por el otro con los
+        penales que le quedan por patear (de sus 5).
+
+      Cada tick de la tanda trae la lista completa de los penales ya
+      ejecutados (`penaltyKicks`) y el marcador de la tanda
+      (`penaltyScore1`, `penaltyScore2`, que coincide con los
+      `scored: true` de la lista). Como el estado es completo en
+      cada tick, un cliente que se conecta tarde o se reconecta
+      reconstruye la tanda sin depender de haber recibido los eventos
+      `penaltyKick`. El tick final (`matchEnd`) también trae la
+      lista completa, aunque su evento sea `matchEnd` y no el último
+      `penaltyKick`.
+
+      Si tras los 5 penales de cada club sigue el empate, el ganador se
+      define 50/50. El último tick trae `phase: finished` y el evento
+      `matchEnd`, con `result.penalties.winner` y
+      `result.penalties.kicks`.
+
+      Los nombres durante la tanda vienen en el propio tick:
+      `penaltyCurrent` (penal en curso) y `kickerName` de cada penal
+      ya ejecutado. Para mostrar el nombre de cualquier otro jugador
+      que aparece en `players` durante el partido, el cliente usa
+      GET /matches/{id}/lineups, que devuelve los titulares de ambos
+      clubes y se vuelve a pedir al terminar cada pausa.
 
       ## Handshake
 
@@ -128,22 +310,26 @@ channels:
       | 1     | Token expirado                                          | `4401` | `tokenExpired`       |
       | 2     | Token que no corresponde al `id` de la URL              | `4403` | `tokenMatchMismatch` |
       | 3     | El partido no existe                                    | `4404` | `matchNotFound`      |
-      | 4     | El partido ya terminó (`finished`)                      | `4409` | `matchFinished`      |
-      | 4     | El partido fue cancelado (`cancelled`)                  | `4409` | `matchCancelled`     |
-      | 5     | Ya hay 5 conexiones abiertas del usuario en ese partido | `4429` | `tooManyConnections` |
+      | 4     | Amistoso y el usuario no es ninguno de sus dos jugadores | `4403` | `notAPlayerInMatch`  |
+      | 4     | Partido de una liga privada y el usuario no es jugador, creador, participante ni la desbloqueó | `4403` | `leagueAccessRequired` |
+      | 5     | El partido ya terminó (`finished`)                      | `4409` | `matchFinished`      |
+      | 5     | El partido fue cancelado (`cancelled`)                  | `4409` | `matchCancelled`     |
+      | 6     | Ya hay 5 conexiones abiertas del usuario en ese partido | `4429` | `tooManyConnections` |
 
+      El acceso (como jugador o como espectador, convención 12 del
+      OpenAPI) se valida al pedir el token y de nuevo en el handshake.
       Un partido `cancelled` es el de un amistoso cuya espera de 15
       minutos venció sin que se uniera un rival. Reconectar a un
       partido cancelado siempre responde `4409` / `matchCancelled`.
-
       Si todas las validaciones pasan, la conexión queda abierta.
 
       ## Vigencia y reutilización del token
 
       - El token tiene una expiración finita de 35 minutos, fija (no
         es configurable). Se deriva de la espera máxima del creador
-        (15 minutos) + la duración máxima de un partido (10 minutos)
-        + un margen (10 minutos), y alcanza para cubrir la espera del
+        (15 minutos) + la duración máxima de un partido (10 minutos) +
+        las 3 pausas de 15 segundos (45 segundos)
+        + un margen (9:15 minutos), y alcanza para cubrir la espera del
         creador, la cuenta regresiva y un partido completo.
       - La expiración se valida SOLO en el handshake. Una conexión ya
         establecida no se corta cuando el token expira.
@@ -229,6 +415,444 @@ channels:
       tick:
         $ref: "#/components/messages/Tick"
 
+  behaviorTest:
+    address: /ws/behaviors/{id}/test
+    title: Transmisión de la prueba de un comportamiento
+    description: |
+      Transmisión en vivo de la prueba de un comportamiento de jugador
+      (`playerBehavior`). Se abre con el `tokenWs` obtenido en
+      `POST /behaviors/{id}/test-connections`, pasado en la query
+      `token`. `{id}` es el `id` del BEHAVIOR (no de un partido): la
+      prueba no es un partido y no tiene id propio.
+
+      Un único mensaje, `testTick`, con el estado completo de la
+      prueba en cada tick. Los mensajes de aplicación son SOLO
+      servidor -> cliente; si el cliente envía algo, el servidor lo
+      ignora en silencio (no se procesa ni cierra la conexión).
+
+      ## Reglas de la prueba
+
+      - Se juega un 3 contra 3 con la alineación enviada en
+        `POST /behaviors/{id}/test-connections`: cada jugador, en su
+        club y su rol, ejecuta el código de su behavior. `club1` ataca
+        el arco de `x = 100` y `club2` el de `x = 0`, como en un partido.
+      - Reglas de un amistoso: 3 minutos de juego y se admiten empates
+        (no hay penales).
+      - Un solo período: no hay pausas ni intervenciones (sustituciones
+        o cambios de comportamiento en vivo). Los comportamientos de DT
+        están deshabilitados.
+      - Cuenta regresiva de 3 segundos antes de empezar (`testStart`,
+        `countdownSeconds: 3`).
+      - Tras un gol viaja el evento `goal` con el club que convirtió,
+        suma uno al marcador de ese club y, en el tick siguiente, los
+        jugadores y la pelota ya están en sus posiciones iniciales.
+      - La prueba termina sola a los 3 minutos de juego (`testEnd`,
+        `reason: timeLimit`).
+      - Se transmite al mismo ritmo que un partido: 20 `testTick` por
+        segundo.
+
+      ## Inicio y fin de la prueba
+
+      - La prueba arranca al aceptar el handshake: no hay silencio
+        previo ni espera de otro usuario. El primer `testTick` sale con
+        `phase: countdown` y `event: testStart`.
+      - La conexión ES la prueba: si se cierra (por el cliente, caída
+        o timeout de ping/pong), la prueba termina y no se retoma.
+        Reconectar con el mismo token inicia una prueba nueva desde
+        cero, sin replay.
+      - Al terminar la prueba con la conexión abierta, el servidor
+        envía el `testTick` final (`testEnd`, `phase: finished`) y
+        cierra con `1000` y `reason: "testEnd"`. El cliente no debe
+        reconectarse automáticamente.
+
+      ## Handshake
+
+      Igual que en la transmisión de partidos: el servidor siempre
+      acepta el upgrade y, si alguna validación falla, cierra con un
+      código 4xxx (4000 + el status HTTP equivalente) y un `reason`.
+      Se informa solo la primera que falla:
+
+      | Orden | Caso                                                         | Código | `reason`                |
+      |-------|--------------------------------------------------------------|--------|-------------------------|
+      | 1     | Falta el parámetro `token`, o el token no existe             | `4401` | `tokenInvalid`          |
+      | 1     | Token expirado                                               | `4401` | `tokenExpired`          |
+      | 2     | Token que no corresponde al `id` de la URL                   | `4403` | `tokenBehaviorMismatch` |
+      | 3     | El behavior de la URL o alguno de la alineación no existe (por ejemplo, fue eliminado) | `4404` | `behaviorNotFound` |
+      | 4     | El usuario ya tiene una prueba en curso                      | `4429` | `tooManyConnections`    |
+
+      ## Vigencia del token
+
+      - Expiración fija de 5 minutos: alcanza para que el cliente se
+        conecte apenas lo recibe. Se valida SOLO en el handshake; una
+        prueba en curso no se corta cuando el token expira.
+      - Es reutilizable hasta que expire, atado a un único usuario y a
+        un único behavior. Si expiró, el cliente pide otro con
+        `POST /behaviors/{id}/test-connections`.
+
+      ## Una prueba a la vez
+
+      Cada conexión ejecuta su propia simulación, que consume
+      recursos del servidor, por eso se permite UNA sola prueba
+      simultánea por usuario. Si ya hay una abierta, la nueva se
+      cierra con `4429` / `tooManyConnections`. Al cerrarse una prueba
+      se libera el cupo.
+
+      ## Comportamiento de la conexión
+
+      - Se usan los mismos frames de control (ping/pong) que en la
+        transmisión de partidos: ping cada 20 segundos y cierre si no
+        llega el pong dentro de otros 20, así que una prueba huérfana
+        libera su cupo en 40 segundos como máximo.
+
+      ## Cierres iniciados por el servidor (resumen)
+
+      | Código | `reason`  | Cuándo                         | ¿Reconectar?                  |
+      |--------|-----------|--------------------------------|-------------------------------|
+      | `1000` | `testEnd` | La prueba terminó              | No (inicia una prueba nueva)  |
+
+    parameters:
+      id:
+        $ref: "#/components/parameters/BehaviorId"
+    bindings:
+      ws:
+        method: GET
+        query:
+          type: object
+          properties:
+            token:
+              type: string
+              description: >
+                `tokenWs` devuelto por POST /behaviors/{id}/test-connections.
+                Vigente 5 minutos, válido solo para el usuario y el
+                behavior para los que fue emitido. Si falta, el
+                servidor acepta el upgrade y cierra con `4401` /
+                `tokenInvalid`.
+          required: [token]
+    messages:
+      testTick:
+        $ref: "#/components/messages/TestTick"
+
+  # ----------------------------------------------------------
+  # CANALES DE LIGA
+  # ----------------------------------------------------------
+  leagueParticipants:
+    address: /ws/leagues/{id}/participants
+    title: Participantes de una liga
+    description: |
+      Participantes inscriptos de una liga, en tiempo real. `{id}` es
+      el `id` de la liga. Sirve mientras la liga está en
+      `preparation`, que es cuando la lista cambia. Con la liga ya
+      iniciada la lista no cambia más y se lee con
+      `GET /leagues/{id}/participants`.
+
+      Un único mensaje, `leagueParticipants`, con la lista completa de
+      participantes (incluido el creador) y el `leagueStatus`. Se emite
+      cuando alguien se inscribe (`POST /leagues/{id}/participants`) o
+      abandona (`DELETE /leagues/{id}/participants/me`).
+
+      Los participantes solo cambian en `preparation`. Cuando la liga
+      pasa a otro estado, el servidor envía un último mensaje con el
+      nuevo `leagueStatus` y cierra el canal (ver "Cierres iniciados
+      por el servidor"). Si el cliente se conecta a una liga que ya no
+      está en `preparation`, el handshake la rechaza con `4409` /
+      `leagueNotInPreparation` y no envía ningún mensaje: con la liga
+      iniciada se usa `GET /leagues/{id}/participants`. El cierre
+      `leagueStarted` de este canal es la señal para que el front
+      abra los canales de fixture, ranking y partido siguiente.
+
+      ## Canales de liga (aplica a los cuatro)
+
+      Autenticación. No hay `tokenWs`: el handshake usa la cookie de
+      sesión `session_id` (el navegador la envía solo si el front y la
+      API comparten sitio o CORS con credenciales) y aplica la misma
+      regla de acceso de la convención 11 del OpenAPI:
+      liga pública, creador, participante, o liga privada desbloqueada
+      en la sesión con `POST /leagues/{id}/access`.
+
+      Origen. Como el handshake se autentica con una cookie, el
+      servidor valida el header `Origin` ANTES de mirar la sesión y
+      rechaza con `4403` / `originNotAllowed` si falta o no está en
+      la lista de orígenes permitidos (el del front). Los navegadores
+      siempre lo envían en un WebSocket; los clientes de prueba
+      (scripts, herramientas) deben enviarlo explícitamente. Es una
+      defensa en profundidad contra el secuestro de WebSocket entre
+      sitios: `SameSite=Lax` ya impide que un sitio ajeno use la
+      cookie en navegadores modernos, pero no cubre a otros
+      subdominios del mismo sitio ni a navegadores viejos. Los
+      canales de partido y de prueba no lo necesitan: se autentican
+      con un `tokenWs`, no con la cookie.
+
+      Mensaje inicial. Al aceptar la conexión, el servidor envía de
+      inmediato el estado actual (el mismo mensaje que los cambios
+      posteriores). Para no perder cambios entre ese estado y los
+      siguientes, el servidor se suscribe a los cambios ANTES de leer
+      el estado. Como cada mensaje trae el estado completo, el cliente
+      reemplaza lo que tenía: no hay deltas, orden que reconstruir ni
+      `version`. El partido siguiente no tiene GET REST equivalente ni
+      fallback si el WebSocket no conecta. Participantes, fixture y
+      ranking sí (con la liga iniciada o terminada, ver cada canal).
+
+      Reconexión. Tras una caída no hay replay: al reconectar, el
+      mensaje inicial trae el estado actual.
+
+      Solo servidor -> cliente. Si el cliente envía algo, el servidor
+      lo ignora en silencio.
+
+      ## Handshake
+
+      El servidor siempre acepta el upgrade. Si alguna validación
+      falla, cierra con un código 4xxx (4000 + el status HTTP
+      equivalente) y un `reason`. Se informa solo la primera que
+      falla:
+
+      | Orden | Caso                                                                  | Código | `reason`               |
+      |-------|-----------------------------------------------------------------------|--------|------------------------|
+      | 1     | El header `Origin` falta o no es uno de los orígenes permitidos       | `4403` | `originNotAllowed`     |
+      | 2     | No hay cookie de sesión, o la sesión no es válida                     | `4401` | `sessionInvalid`       |
+      | 3     | La liga no existe, o el `id` no es un entero entre 1 y 2147483647     | `4404` | `leagueNotFound`       |
+      | 4     | La liga es privada y el usuario no es creador, participante ni la desbloqueó | `4403` | `leagueAccessRequired` |
+      | 5     | La liga no está en un estado que admita el canal (ver abajo)           | `4409` | ver abajo              |
+      | 6     | Ya hay 5 conexiones abiertas del usuario en este canal de esta liga   | `4429` | `tooManyConnections`   |
+
+      El `4409` depende del canal y del estado de la liga:
+
+      | Canal          | Estados que admite        | `reason` del rechazo                                    |
+      |----------------|---------------------------|---------------------------------------------------------|
+      | `participants` | `preparation`             | `leagueNotInPreparation`                                |
+      | `fixture`      | `started`                 | `leagueNotStarted`, `leagueFinished`, `leagueCancelled` |
+      | `ranking`      | `started`                 | `leagueNotStarted`, `leagueFinished`, `leagueCancelled` |
+      | `matches/next` | `started`                 | `leagueNotStarted`, `leagueFinished`, `leagueCancelled` |
+
+      ## Comportamiento de la conexión
+
+      - Se permiten varias conexiones por usuario y canal (hasta 5),
+        cada una como suscriptor independiente.
+      - Ping/pong igual que en los canales de partido: ping cada 20
+        segundos y cierre si no llega el pong dentro de otros 20.
+      - La sesión es la que da el acceso: si termina (log-out o
+        vencimiento), el servidor cierra las conexiones abiertas con
+        ella con `4401` / `sessionEnded`. Abandonar la liga NO cierra
+        el canal ni revoca el acceso (convención 11 del OpenAPI).
+
+      ## Cierres iniciados por el servidor (resumen)
+
+      | Código | `reason`          | Cuándo                                                        | ¿Reconectar? |
+      |--------|-------------------|---------------------------------------------------------------|--------------|
+      | `1000` | `leagueStarted`   | La liga pasó a `started` (solo este canal)                    | No           |
+      | `1000` | `leagueCancelled` | La liga fue cancelada                                         | No           |
+      | `1000` | `leagueFinished`  | La liga terminó                                               | No           |
+      | `4401` | `sessionEnded`    | La sesión del usuario terminó                                 | No (iniciar sesión) |
+      | `4404` | `leagueNotFound`  | La liga dejó de existir con la conexión abierta               | No           |
+      | `1011` | (vacío)           | Error interno del servidor al enviar el estado                | Sí, con espera creciente |
+
+      El `4404` / `leagueNotFound` es el mismo código del handshake,
+      pero iniciado por el servidor: la liga existía al conectar y
+      dejó de existir después (por ejemplo, fue eliminada), así que
+      no hay estado que enviar. El cliente no debe reconectarse:
+      el handshake respondería `4404` otra vez.
+
+      El `1011` indica un error interno inesperado del servidor al
+      leer o enviar el estado. No lleva `reason` y no es culpa del
+      cliente. Como no hay replay, al reconectar el mensaje inicial
+      trae el estado actual: el cliente puede reintentar con una
+      espera creciente entre intentos.
+    parameters:
+      id:
+        $ref: "#/components/parameters/LeagueId"
+    messages:
+      leagueParticipants:
+        $ref: "#/components/messages/LeagueParticipants"
+
+  leagueFixture:
+    address: /ws/leagues/{id}/fixture
+    title: Fixture de una liga
+    description: |
+      Fixture de una liga, en tiempo real. `{id}` es el `id` de la
+      liga.
+
+      Un único mensaje, `leagueFixture`, con el fixture completo (la
+      lista de partidos con fecha, clubes, estado y resultado) y el
+      `leagueStatus`. Se emite cuando la liga se inicia y se genera el
+      fixture, y cada vez que un partido cambia de estado o de
+      resultado (`scheduled` -> `started` -> `finished`). El `id` de
+      cada partido sirve para verlo como espectador
+      (`GET /matches/{id}` y `POST /matches/{id}/connections`,
+      convención 12 del OpenAPI).
+
+      Sirve solo con la liga en curso (`started`). Si la liga pasa a
+      `finished` o `cancelled` con la conexión abierta, el servidor
+      envía el último mensaje y cierra (`leagueFinished` /
+      `leagueCancelled`). Si el cliente se conecta con la liga en
+      `preparation`, `finished` o `cancelled`, el handshake la
+      rechaza con `4409` y no envía ningún mensaje: con la liga
+      terminada se usa `GET /leagues/{id}/fixture`.
+
+      Autenticación, mensaje inicial, handshake y comportamiento de la
+      conexión: ver "Canales de liga" en el canal
+      `/ws/leagues/{id}/participants`.
+    parameters:
+      id:
+        $ref: "#/components/parameters/LeagueId"
+    messages:
+      leagueFixture:
+        $ref: "#/components/messages/LeagueFixture"
+
+  leagueRanking:
+    address: /ws/leagues/{id}/ranking
+    title: Ranking de una liga
+    description: |
+      Ranking de una liga, en tiempo real. `{id}` es el `id` de la
+      liga.
+
+      Un único mensaje, `leagueRanking`, con el ranking completo
+      (ordenado con los criterios de `GET /ranking`) y el
+      `leagueStatus`. Se emite cuando termina un partido de la liga,
+      que es lo único que lo modifica. No se emite cuando un partido
+      empieza o está en juego.
+
+      Una vez iniciada la liga, el `ranking` trae una entrada por
+      participante, en cero hasta que termine su primer partido.
+
+      Sirve solo con la liga en curso (`started`). Si la liga pasa a
+      `finished` o `cancelled` con la conexión abierta, el servidor
+      envía el último mensaje y cierra (`leagueFinished` /
+      `leagueCancelled`). Si el cliente se conecta con la liga en
+      `preparation`, `finished` o `cancelled`, el handshake la
+      rechaza con `4409` y no envía ningún mensaje: con la liga
+      terminada se usa `GET /leagues/{id}/ranking`.
+
+      Autenticación, mensaje inicial, handshake y comportamiento de la
+      conexión: ver "Canales de liga" en el canal
+      `/ws/leagues/{id}/participants`.
+    parameters:
+      id:
+        $ref: "#/components/parameters/LeagueId"
+    messages:
+      leagueRanking:
+        $ref: "#/components/messages/LeagueRanking"
+
+  leagueNextMatch:
+    address: /ws/leagues/{id}/matches/next
+    title: Partido siguiente de una liga
+    description: |
+      Partido siguiente de una liga, en tiempo real. `{id}` es el
+      `id` de la liga.
+
+      Un único mensaje, `leagueNextMatch`, con el `leagueStatus` y el
+      partido siguiente (`NextLeagueMatch`), o `null` si no hay. Se
+      emite cuando:
+
+      - el partido siguiente pasa de `scheduled` a `started`;
+      - el partido siguiente termina y el siguiente `scheduled` pasa a
+        ser el nuevo partido siguiente;
+      - termina el último partido (la liga queda `finished` y `match`
+        es `null`);
+      - la liga se cancela (`match` es `null`).
+
+      El canal solo existe con la liga en curso (`started`): con la
+      liga en `preparation`, `finished` o `cancelled` no hay partido
+      siguiente y el handshake rechaza la conexión con `4409`, sin
+      ningún mensaje. Mientras la liga está en curso `match` nunca es
+      `null`; solo lo es en el último mensaje, cuando la liga pasa a
+      `finished` o `cancelled` y el canal se cierra. Con la liga en
+      `preparation`, el cliente espera el cierre `leagueStarted` del
+      canal de participantes para conectarse.
+
+      `playable` depende del usuario conectado, no del partido: el
+      servidor lo calcula por conexión y no hace broadcast del mismo
+      mensaje a todos. Cuando `playable` es `true`, el usuario ya
+      puede pedir su token con `POST /matches/{id}/connections` y
+      conectarse al canal del partido. Este canal solo avisa que
+      llegó el momento: no reemplaza ese paso. Con `playable: false`
+      el usuario también puede pedir un token, pero como espectador
+      (convención 12 del OpenAPI).
+
+      Si la liga pasa a `finished` o `cancelled` con la conexión
+      abierta, el servidor envía el último mensaje (con `match: null`)
+      y cierra (`leagueFinished` / `leagueCancelled`).
+
+      Autenticación, mensaje inicial, handshake y comportamiento de la
+      conexión: ver "Canales de liga" en el canal
+      `/ws/leagues/{id}/participants`.
+    parameters:
+      id:
+        $ref: "#/components/parameters/LeagueId"
+    messages:
+      leagueNextMatch:
+        $ref: "#/components/messages/LeagueNextMatch"
+
+  notifications:
+    address: /ws/notifications
+    title: Notificaciones del usuario
+    description: |
+      Notificaciones del usuario de la sesión, en tiempo real. No hay
+      parámetros: el destinatario es el usuario de la cookie.
+
+      Un único mensaje, `notifications`, con las 10 notificaciones más
+      recientes del usuario y `new`. Se crea una notificación para cada
+      participante de la liga (no solo para los dos clubes del partido)
+      cuando:
+
+      - un partido de la liga pasa a `finished` (`kind: matchFinished`,
+        con el `leagueMatchId` del partido);
+      - la liga pasa a `finished` (`kind: leagueFinished`,
+        `leagueMatchId: null`).
+
+      Si el último partido termina la liga, se crean las dos y la de
+      fin de liga queda primera en el orden.
+
+      El servidor envía el mensaje:
+
+      - al aceptar la conexión;
+      - cada vez que se crean notificaciones para el usuario (un solo
+        mensaje aunque se hayan creado dos a la vez);
+      - cuando el usuario marca notificaciones como vistas
+        (`POST /notifications/seen`).
+
+      Cada mensaje trae el estado completo: el cliente reemplaza lo que
+      tenía, no hay deltas. Al reconectar no se reenvía nada: el
+      mensaje inicial ya trae el estado actual.
+
+      Autenticación y origen: iguales que en los canales de liga (ver
+      "Canales de liga" en el canal `/ws/leagues/{id}/participants`):
+      cookie `session_id`, sin `tokenWs`, y el header `Origin` se valida
+      antes que la sesión.
+
+      Solo servidor -> cliente. Si el cliente envía algo, el servidor
+      lo ignora en silencio y no cierra la conexión.
+
+      ## Handshake
+
+      El servidor siempre acepta el upgrade. Si alguna validación
+      falla, cierra con un código 4xxx y un `reason`. Se informa solo
+      la primera que falla:
+
+      | Orden | Caso                                                            | Código | `reason`             |
+      |-------|-----------------------------------------------------------------|--------|----------------------|
+      | 1     | El header `Origin` falta o no es uno de los orígenes permitidos | `4403` | `originNotAllowed`   |
+      | 2     | No hay cookie de sesión, o la sesión no es válida               | `4401` | `sessionInvalid`     |
+      | 3     | Ya hay 5 conexiones abiertas del usuario en este canal          | `4429` | `tooManyConnections` |
+
+      ## Comportamiento de la conexión
+
+      - Se permiten varias conexiones por usuario (hasta 5), cada una
+        como suscriptor independiente.
+      - Ping/pong igual que en los demás canales: ping cada 20
+        segundos y cierre si no llega el pong dentro de otros 20.
+      - Si la sesión termina (log-out o vencimiento), el servidor
+        cierra las conexiones abiertas con ella con `4401` /
+        `sessionEnded`.
+
+      ## Cierres iniciados por el servidor (resumen)
+
+      | Código | `reason`       | Cuándo                                          | ¿Reconectar?             |
+      |--------|----------------|-------------------------------------------------|--------------------------|
+      | `4401` | `sessionEnded` | La sesión del usuario terminó                   | No (iniciar sesión)      |
+      | `1011` | (vacío)        | Error interno del servidor al enviar el estado  | Sí, con espera creciente |
+    messages:
+      notifications:
+        $ref: "#/components/messages/Notifications"
+
 # ============================================================
 # OPERACIONES
 #
@@ -255,6 +879,83 @@ operations:
     messages:
       - $ref: "#/channels/match/messages/tick"
 
+  sendBehaviorTestStream:
+    action: send
+    channel:
+      $ref: "#/channels/behaviorTest"
+    title: Transmitir la prueba de un comportamiento
+    description: >
+      El servidor emite un `testTick` por cada paso de la simulación
+      de la prueba, con el estado completo (los 6 jugadores, la
+      pelota, marcador, tiempo y fase) y, cuando corresponde, el evento
+      puntual de ese tick. La simulación pertenece a la conexión: se
+      inicia al aceptar el handshake y termina al cerrarse. Cualquier
+      mensaje enviado por el cliente se ignora en silencio.
+    messages:
+      - $ref: "#/channels/behaviorTest/messages/testTick"
+
+  sendLeagueParticipants:
+    action: send
+    channel:
+      $ref: "#/channels/leagueParticipants"
+    title: Informar los participantes de una liga
+    description: >
+      El servidor envía el estado actual al aceptar la conexión y uno
+      nuevo cada vez que cambia la lista de participantes, con la
+      lista completa. Cuando la liga sale de `preparation`, envía el
+      último mensaje y cierra el canal.
+    messages:
+      - $ref: "#/channels/leagueParticipants/messages/leagueParticipants"
+
+  sendLeagueFixture:
+    action: send
+    channel:
+      $ref: "#/channels/leagueFixture"
+    title: Informar el fixture de una liga
+    description: >
+      El servidor envía el fixture completo al aceptar la conexión y
+      cada vez que se genera o que un partido cambia de estado o de
+      resultado. Cierra el canal cuando la liga termina o se cancela.
+    messages:
+      - $ref: "#/channels/leagueFixture/messages/leagueFixture"
+
+  sendLeagueRanking:
+    action: send
+    channel:
+      $ref: "#/channels/leagueRanking"
+    title: Informar el ranking de una liga
+    description: >
+      El servidor envía el ranking completo al aceptar la conexión y
+      cada vez que termina un partido de la liga. Cierra el canal
+      cuando la liga termina o se cancela.
+    messages:
+      - $ref: "#/channels/leagueRanking/messages/leagueRanking"
+
+  sendLeagueNextMatch:
+    action: send
+    channel:
+      $ref: "#/channels/leagueNextMatch"
+    title: Informar el partido siguiente de una liga
+    description: >
+      El servidor envía el partido siguiente (o `null`) al aceptar la
+      conexión y cada vez que cambia, calculando `playable` por
+      conexión. Cierra el canal cuando la liga termina o se cancela.
+    messages:
+      - $ref: "#/channels/leagueNextMatch/messages/leagueNextMatch"
+
+  sendNotifications:
+    action: send
+    channel:
+      $ref: "#/channels/notifications"
+    title: Informar las notificaciones del usuario
+    description: >
+      El servidor envía las 10 notificaciones más recientes y `new` al
+      aceptar la conexión, cada vez que se crean notificaciones para el
+      usuario y cuando el usuario las marca como vistas. Cada mensaje
+      trae el estado completo.
+    messages:
+      - $ref: "#/channels/notifications/messages/notifications"
+
 # ============================================================
 # COMPONENTES
 # ============================================================
@@ -265,6 +966,15 @@ components:
         Id del partido (el `id` devuelto por REST; en un amistoso, el
         de `POST /friendlies`).
       examples: ["42"]
+    BehaviorId:
+      description: >
+        Id del behavior a probar (el `id` de `BehaviorDetail` en REST).
+        Debe ser un `playerBehavior` del usuario.
+      examples: ["7"]
+    LeagueId:
+      description: >
+        Id de la liga (el `id` de `LeagueSummary` en REST).
+      examples: ["3"]
 
   messages:
     Tick:
@@ -279,18 +989,85 @@ components:
       payload:
         $ref: "#/components/schemas/TickPayload"
 
+    TestTick:
+      name: testTick
+      title: Estado de la prueba de un comportamiento
+      summary: >
+        Se emite en cada tick de la prueba. Trae siempre el estado
+        completo (los 6 jugadores, la pelota, marcador, tiempo y fase,
+        todo al mismo nivel) y, opcionalmente, el evento puntual de
+        ese tick (`event`, `null` si no pasó nada relevante).
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/TestTickPayload"
+
+    LeagueParticipants:
+      name: leagueParticipants
+      title: Participantes de la liga
+      summary: >
+        Lista completa de participantes inscriptos y estado de la
+        liga. Se envía al conectar y cada vez que la lista cambia.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/LeagueParticipantsPayload"
+
+    LeagueFixture:
+      name: leagueFixture
+      title: Fixture de la liga
+      summary: >
+        Fixture completo y estado de la liga. Se envía al conectar y
+        cada vez que se genera el fixture o cambia un partido.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/LeagueFixturePayload"
+
+    LeagueRanking:
+      name: leagueRanking
+      title: Ranking de la liga
+      summary: >
+        Ranking completo y estado de la liga. Se envía al conectar y
+        cada vez que termina un partido de la liga.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/LeagueRankingPayload"
+
+    LeagueNextMatch:
+      name: leagueNextMatch
+      title: Partido siguiente de la liga
+      summary: >
+        Partido siguiente (o `null`) y estado de la liga. Se envía al
+        conectar y cada vez que cambia. `playable` es por conexión.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/LeagueNextMatchPayload"
+
+    Notifications:
+      name: notifications
+      title: Notificaciones del usuario
+      summary: >
+        Las 10 notificaciones más recientes del usuario y si tiene
+        alguna sin ver. Se envía al conectar, al crearse notificaciones
+        para el usuario y al marcarlas como vistas.
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/NotificationsPayload"
+
   schemas:
     Position:
       type: object
       description: >
-       Posición en unidades de cancha, en coordenadas absolutas (no relativas a un equipo, a
-       diferencia de la API de Comportamientos). Origen (0, 0) en la esquina inferior izquierda,
-       del lado del arco de club1; x crece hacia el arco de club2 (de 0 a 100) e y hacia arriba 
-       (de 0 a 60). Los arcos están en x = 0 (club1) y x = 100 (club2), entre y = 22 e y = 38.
-       Los valores son decimales.
-       Excepción: en el tick de un gol, la pelota puede venir con x apenas menor que 0 o
-       mayor que 100, porque está dentro del arco.
-
+        Posición en unidades de cancha, en coordenadas absolutas (no
+        relativas a un equipo, a diferencia de la API de
+        Comportamientos). Origen (0, 0) en la esquina inferior
+        izquierda, del lado del arco de club1; x crece hacia el arco
+        de club2 (de 0 a 100) e y hacia arriba (de 0 a 60). Los arcos
+        están en x = 0 (club1) y x = 100 (club2), entre y = 22 e
+        y = 38. Los valores son decimales.
+        Excepción: en el tick de un gol, la pelota puede venir con x
+        apenas menor que 0 o mayor que 100, porque está dentro del
+        arco.
+        En la prueba de un comportamiento se usan las mismas
+        coordenadas: club1 ataca el arco de x = 100 y club2 el de x = 0.
       properties:
         x:
           type: number
@@ -300,23 +1077,47 @@ components:
 
     MatchPhase:
       type: string
-      description: >
+      description: |
         Fase actual del partido. Viaja en TODOS los `tick`, de modo que
         un cliente que se conecta tarde o se reconecta sabe en qué fase
         está sin depender de haber recibido un evento puntual.
 
-        countdown: cuenta regresiva previa al inicio de un período. El
-        primer `tick` de la cuenta trae el evento `periodStart`. El
-        partido sigue `scheduled`.
-
-        playing: el partido está en juego (`started`).
-
-        paused: el partido está en pausa (coincide con el evento
-        `pause`).
-
-        finished: el partido terminó (coincide con el evento
-        `matchEnd`).
-      enum: [countdown, playing, paused, finished]
+        - countdown: cuenta regresiva de 5 segundos previa al inicio de
+          un período. El primer `tick` de la cuenta trae el evento
+          `periodStart`. Hay una antes de cada uno de los 4 períodos: al
+          comenzar el partido (que sigue `scheduled`) y al terminar cada
+          pausa (el partido ya está `started`). Durante la cuenta el
+          reloj sigue detenido y las posiciones no cambian.
+        - playing: el partido está en juego (`started`).
+        - paused: el partido está en pausa (coincide con el evento
+          `pause`). Hay 3 pausas por partido de 15 segundos, a 1/4, 1/2
+          y 3/4 de la duración del mismo. Durante la pausa el reloj se
+          detiene y los `tick` se siguen transmitiendo con las mismas
+          posiciones y el mismo `elapsedTime`, el que tenía al empezar
+          la pausa. Las sustituciones pendientes de cada equipo se
+          aplican al empezar la pausa y, mientras dura, GET
+          /matches/{id}/substitutions devuelve la aplicada (ver GET y PUT
+          /matches/{id}/substitutions en el OpenAPI); un pedido que
+          llega durante la pausa queda pendiente para la siguiente y
+          recién se ve en el GET cuando la pausa termina. Al
+          terminar, el partido pasa a `countdown` (con el
+          `periodStart` del período siguiente) y después vuelve a
+          `playing`.
+        - penalties: tanda de penales (penal australiano), solo en
+          partidos de ligas con `allowDraws: false` que terminan
+          empatados. El partido sigue `started`. Empieza con el evento
+          `penaltiesStart` y cada penal se informa con un evento
+          `penaltyKick`. Antes de cada penal hay una cuenta previa de
+          3 segundos (`penaltyCountdownSeconds`) y después el pateador
+          tiene 8 segundos para convertir (`penaltyRemainingSeconds`).
+          Durante la tanda el reloj no avanza (`elapsedTime` conserva el
+          valor del final del juego); el marcador de la tanda viaja en
+          `penaltyScore1` y `penaltyScore2` y la lista de penales ya
+          ejecutados en `penaltyKicks`. No se piden sustituciones
+          durante la tanda. Termina con `phase: finished`.
+        - finished: el partido terminó (coincide con el evento
+          `matchEnd`).
+      enum: [countdown, playing, paused, penalties, finished]
 
     TickPlayerPosition:
       type: object
@@ -333,11 +1134,23 @@ components:
         type:
           type: string
           const: goal
+        club:
+          type: string
+          enum: [club1, club2]
+          description: >
+            Lado del partido que convirtió. Es el dato que debe usar
+            el cliente para atribuir el gol: dos clubes pueden tener
+            el mismo nombre, pero nunca el mismo lado. En el tick
+            siguiente, los jugadores y la pelota ya están en sus
+            posiciones iniciales y el juego continúa
+            (`phase: playing`).
         scoringClub:
           type: string
-          description: Nombre del club que convirtió. En el tick siguiente, los jugadores y la
-            pelota ya están en sus posiciones iniciales y el juego continúa (phase: playing).
-      required: [type, scoringClub]
+          description: >
+            Nombre del club que convirtió. Solo informativo (para
+            mostrar texto): no usar para decidir de qué lado es el
+            gol.
+      required: [type, club, scoringClub]
 
     PeriodStartEvent:
       type: object
@@ -349,6 +1162,9 @@ components:
           type: integer
           minimum: 1
           maximum: 4
+          description: >
+            Período que empieza. El partido tiene 4 períodos,
+            separados por las 3 pausas.
         countdownSeconds:
           type: integer
           examples: [5]
@@ -356,11 +1172,18 @@ components:
             Cuenta regresiva previa al inicio del período. En el
             período 1 de un amistoso es de 5 segundos, para dar tiempo
             al rival que se une a conectarse antes de que empiece el
-            juego.
+            juego. En los períodos 2 a 4 (al terminar cada pausa) es
+            también de 5 segundos.
       required: [type, periodNumber, countdownSeconds]
 
     PauseEvent:
       type: object
+      description: >
+        Empieza una pausa. Hay 3 por partido, a 1/4, 1/2 y 3/4 de la
+        duración (en un amistoso, a los 45 segundos, 1:30 y 2:15 de
+        juego). En este momento se aplica la sustitución pendiente de
+        cada equipo, si la tiene, y pasa a ser la que devuelve
+        GET /matches/{id}/substitutions hasta que termina la pausa.
       properties:
         type:
           type: string
@@ -369,19 +1192,163 @@ components:
           type: string
           enum: [hydration, halftime]
           description: >
-            TODO: confirmar los valores exactos, o si no se distingue
-            el motivo.
+            Permite distinguir las pausas de hidratación y de medio
+            tiempo, aunque para el sistema se comporten igual.
+        durationSeconds:
+          type: integer
+          description: Duración de la pausa, en segundos. Son 15 segundos.
       required: [type, reason]
+
+    PenaltyKickRecord:
+      type: object
+      description: >
+        Un penal ya ejecutado de la tanda. Se usa en la lista
+        `penaltyKicks` de cada tick y en `PenaltyShootout.kicks`; el
+        evento `penaltyKick` trae los mismos campos. La lista va en
+        orden de ejecución. Mismo formato que `PenaltyKickRecord` del
+        OpenAPI.
+      properties:
+        club:
+          type: string
+          enum: [club1, club2]
+          description: Lado del partido que patea.
+        kickerId:
+          type: integer
+          description: Id del jugador que patea.
+        kickerName:
+          type: string
+          maxLength: 20
+          description: Nombre del jugador que patea.
+        round:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: >
+            Número de penal de la tanda para ese club, de 1 a 5 (1 es
+            el primero de cada club).
+        scored:
+          type: boolean
+          description: >
+            `true` si fue gol. Es `false` si se agotaron los 8
+            segundos o si la pelota entró en el arco del propio
+            equipo pateador (el penal no cuenta).
+      required: [club, kickerId, kickerName, round, scored]
+
+    PenaltyShootout:
+      type: object
+      description: Mismo formato que `PenaltyShootout` del OpenAPI.
+      properties:
+        score1:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Penales convertidos por el club 1.
+        score2:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Penales convertidos por el club 2.
+        winner:
+          type: string
+          enum: [club1, club2]
+          description: >
+            Club que ganó por penales. Si la tanda terminó empatada
+            (sorteo 50/50), solo este campo indica quién ganó.
+        kicks:
+          type: array
+          description: Todos los penales de la tanda, en orden de ejecución.
+          items:
+            $ref: "#/components/schemas/PenaltyKickRecord"
+      required: [score1, score2, winner, kicks]
 
     MatchResult:
       type: object
-      description: Mismo formato que `MatchResult` del OpenAPI.
+      description: >
+        Mismo formato que `MatchResult` del OpenAPI. `score1` y `score2`
+        son los goles del juego, sin la tanda de penales; `penalties`
+        trae el resultado de la tanda si el partido se definió por
+        penales y es `null` si no.
       properties:
         score1:
           type: integer
         score2:
           type: integer
-      required: [score1, score2]
+        penalties:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/PenaltyShootout"
+      required: [score1, score2, penalties]
+
+    PenaltyCurrent:
+      type: object
+      description: >
+        Penal en curso: quién patea y quién defiende, con sus nombres.
+        Coincide con los dos jugadores de `players` durante la tanda.
+      properties:
+        club:
+          type: string
+          enum: [club1, club2]
+          description: Lado del partido que patea.
+        kickerId:
+          type: integer
+          description: Id del pateador.
+        kickerName:
+          type: string
+          maxLength: 20
+          description: Nombre del pateador.
+        defenderId:
+          type: integer
+          description: Id del defensor (titular `defense` del club rival).
+        defenderName:
+          type: string
+          maxLength: 20
+          description: Nombre del defensor.
+      required: [club, kickerId, kickerName, defenderId, defenderName]
+
+    PenaltiesStartEvent:
+      type: object
+      description: >
+        Empieza la tanda de penales (`phase: penalties`). Lo trae el
+        primer tick de la tanda, que es el inicio de la cuenta
+        previa del primer penal.
+      properties:
+        type:
+          type: string
+          const: penaltiesStart
+      required: [type]
+
+    PenaltyKickEvent:
+      type: object
+      description: >
+        Un penal ejecutado. Se emite en el tick en que termina el
+        penal (gol, 8 segundos agotados o pelota en el arco del
+        propio pateador). Un tick trae a lo sumo un evento. Trae los
+        mismos campos que `PenaltyKickRecord`; ese penal ya figura
+        también al final de `penaltyKicks` en el mismo tick.
+      properties:
+        type:
+          type: string
+          const: penaltyKick
+        club:
+          type: string
+          enum: [club1, club2]
+          description: Lado del partido que patea.
+        kickerId:
+          type: integer
+          description: Id del jugador que patea.
+        kickerName:
+          type: string
+          maxLength: 20
+          description: Nombre del jugador que patea.
+        round:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Número de penal de la tanda para ese club, de 1 a 5 (1 es el primero de cada club).
+        scored:
+          type: boolean
+          description: "`true` si fue gol. Si es `false`, el penal no cuenta."
+      required: [type, club, kickerId, kickerName, round, scored]
 
     MatchEndEvent:
       type: object
@@ -407,11 +1374,18 @@ components:
         Un tick trae a lo sumo un evento. Si en un mismo tick coinciden
         varios, `matchEnd` tiene prioridad sobre `goal` (ver
         `MatchEndEvent`).
+      type: object
+      properties:
+        type:
+          type: string
+      required: [type]
       oneOf:
         - $ref: "#/components/schemas/GoalEvent"
         - $ref: "#/components/schemas/PeriodStartEvent"
         - $ref: "#/components/schemas/PauseEvent"
         - $ref: "#/components/schemas/MatchEndEvent"
+        - $ref: "#/components/schemas/PenaltiesStartEvent"
+        - $ref: "#/components/schemas/PenaltyKickEvent"
       discriminator: type
 
     TickPayload:
@@ -437,9 +1411,85 @@ components:
         score2:
           type: integer
           description: Goles del club 2 (`club2` del partido).
+        penaltyScore1:
+          type: integer
+          description: Penales convertidos por `club1` en la tanda. 0 fuera de la tanda.
+        penaltyScore2:
+          type: integer
+          description: Penales convertidos por `club2` en la tanda. 0 fuera de la tanda.
+        penaltyKicks:
+          type: array
+          description: >
+            Penales ya ejecutados de la tanda, en orden de ejecución
+            (estado completo, no un delta). `[]` fuera de la tanda.
+            Un penal que termina en este tick figura al final de la
+            lista y, si corresponde, también en el `event`.
+          items:
+            $ref: "#/components/schemas/PenaltyKickRecord"
+        penaltyCurrent:
+          description: >
+            Penal en curso (pateador y defensor), desde la cuenta
+            previa hasta que termina el penal. `null` fuera de la
+            tanda (`phase` distinta de `penalties`).
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/PenaltyCurrent"
+        penaltyCountdownSeconds:
+          description: >
+            Segundos que faltan para que empiece el penal (de 3 a 1),
+            durante la cuenta previa. `null` si el penal ya está en
+            juego o si el partido no está en la tanda (`phase`
+            distinta de `penalties`).
+          oneOf:
+            - type: "null"
+            - type: integer
+        penaltyRemainingSeconds:
+          description: >
+            Segundos que quedan del penal en curso (de 8 a 0). Durante
+            la cuenta previa vale 8. `null` si el partido no está en
+            la tanda (`phase` distinta de `penalties`).
+          oneOf:
+            - type: "null"
+            - type: integer
         elapsedTime:
           type: integer
-          description: Segundos transcurridos (suposición; alternativa "mm:ss" como string).
+          description: >
+            Segundos de juego transcurridos. Durante una pausa y
+            durante la tanda de penales no avanza.
+        pauseRemainingSeconds:
+          description: >
+            Segundos que faltan para que termine la pausa, o `null`
+            si el partido no está en pausa (`phase` distinta de
+            `paused`).
+          oneOf:
+            - type: "null"
+            - type: integer
+        pausesLeft:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: >
+            Pausas que todavía no empezaron (de 3 a 0). NO cuenta la
+            pausa en curso: vale 3 hasta que empieza la primera, baja
+            a 2 en el tick en que empieza la primera pausa (evento
+            `pause`), a 1 con la segunda y a 0 con la tercera, y
+            sigue en 0 durante el período 4, la tanda de penales y
+            `finished`. Es estado completo, como el resto del tick:
+            un cliente que se conecta tarde o se reconecta lo conoce
+            sin haber contado eventos `pause`. Coincide con la regla
+            del 409 `noPausesLeft` de PUT
+            /matches/{id}/substitutions (no queda ninguna pausa por
+            empezar cuando `pausesLeft` es 0), así que el front puede
+            habilitar el pedido de sustitución solo si es jugador y
+            `pausesLeft` es mayor que 0. En la cuenta regresiva del
+            período 1 vale 3 aunque el partido todavía no esté
+            `started`: un pedido en esa ventana responde 409
+            `matchNotStarted`, que el cliente informa por su `code`.
+            Para GET /matches/{id}/substitutions la regla es distinta:
+            durante la última pausa (`phase: paused` con `pausesLeft`
+            en 0) responde 200 con la aplicada; el 409 `noPausesLeft`
+            del GET solo aplica con `pausesLeft` en 0 y fuera de una
+            pausa.
         phase:
           $ref: "#/components/schemas/MatchPhase"
         event:
@@ -459,4 +1509,335 @@ components:
         - elapsedTime
         - phase
         - event
+        - penaltyScore1
+        - penaltyScore2
+        - penaltyKicks
+        - penaltyCurrent
+        - penaltyCountdownSeconds
+        - penaltyRemainingSeconds
+        - pausesLeft
+
+    # ------------------------------------------------------------
+    # PRUEBA DE UN COMPORTAMIENTO
+    # ------------------------------------------------------------
+    TestPhase:
+      type: string
+      description: |
+        Fase actual de la prueba. Viaja en TODOS los `testTick`.
+
+        - countdown: cuenta regresiva previa al inicio. El primer
+          `testTick` trae el evento `testStart`.
+        - playing: la prueba está en juego.
+        - finished: la prueba terminó (coincide con el evento
+          `testEnd`).
+
+        No hay pausas: la prueba no tiene fase `paused`.
+      enum: [countdown, playing, finished]
+
+    TestStartEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          const: testStart
+        countdownSeconds:
+          type: integer
+          examples: [3]
+          description: Cuenta regresiva previa al inicio de la prueba, en segundos.
+      required: [type, countdownSeconds]
+
+    TestGoalEvent:
+      type: object
+      description: >
+        Un club convirtió un gol. `score1` / `score2` del mismo tick ya
+        lo incluyen. En el tick siguiente, los jugadores y la pelota ya
+        están en sus posiciones iniciales y la prueba continúa
+        (`phase: playing`). No lleva `scoringClub`: los dos clubes son
+        del mismo usuario.
+      properties:
+        type:
+          type: string
+          const: goal
+        club:
+          type: string
+          enum: [club1, club2]
+          description: Lado que convirtió.
+      required: [type, club]
+
+    TestEndEvent:
+      type: object
+      description: >
+        Último `testTick` de la prueba (`phase: finished`). Tiene
+        prioridad sobre `goal`: si el último tick coincide con un gol,
+        el `event` es `testEnd`, pero ese gol ya está sumado en
+        `score1` / `score2`, que son la fuente de verdad en todos los
+        ticks.
+      properties:
+        type:
+          type: string
+          const: testEnd
+        reason:
+          type: string
+          enum: [timeLimit]
+          description: >
+            timeLimit: se alcanzaron los 3 minutos de juego. Es el
+            único motivo de fin.
+      required: [type, reason]
+
+    TestTickEvent:
+      description: >
+        Evento puntual ocurrido en este tick de la prueba.
+        Discriminado por `type`. Un tick trae a lo sumo un evento; si
+        coinciden, `testEnd` tiene prioridad sobre `goal`.
+      type: object
+      properties:
+        type:
+          type: string
+      required: [type]
+      oneOf:
+        - $ref: "#/components/schemas/TestStartEvent"
+        - $ref: "#/components/schemas/TestGoalEvent"
+        - $ref: "#/components/schemas/TestEndEvent"
+      discriminator: type
+
+    TestTickPayload:
+      type: object
+      description: >
+        Estado completo de la prueba en este tick, todo al mismo nivel
+        (sin sub-objetos), igual que `TickPayload`. A diferencia del
+        partido, no hay nombres de club, pausas ni penales. `players`
+        no dice el club de cada jugador: el cliente lo sabe por la
+        alineación que mandó en el POST.
+      properties:
+        type:
+          type: string
+          const: testTick
+        players:
+          type: array
+          minItems: 6
+          maxItems: 6
+          description: Los 6 jugadores de la prueba, de los dos clubes.
+          items:
+            $ref: "#/components/schemas/TickPlayerPosition"
+        ballPosition:
+          $ref: "#/components/schemas/Position"
+        score1:
+          type: integer
+          minimum: 0
+          description: Goles de `club1` hasta este tick.
+        score2:
+          type: integer
+          minimum: 0
+          description: Goles de `club2` hasta este tick.
+        elapsedTime:
+          type: integer
+          description: >
+            Segundos de juego transcurridos desde el fin de la cuenta
+            regresiva (mismo criterio que en `TickPayload`).
+        phase:
+          $ref: "#/components/schemas/TestPhase"
+        event:
+          description: >
+            Evento puntual de este tick, o `null` si no ocurrió ninguno
+            (la gran mayoría de los ticks).
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/TestTickEvent"
+      required:
+        - type
+        - players
+        - ballPosition
+        - score1
+        - score2
+        - elapsedTime
+        - phase
+        - event
+
+    # ------------------------------------------------------------
+    # LIGAS
+    #
+    # Los payloads reutilizan los schemas del OpenAPI (mismo
+    # contenido que los GET): no se redefinen acá.
+    # ------------------------------------------------------------
+    LeagueParticipantsPayload:
+      type: object
+      description: >
+        Estado completo de los participantes de la liga. Mismo
+        contenido que `GET /leagues/{id}/participants`.
+      properties:
+        type:
+          type: string
+          const: leagueParticipants
+        leagueStatus:
+          $ref: "futbot-openapi.yaml#/components/schemas/LeagueStatus"
+        participants:
+          type: array
+          description: Participantes inscriptos, incluido el creador.
+          items:
+            $ref: "futbot-openapi.yaml#/components/schemas/LeagueParticipant"
+      required: [type, leagueStatus, participants]
+
+    LeagueFixturePayload:
+      type: object
+      description: >
+        Estado completo del fixture de la liga. `fixture` es `[]`
+        solo en el último mensaje de una liga cancelada (una liga
+        cancelada no tiene fixture).
+      properties:
+        type:
+          type: string
+          const: leagueFixture
+        leagueStatus:
+          $ref: "futbot-openapi.yaml#/components/schemas/LeagueStatus"
+        fixture:
+          $ref: "futbot-openapi.yaml#/components/schemas/Fixture"
+      required: [type, leagueStatus, fixture]
+
+    LeagueRankingPayload:
+      type: object
+      description: >
+        Estado completo del ranking de la liga. `ranking` es `[]`
+        solo en el último mensaje de una liga cancelada (una liga
+        cancelada no tiene ranking).
+      properties:
+        type:
+          type: string
+          const: leagueRanking
+        leagueStatus:
+          $ref: "futbot-openapi.yaml#/components/schemas/LeagueStatus"
+        ranking:
+          $ref: "futbot-openapi.yaml#/components/schemas/LeagueRanking"
+      required: [type, leagueStatus, ranking]
+
+    NextLeagueMatch:
+      description: >
+        Un `Match` (en `started` o `scheduled`) más `playable`, que
+        depende del usuario de la conexión y no del partido.
+      allOf:
+        - $ref: "futbot-openapi.yaml#/components/schemas/Match"
+        - type: object
+          properties:
+            playable:
+              type: boolean
+              description: >
+                true si el usuario es uno de los dos participantes del
+                partido y todavía no lo jugó (el front muestra el
+                botón "Jugar Partido"). Si es false, el usuario no
+                juega este partido y puede verlo como espectador
+                (POST /matches/{id}/connections devuelve
+                `role: spectator`). Puede ser true con el partido en
+                `scheduled`: el usuario ya puede pedir su token en
+                POST /matches/{id}/connections.
+          required: [playable]
+
+    LeagueNextMatchPayload:
+      type: object
+      description: >
+        Partido siguiente de la liga. `match` es `null` solo en el
+        último mensaje del canal (la liga pasó a `finished` o
+        `cancelled`). Si no es `null`, su `status` es `started` o
+        `scheduled` y `playable` está calculado para el usuario de
+        esta conexión.
+      properties:
+        type:
+          type: string
+          const: leagueNextMatch
+        leagueStatus:
+          $ref: "futbot-openapi.yaml#/components/schemas/LeagueStatus"
+        match:
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/NextLeagueMatch"
+      required: [type, leagueStatus, match]
+
+    # ------------------------------------------------------------
+    # NOTIFICACIONES
+    # ------------------------------------------------------------
+    Notification:
+      description: >
+        Una notificación. Los campos para mostrarla dependen de `kind`:
+        las de fin de partido traen los dos clubes y el resultado; las
+        de fin de liga, el nombre de la liga.
+      type: object
+      properties:
+        kind:
+          type: string
+      required: [kind]
+      oneOf:
+        - $ref: "#/components/schemas/MatchFinishedNotification"
+        - $ref: "#/components/schemas/LeagueFinishedNotification"
+      discriminator: kind
+
+    MatchFinishedNotification:
+      type: object
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          const: matchFinished
+        leagueId:
+          type: integer
+        leagueMatchId:
+          type: integer
+          description: Id del partido que terminó (el `id` de `Match` en REST).
+        seen:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        club1:
+          $ref: "futbot-openapi.yaml#/components/schemas/UserClub"
+        club2:
+          $ref: "futbot-openapi.yaml#/components/schemas/UserClub"
+        result:
+          $ref: "#/components/schemas/MatchResult"
+      required: [id, kind, leagueId, leagueMatchId, seen, createdAt, club1, club2, result]
+
+    LeagueFinishedNotification:
+      type: object
+      properties:
+        id:
+          type: integer
+        kind:
+          type: string
+          const: leagueFinished
+        leagueId:
+          type: integer
+        leagueMatchId:
+          type: "null"
+        seen:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        leagueName:
+          type: string
+      required: [id, kind, leagueId, leagueMatchId, seen, createdAt, leagueName]
+
+    NotificationsPayload:
+      type: object
+      description: >
+        Estado completo de las notificaciones del usuario. El cliente
+        reemplaza lo que tenía.
+      properties:
+        type:
+          type: string
+          const: notifications
+        new:
+          type: boolean
+          description: >
+            true si el usuario tiene al menos una notificación con
+            `seen: false`, contando todas y no solo las de
+            `notifications`.
+        notifications:
+          type: array
+          maxItems: 10
+          description: >
+            Las 10 más recientes del usuario, por `createdAt`
+            descendente y, a igual fecha, por `id` descendente.
+          items:
+            $ref: "#/components/schemas/Notification"
+      required: [type, new, notifications]
+
 

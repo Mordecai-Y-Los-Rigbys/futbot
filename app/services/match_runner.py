@@ -12,7 +12,7 @@ from contextlib import AbstractContextManager
 
 from starlette.concurrency import run_in_threadpool
 
-from app.repositories.match_abstract import AbstractMatchRepository, PenaltyShootoutData
+from app.repositories.match_abstract import PenaltyShootoutData
 from app.repositories.substitution_abstract import AbstractSubstitutionRepository, AppliedSwap
 from app.services.match_broadcast import (
     SEND_TIMEOUT,
@@ -21,9 +21,7 @@ from app.services.match_broadcast import (
     build_tick_payload,
     penalty_kick_record,
 )
-from app.services.match_connection_manager import MatchConnectionManager
 from app.services.match_progress import MatchProgress
-from app.services.match_setup_service import MatchSetup
 from app.simulation.behaviors.sandbox import CompiledBehavior, compile_behavior
 from app.simulation import constants as C
 from app.simulation.match_rules import Event, MatchSession, Phase, TickResult, build_session
@@ -52,6 +50,8 @@ class MatchRunner:
         monotonic: Callable[[], float] = time.monotonic,
         seed_factory: Callable[[], int] = lambda: secrets.randbits(63),
         send_timeout: float = SEND_TIMEOUT,
+        on_match_change: Callable[[int], None] | None = None,
+        on_match_finished: Callable[[int], None] | None = None,
     ) -> None:
         """Juega cada partido en tiempo real y transmite sus ticks.
 
@@ -72,6 +72,8 @@ class MatchRunner:
         self._seed_factory = seed_factory
         self._send_timeout = send_timeout
         self._tasks: dict[int, asyncio.Task] = {}
+        self._on_match_change = on_match_change
+        self._on_match_finished = on_match_finished
         self._pending: dict[int, dict[int, CompiledBehavior]] = {}
         self._pending_lock = threading.Lock()
         self._progress: dict[int, MatchProgress] = {}
@@ -145,7 +147,7 @@ class MatchRunner:
                 club_2=setup.club_2_name,
                 countdown_seconds=round(setup.countdown_seconds),
             )
-            await self._play(match_id, session, context, setup)
+            await self._play(match_id, session, context)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -165,9 +167,7 @@ class MatchRunner:
         with self._repo_scope() as repo:
             repo.save_seed(match_id, seed)
 
-    async def _play(
-        self, match_id: int, session: MatchSession, context: TickContext, setup: MatchSetup
-    ) -> None:
+    async def _play(self, match_id: int, session: MatchSession, context: TickContext) -> None:
         loop = asyncio.get_running_loop()
         started = False
         start = self._monotonic()
@@ -190,13 +190,7 @@ class MatchRunner:
                 swaps = await run_in_threadpool(self._start_pause, match_id)
                 result = self._put_on_field(match_id, session, result, swaps)
             # Después de aplicar los cambios: quien ve `paused` ya ve lo aplicado.
-            self._progress[match_id] = MatchProgress(
-                result.phase,
-                result.period,
-                session.periods,
-                result.pauses_left,
-                in_penalties=result.phase is Phase.PENALTIES,
-            )
+            self._progress[match_id] = MatchProgress(result.phase, result.period, session.periods)
 
             finished = result.phase is Phase.FINISHED
             if finished:
@@ -216,6 +210,7 @@ class MatchRunner:
     def _mark_started(self, match_id: int) -> None:
         with self._repo_scope() as repo:
             repo.mark_started(match_id)
+        self._notify(self._on_match_change, match_id)
 
     def _start_pause(self, match_id: int) -> list[AppliedSwap]:
         """Aplica en la base las sustituciones pendientes. Si falla, el partido sigue
@@ -263,6 +258,17 @@ class MatchRunner:
     def _save_result(self, match_id: int, result: TickResult) -> None:
         with self._repo_scope() as repo:
             repo.finish(match_id, result.score_1, result.score_2, _penalties_data(result))
+        self._notify(self._on_match_change, match_id)
+        self._notify(self._on_match_finished, match_id)
+
+    def _notify(self, callback: Callable[[int], None] | None, match_id: int) -> None:
+        """Avisa que el partido cambió. Un aviso que falla no frena el partido."""
+        if callback is None:
+            return
+        try:
+            callback(match_id)
+        except Exception:
+            logger.exception("No se pudo avisar el cambio del partido %s", match_id)
 
     def _apply_pending(self, match_id: int, session: MatchSession) -> None:
         """Aplica los cambios de behavior pendientes antes del próximo tick."""

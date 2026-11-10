@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.orm import Session, joinedload
@@ -18,6 +18,9 @@ from app.repositories.league_abstract import (
     JoinLeagueStateConflict,
     LeagueCreatorData,
     LeagueDetailData,
+    LeagueFixtureClubData,
+    LeagueFixtureData,
+    LeagueFixtureMatchData,
     LeagueJoinState,
     LeagueLeaveInfo,
     LeagueListItemData,
@@ -57,6 +60,15 @@ def _to_data(record: League, participants_count: int) -> LeagueListItemData:
         private=record.private,
         created_at=created_at,
         allow_draws=record.allow_draws,
+    )
+    
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _to_club(user: User) -> LeagueFixtureClubData:
+    return LeagueFixtureClubData(
+        id=user.id, username=user.username, club_name=user.club_name, avatar=user.avatar
     )
 
 
@@ -104,6 +116,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             match_duration=data.match_duration,
             private=data.private,
             password=data.password,
+            allow_draws=data.allow_draws,
         )
         try:
             self.db.add(league)
@@ -197,6 +210,35 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
         return LeagueDetailData(
             **_to_data(league, count).model_dump(),
             joined=bool(is_joined),
+        )
+        
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        status = self.db.scalar(select(League.status).where(League.id == league_id))
+        if status is None:
+            return None
+
+        matches = self.db.scalars(
+            select(Match)
+            .options(joinedload(Match.user_1), joinedload(Match.user_2))
+            .where(Match.league_id == league_id)
+            .order_by(Match.scheduled_at.asc(), Match.id.asc())
+        ).all()
+
+        return LeagueFixtureData(
+            status=status,
+            matches=[
+                LeagueFixtureMatchData(
+                    id=m.id,
+                    status=m.status,
+                    club_1=_to_club(m.user_1),
+                    club_2=_to_club(m.user_2),
+                    scheduled_at=_as_utc(m.scheduled_at),
+                    created_at=_as_utc(m.created_at),
+                    score_1=m.score_1,
+                    score_2=m.score_2,
+                )
+                for m in matches
+            ],
         )
 
     def list_participants(self, league_id: int) -> list[LeagueParticipantData]:

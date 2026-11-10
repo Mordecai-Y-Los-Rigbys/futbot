@@ -3,12 +3,13 @@
 import pytest
 
 from app.domain.team_member import MemberRole
+from app.repositories.league_abstract import AbstractLeagueRepository
 from app.repositories.match_abstract import MatchSetupData
 from app.repositories.team_abstract import StarterData
 from app.services.match_setup_service import MatchSetupService
 from app.simulation.constants import STARTER_ROLES, FRIENDLY_MATCH_DURATION
 from app.tests.unit.match_ws_fakes import FakeMatchRepo
-from app.tests.unit.repo_fakes import FakeLeagues, FakeTeams
+from app.tests.unit.repo_fakes import FakeTeams
 
 
 def starter(player_id: int, role: str, code: str = "pass") -> StarterData:
@@ -29,9 +30,53 @@ def full_team(first_id: int) -> list[StarterData]:
     return [starter(first_id + i, r.value) for i, r in enumerate(STARTER_ROLES)]
 
 
-def setup_data(
-    league_id=None, user_2_id=2, club_2="Club Dos", allow_draws=True
-) -> MatchSetupData:
+class FakeLeagues(AbstractLeagueRepository):
+    def __init__(self, durations=None):
+        self.durations = durations or {}
+        self.calls = []
+
+    def get_match_duration_minutes(self, league_id):
+        self.calls.append(league_id)
+        return self.durations.get(league_id)
+
+    def list_page(self, name, offset, limit):
+        raise NotImplementedError
+
+    def create(self, data):
+        raise NotImplementedError
+
+    def get_detail(self, league_id: int, user_id: int):
+        raise NotImplementedError
+
+    def get_leave_info(self, league_id):
+        raise NotImplementedError
+
+    def is_participant(self, league_id, user_id):
+        raise NotImplementedError
+
+    def remove_participant(self, league_id, user_id):
+        raise NotImplementedError
+
+    def get_join_state(self, league_id, user_id):
+        raise NotImplementedError
+
+    def join(self, data):
+        raise NotImplementedError
+
+    def get_fixture(self, league_id):
+        raise NotImplementedError
+
+    def list_participants(self, league_id):
+        raise NotImplementedError
+
+    def get_start_state(self, league_id):
+        raise NotImplementedError
+
+    def start(self, league_id, plan_fixture):
+        raise NotImplementedError
+
+
+def setup_data(league_id=None, user_2_id=2, club_2="Club Dos", allow_draws=True) -> MatchSetupData:
     return MatchSetupData(
         id=1,
         league_id=league_id,
@@ -115,7 +160,7 @@ def test_league_that_does_not_exist_is_a_lookup_error():
 
 def test_team_without_starters_is_an_error():
     service, _, _ = build(setup_data(), starters={1: full_team(10), 2: []})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="equipo del usuario 2"):
         service.load_match_setup(1)
 
 

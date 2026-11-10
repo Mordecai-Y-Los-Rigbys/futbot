@@ -9,6 +9,7 @@ from app.services.match_broadcast import TickContext, build_tick_payload, _closi
 from app.repositories.substitution_abstract import AppliedSwap
 from app.repositories.team_abstract import StarterData
 from app.domain.team_member import MemberRole
+from app.services import match_runner
 from app.services.match_runner import MatchRunner
 from app.services.match_setup_service import MatchSetup
 from app.simulation import match_rules
@@ -36,7 +37,6 @@ TICK_KEYS = {
     "penaltyRemainingSeconds",
     "elapsedTime",
     "pauseRemainingSeconds",
-    "pausesLeft",
     "phase",
     "event",
 }
@@ -116,8 +116,6 @@ def build(
         club_2_name="Club Dos",
         periods=periods,
         pause_seconds=pause_seconds,
-        user_1_id=1,
-        user_2_id=2,
         allow_draws=allow_draws,
     )
 
@@ -344,7 +342,7 @@ def swap_for_home_forward(player_id=99, out_player_id=HOME_FORWARD_ID):
         out_player_id=out_player_id,
         incoming=StarterData(
             player_id=player_id,
-            name=f"P{player_id}",
+            name=f"Jugador {player_id}",
             role=MemberRole.forward,
             power=60,
             agility=60,
@@ -367,6 +365,30 @@ def test_the_substitute_is_on_the_field_from_the_first_tick_of_the_pause():
     assert HOME_FORWARD_ID in ids(ws.received[0])  # antes de la pausa juega el titular
     assert 99 in ids(pause_ticks[0]) and HOME_FORWARD_ID not in ids(pause_ticks[0])
     assert 99 in ids(ws.received[-1])  # sigue jugando hasta el final
+
+
+def test_the_substitute_plays_with_its_behavior_from_the_first_play_tick_after_the_pause(
+    monkeypatch,
+):
+    used = spy_forward(monkeypatch)
+    incoming_behavior = compile_behavior("pass")
+    monkeypatch.setattr(match_runner, "compile_behavior", lambda code: incoming_behavior)
+    substitutions = FakeSubstitutionRepo()
+    substitutions.swaps = [swap_for_home_forward()]
+    ws = FakeWs()
+    mark = {}
+
+    def probe(tick):
+        if tick["phase"] == "paused" and "before_pause" not in mark:
+            mark["before_pause"] = len(used)
+
+    ws.probe = probe
+    run(build(FakeManager([ws]), FakeMatchRepo(), substitutions, **PAUSED))
+
+    before_pause = mark["before_pause"]
+    assert before_pause > 0
+    assert all(behavior is not incoming_behavior for behavior in used[:before_pause])
+    assert used[before_pause] is incoming_behavior
 
 
 def test_a_substitution_that_cannot_be_put_on_the_field_is_logged_and_the_match_goes_on(caplog):
@@ -452,6 +474,34 @@ def test_reconnecting_client_is_a_new_subscriber_and_sees_the_same_pause_stream(
     assert any(t["phase"] == "countdown" for t in second.received)
     for tick in second.received:
         TickPayload.model_validate(tick)
+
+
+# --- aviso de cambios -----------------------------------------------------------
+
+
+def test_match_changes_are_notified_after_being_saved():
+    repo = FakeMatchRepo()
+    repo.add(1)
+    seen = []
+    runner = build(
+        FakeManager([FakeWs()]),
+        repo,
+        on_match_change=lambda match_id: seen.append((match_id, repo.states[1].status)),
+    )
+    run(runner)
+    # Cuando se avisa, el cambio ya está guardado.
+    assert seen == [(1, "started"), (1, "finished")]
+
+
+def test_a_failing_notification_does_not_stop_the_match(caplog):
+    def boom(match_id):
+        raise RuntimeError("canal caído")
+
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), on_match_change=boom))
+    assert len(ws.received) == TOTAL
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudo avisar el cambio del partido" in caplog.text
 
 
 def test_queued_behavior_applies_from_the_next_tick(monkeypatch):
@@ -570,6 +620,30 @@ def test_changes_from_another_thread_never_break_a_tick(monkeypatch):
     assert accepted  # el hilo llegó a encolar con el partido corriendo
     assert all(x in (original, a, b) for x in used)
     assert manager.match_closed == [(1, 1000, "matchEnd")]
+
+
+def test_only_the_result_notifies_the_finished_match():
+    repo = FakeMatchRepo()
+    repo.add(1)
+    seen = []
+    runner = build(
+        FakeManager([FakeWs()]),
+        repo,
+        on_match_finished=lambda match_id: seen.append((match_id, repo.states[1].status)),
+    )
+    run(runner)
+    # No se avisa al empezar, y al avisar el resultado ya está guardado.
+    assert seen == [(1, "finished")]
+
+
+def test_a_failing_finished_notification_does_not_stop_the_match(caplog):
+    def boom(match_id):
+        raise RuntimeError("canal caído")
+
+    ws = FakeWs()
+    run(build(FakeManager([ws]), FakeMatchRepo(), on_match_finished=boom))
+    assert ws.received[-1]["phase"] == "finished"
+    assert "No se pudo avisar el cambio del partido" in caplog.text
 
 
 # --- penales -------------------------------------------------------------------

@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, DDL, ForeignKey, Integer, event
+from sqlalchemy import CheckConstraint, DDL, ForeignKey, event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -26,9 +26,7 @@ class Substitution(Base):
           dueño: la misma liga o el mismo partido);
         * `user_id` no es el dueño de los integrantes;
         * el equipo no es de ese partido (el usuario no es uno de los dos
-          clubes, o el equipo es de otra liga/otro amistoso);
-        * los roles no corresponden a una pendiente: el que entra tiene que
-          ser `substitute` y el que sale, titular.
+          clubes, o el equipo es de otra liga/otro amistoso).
     """
 
     __tablename__ = "substitutions"
@@ -93,7 +91,7 @@ DECLARE
     t_in team_members%%ROWTYPE;
     t_out team_members%%ROWTYPE;
 BEGIN
-    -- El lock serializa los cambios de un mismo partido (también apply_pending).
+    -- El lock serializa los cambios de un mismo partido.
     SELECT * INTO m FROM matches WHERE id = NEW.match_id FOR UPDATE;
     SELECT * INTO t_in FROM team_members WHERE id = NEW.member_in_id;
     SELECT * INTO t_out FROM team_members WHERE id = NEW.member_out_id;
@@ -131,11 +129,6 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
-    IF t_in.role <> 'substitute' OR t_out.role = 'substitute' THEN
-        RAISE EXCEPTION 'substitution: los roles no corresponden a una sustitución pendiente'
-            USING ERRCODE = '23514';
-    END IF;
-
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
@@ -163,3 +156,4 @@ event.listen(
     "after_drop",
     DDL("DROP FUNCTION IF EXISTS validate_substitution()").execute_if(**_postgres),
 )
+

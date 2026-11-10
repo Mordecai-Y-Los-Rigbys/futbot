@@ -32,7 +32,6 @@ def payload(**over) -> dict:
         "penaltyRemainingSeconds": None,
         "elapsedTime": 5,
         "pauseRemainingSeconds": None,
-        "pausesLeft": 3,
         "phase": "playing",
         "event": None,
     }
@@ -65,7 +64,6 @@ def payload(**over) -> dict:
         },
         {"phase": "paused", "pauseRemainingSeconds": 3, "event": None},
         {"phase": "paused", "pauseRemainingSeconds": 0, "event": None},
-        *({"pausesLeft": n} for n in (0, 1, 2, 3)),
         {
             "score1": 2,
             "score2": 1,
@@ -116,7 +114,6 @@ def without(key):
         "penaltyRemainingSeconds",
         "elapsedTime",
         "pauseRemainingSeconds",
-        "pausesLeft",
         "phase",
         "event",
     ],
@@ -175,12 +172,6 @@ def test_every_key_is_required_including_the_null_ones(key):
             "event": {"type": "matchEnd", "result": {"score1": 0, "score2": 0}},
         },
         {"pauseRemainingSeconds": -1, "phase": "paused"},
-        {"pausesLeft": -1},  # entero de 0 a 3
-        {"pausesLeft": 4},
-        {"pausesLeft": "3"},  # sin conversión de tipos
-        {"pausesLeft": True},
-        {"pausesLeft": 2.5},
-        {"pausesLeft": None},
     ],
 )
 def test_invalid_payloads(over):

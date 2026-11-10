@@ -131,10 +131,6 @@ def build_tick_payload(result: TickResult, ctx: TickContext) -> dict:
         "penaltyRemainingSeconds": shootout.remaining_seconds if in_penalties else None,
         "elapsedTime": int(result.elapsed),
         "pauseRemainingSeconds": result.pause_remaining_seconds,  # None fuera de la pausa
-        # Pausas que no empezaron (3 a 0), sin la en curso. Estado completo en cada
-        # tick: igual para jugadores y espectadores, y correcto en el primer tick de
-        # quien se conecta tarde o se reconecta.
-        "pausesLeft": result.pauses_left,
         "phase": result.phase.value,
         "event": _event(result, ctx),
     }

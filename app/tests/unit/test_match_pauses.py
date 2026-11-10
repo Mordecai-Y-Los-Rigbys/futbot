@@ -249,31 +249,3 @@ def test_friendly_of_3_minutes_end_to_end():
     assert sum(t.phase in (Phase.PLAYING, Phase.FINISHED) for t in ticks) == 3600
     assert ticks[-1].elapsed == 180.0 and ticks[-1].phase is Phase.FINISHED
     assert len(ticks) == 100 + 3600 + 3 * (300 + 100)
-
-
-def test_pauses_remaining_counts_the_whole_current_pause_through_its_last_tick():
-    from app.simulation.run import default_team
-    from app.simulation.match_rules import build_session
-
-    session = build_session(
-        default_team(), default_team(first_id=10), 0.4, seed=1,
-        countdown_seconds=0, periods=4, pause_seconds=0.1,
-    )
-    assert session.pauses_remaining == 3
-
-    # Primer período: dos ticks de juego.
-    session.advance()
-    session.advance()
-    assert session.pauses_remaining == 3
-
-    # La pausa tiene dos ticks; incluso en el último todavía cuenta como disponible.
-    first_pause_tick = session.advance()
-    assert first_pause_tick.phase.value == "paused"
-    assert session.pauses_remaining == 3
-    last_pause_tick = session.advance()
-    assert last_pause_tick.phase.value == "paused"
-    assert session.pauses_remaining == 3
-
-    # El primer tick posterior a la pausa la consume.
-    session.advance()
-    assert session.pauses_remaining == 2
