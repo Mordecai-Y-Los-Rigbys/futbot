@@ -47,7 +47,7 @@ def create_behavior(
     body: Any = Depends(get_json_body),
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
-    return BehaviorDetail.model_validate(service.create_behavior(user_id, body))
+    return service.create_behavior(user_id, body)
 
 
 # /me tiene que declararse ANTES que /{behavior_id}, si no este último lo tapa.
@@ -90,10 +90,7 @@ def get_behavior(
     user_id: int = Depends(get_current_user_id),  # 401 antes que el 404 del id
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
-    behavior = service.get_owned_behavior(
-        user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE)
-    )
-    return BehaviorDetail.model_validate(behavior)
+    return service.get_behavior(user_id, _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE))
 
 
 @router.put(
@@ -115,7 +112,7 @@ def update_behavior(
     service: BehaviorService = Depends(get_behavior_service),
 ) -> BehaviorDetail:
     parsed_id = _parse_id(behavior_id, BEHAVIOR_NOT_FOUND_MESSAGE, "notFound")
-    return BehaviorDetail.model_validate(service.update_behavior(user_id, parsed_id, body))
+    return service.update_behavior(user_id, parsed_id, body)
 
 
 @router.delete(
