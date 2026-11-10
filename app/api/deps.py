@@ -37,6 +37,7 @@ from app.services.field_validation import INVALID_JSON
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.match_connection_service import MatchConnectionService
 from app.services.match_runner import MatchRunner
+from app.services.match_player_behavior_service import MatchPlayerBehaviorService
 from app.services.match_service import MatchService
 from app.services.match_team_service import MatchTeamService
 from app.services.player_service import PlayerService
@@ -154,6 +155,13 @@ def get_match_behavior_service(
         SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db), behaviors, runner
     )
 
+def get_match_player_behavior_service(
+    db: Session = Depends(get_db),
+    behaviors: AbstractBehaviorRepository = Depends(get_behavior_repository),
+) -> MatchPlayerBehaviorService:
+    return MatchPlayerBehaviorService(
+        SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db), behaviors
+    )
 
 def get_match_team_service(db: Session = Depends(get_db)) -> MatchTeamService:
     return MatchTeamService(SqlAlchemyMatchRepository(db), SqlAlchemyTeamRepository(db))
