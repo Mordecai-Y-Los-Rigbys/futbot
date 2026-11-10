@@ -22,6 +22,9 @@ from app.repositories.league_abstract import (
     LeagueFixtureData,
     LeagueFixtureMatchData,
     LeagueJoinState,
+    LeagueFixtureClubData,
+    LeagueFixtureData,
+    LeagueFixtureMatchData,
     LeagueLeaveInfo,
     LeagueListItemData,
     LeaguePageData,
@@ -116,6 +119,7 @@ class SqlAlchemyLeagueRepository(AbstractLeagueRepository):
             match_duration=data.match_duration,
             private=data.private,
             password=data.password,
+            allow_draws=data.allow_draws,
         )
         try:
             self.db.add(league)

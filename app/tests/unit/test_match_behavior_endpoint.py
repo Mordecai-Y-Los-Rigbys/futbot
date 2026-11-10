@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_match_behavior_service, get_session_service
 from app.errors import ApiError, ValidationApiError
 from app.main import app
-from app.services.league_validation import INVALID_JSON
+from app.services.field_validation import INVALID_JSON
 from app.services.match_behavior_service import MatchBehaviorService
 from app.services.session_service import SessionService
 

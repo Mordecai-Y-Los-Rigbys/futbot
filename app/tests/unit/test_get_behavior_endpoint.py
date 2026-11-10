@@ -61,7 +61,12 @@ def test_success_calls_service_with_user_and_id(as_user, behavior_service):
     r = as_user(7).get("/behaviors/5")
 
     assert r.status_code == 200
-    assert r.json() == {"id": 5, "name": "mi-b", "code": "print(1)"}  # sin user_id
+    assert r.json() == {
+        "id": 5,
+        "name": "mi-b",
+        "type": "playerBehavior",
+        "code": "print(1)",
+    }  # sin user_id
     behavior_service.get_owned_behavior.assert_called_once_with(7, 5)
 
 

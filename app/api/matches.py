@@ -15,7 +15,6 @@ from app.api.deps import (
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
     Error,
-    JoinMatchBadRequest,
     JoinMatchConflict,
     JoinMatchForbidden,
     SubstitutionsConflict,
@@ -85,7 +84,7 @@ def get_match_lineups(
     operation_id="joinMatch",
     summary="Crear una conexión a un partido y obtener el token del WebSocket",
     responses={
-        400: {"model": JoinMatchBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         403: {"model": JoinMatchForbidden},
         404: {"model": Error},

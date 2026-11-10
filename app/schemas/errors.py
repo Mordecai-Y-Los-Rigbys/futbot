@@ -2,28 +2,17 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.domain.behavior import CodeRule
+from app.schemas.base import CamelModel
+
 
 class Error(BaseModel):
     code: str | None = None
     message: str
 
 
-class ListPageBadRequest(BaseModel):
-    code: Literal["pageNotAnInteger", "pageBelowMinimum", "pageTooLarge"]
-    message: str
-
-
-class CreateLeagueBadRequest(BaseModel):
-    code: Literal[
-        "invalidFieldType",
-        "incompleteForm",
-        "nameTooLong",
-        "minParticipantsTooLow",
-        "maxLessThanMin",
-        "matchDurationOutOfRange",
-        "passwordTooLong",
-        "invalidTeam",
-    ]
+class LeagueDataConflict(BaseModel):
+    code: Literal["leagueNotStarted", "leagueCancelled"]
     message: str
 
 
@@ -42,29 +31,8 @@ class StartLeagueConflict(BaseModel):
     message: str
 
 
-class CreatePlayerBadRequest(BaseModel):
-    code: Literal[
-        "invalidFieldType",
-        "incompleteForm",
-        "nameTooLong",
-        "statOutOfRange",
-        "statSumMismatch",
-    ]
-    message: str
-
-
-class CreateFriendlyMatchBadRequest(BaseModel):
-    code: Literal["invalidFieldType", "incompleteForm", "nameTooLong", "invalidTeam"]
-    message: str
-
-
 class CreateFriendlyMatchConflict(BaseModel):
     code: Literal["alreadyPlaying", "playerOrBehaviorNotOwned"]
-    message: str
-
-
-class JoinMatchBadRequest(BaseModel):
-    code: Literal["invalidFieldType"]
     message: str
 
 
@@ -80,11 +48,6 @@ class MatchAccessForbidden(BaseModel):
 
 class JoinMatchConflict(BaseModel):
     code: Literal["matchFinished", "matchCancelled", "matchNotCreatedYet"]
-    message: str
-
-
-class JoinFriendlyMatchBadRequest(BaseModel):
-    code: Literal["invalidFieldType", "incompleteForm", "invalidTeam"]
     message: str
 
 
@@ -161,4 +124,32 @@ class MatchBehaviorForbidden(BaseModel):
 
 class MatchBehaviorConflict(BaseModel):
     code: Literal["matchNotInProgress", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
+    message: str
+
+
+class TestBehaviorConflict(BaseModel):
+    code: Literal["notPlayerBehavior", "playerOrBehaviorNotOwned", "behaviorTypeMismatch"]
+    message: str
+
+
+# --- POST /behaviors -----------------------------------------------------------
+
+
+class CodeError(BaseModel):
+    rule: CodeRule
+    line: int
+    column: int
+
+
+class CreateBehaviorConflict(CamelModel):
+    code: Literal["duplicateName", "codeTooLong", "invalidCode"]
+    message: str
+    code_error: CodeError | None
+
+
+# --- PUT /behaviors/{id} ------------------------------------------------------
+
+
+class UpdateBehaviorNotFound(BaseModel):
+    code: Literal["notFound", "deletedConcurrently"]
     message: str
