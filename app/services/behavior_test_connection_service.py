@@ -42,14 +42,14 @@ class BehaviorTestConnectionService:
         porque la validación del body va entre los dos.
 
         Raises:
-            ApiError 404: el behavior no existe.
+            ApiError 404: el behavior no existe o está eliminado.
             ValidationApiError 400: invalidFields, con todos los campos que fallan.
             ApiError 403: el behavior es de otro usuario.
             ApiError 409: notPlayerBehavior, playerOrBehaviorNotOwned o
                 behaviorTypeMismatch, en ese orden.
         """
         behavior = self.behaviors.get_by_id(behavior_id)
-        if behavior is None:
+        if behavior is None or behavior.deleted:
             raise ApiError(404, None, BEHAVIOR_NOT_FOUND_MESSAGE)
 
         members = parse_behavior_test(body)
