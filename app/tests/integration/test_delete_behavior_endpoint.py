@@ -2,6 +2,7 @@ import threading
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.domain.behavior import BehaviorType, BehaviorUsage
@@ -12,7 +13,7 @@ from app.models.league_participant import LeagueParticipant
 from app.models.match import Match
 from app.models.player import Player
 from app.models.team_member import MemberRole, TeamMember
-from app.repositories.behavior_abstract import UpdateBehaviorData
+from app.repositories.behavior_abstract import BehaviorNotFoundError, UpdateBehaviorData
 from app.repositories.behavior_sqlalchemy import SqlAlchemyBehaviorRepository
 from app.tests.integration.match_factories import ROLES, add_league, add_team
 
@@ -277,6 +278,18 @@ def test_a_behavior_deleted_after_reading_it_is_not_updated(login, db_session):
     assert behavior.name == "mio"
 
 
+def test_deleting_an_already_deleted_behavior_raises_and_does_not_touch_it(login, db_session):
+    api = login(1)
+    behavior = add_behavior(db_session, 1, "mio")
+    api.delete(url(behavior.id))
+
+    with pytest.raises(BehaviorNotFoundError):
+        SqlAlchemyBehaviorRepository(db_session).delete_if_unused(behavior.id)
+
+    db_session.refresh(behavior)
+    assert (behavior.name, behavior.deleted) == ("mio", True)
+
+
 # --- Atomicidad -----------------------------------------------------------------
 
 
@@ -316,3 +329,30 @@ def test_the_delete_waits_for_a_team_being_saved_and_sees_it(db_session, make_us
 
     assert result["usage"] == BehaviorUsage.match
     assert not is_deleted(db_session, behavior)
+
+
+def test_a_team_being_saved_waits_for_the_delete_and_does_not_see_it(db_session, make_user):
+    """Un DELETE tiene la fila bloqueada con FOR UPDATE; mientras no confirma,
+    owned_behavior_ids espera, y cuando confirma, ya no encuentra el behavior."""
+    make_user(1)
+    behavior_id = add_behavior(db_session, 1, "mio").id
+    engine = db_session.get_bind()
+    result = {}
+
+    def owned():
+        with Session(engine) as saving:
+            result["owned"] = SqlAlchemyBehaviorRepository(saving).owned_behavior_ids(
+                1, [behavior_id]
+            )
+
+    with Session(engine) as deleting:
+        deleting.execute(select(Behavior.id).where(Behavior.id == behavior_id).with_for_update())
+        deleting.execute(update(Behavior).where(Behavior.id == behavior_id).values(deleted=True))
+        saver = threading.Thread(target=owned)
+        saver.start()
+        saver.join(timeout=0.5)
+        assert saver.is_alive()  # espera al DELETE
+        deleting.commit()
+    saver.join(timeout=5)
+
+    assert result["owned"] == set()

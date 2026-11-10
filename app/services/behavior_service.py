@@ -5,6 +5,7 @@ from app.errors import ApiError, BehaviorConflictError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    BehaviorNotFoundError,
     CreateBehaviorData,
     DuplicateBehaviorNameError,
 )
@@ -115,7 +116,11 @@ class BehaviorService:
             ApiError 409: behaviorInLeagueTeam o behaviorInMatch, si está en uso.
         """
         self.get_owned_behavior(user_id, behavior_id)
-        usage = self.repository.delete_if_unused(behavior_id)
+        try:
+            usage = self.repository.delete_if_unused(behavior_id)
+        except BehaviorNotFoundError:
+            # Otro DELETE lo eliminó después de que lo leímos.
+            raise ApiError(404, None, BEHAVIOR_NOT_FOUND_MESSAGE)
         if usage is not None:
             raise ApiError(409, usage.value, IN_USE_MESSAGES[usage])
 

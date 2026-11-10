@@ -13,6 +13,7 @@ from app.models.team_member import TeamMember
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    BehaviorNotFoundError,
     CreateBehaviorData,
     DuplicateBehaviorNameError,
     UpdateBehaviorData,
@@ -133,8 +134,12 @@ class SqlAlchemyBehaviorRepository(AbstractBehaviorRepository):
             .where(Behavior.id == behavior_id, Behavior.deleted.is_(False))
             .with_for_update()
         )
+        if locked is None:
+            # Otro DELETE lo eliminó mientras esperábamos el bloqueo.
+            self.db.rollback()
+            raise BehaviorNotFoundError()
         usage = self.usage(behavior_id)
-        if locked is not None and usage is None:
+        if usage is None:
             self.db.execute(update(Behavior).where(Behavior.id == behavior_id).values(deleted=True))
         self.db.commit()
         return usage

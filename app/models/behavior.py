@@ -16,7 +16,6 @@ class Behavior(Base):
             "name",
             unique=True,
             postgresql_where=text("NOT deleted"),
-            sqlite_where=text("NOT deleted"),
         ),
     )
 

@@ -31,6 +31,10 @@ class DuplicateBehaviorNameError(Exception):
     """El usuario ya tiene un behavior con ese nombre."""
 
 
+class BehaviorNotFoundError(Exception):
+    """El behavior no existe o ya está eliminado."""
+
+
 class AbstractBehaviorRepository(ABC):
     @abstractmethod
     def list_by_user(
@@ -51,10 +55,7 @@ class AbstractBehaviorRepository(ABC):
 
     @abstractmethod
     def create_many(self, user_id: int, behaviors: list[CreateBehaviorData]) -> list[BehaviorData]:
-        """Devuelve el behavior con ese id (de cualquier usuario) o None si no existe.
-
-        También devuelve los eliminados, con `deleted` en True.
-        """
+        """Crea los behaviors para el usuario. No confirma la transacción."""
 
     @abstractmethod
     def name_taken(self, user_id: int, name: str, except_id: int | None = None) -> bool:
@@ -97,6 +98,10 @@ class AbstractBehaviorRepository(ABC):
 
         El chequeo y el borrado son atómicos: nadie puede asignarlo a un equipo
         en el medio. Devuelve por qué está en uso (y no lo elimina), o None.
+
+        Raises:
+            BehaviorNotFoundError: ya estaba eliminado (otro DELETE lo eliminó
+                mientras tanto). No calcula el uso ni toca la fila.
         """
 
     @abstractmethod

@@ -7,6 +7,7 @@ from app.errors import ApiError, BehaviorConflictError, ValidationApiError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    BehaviorNotFoundError,
     CreateBehaviorData,
     DuplicateBehaviorNameError,
     UpdateBehaviorData,
@@ -322,6 +323,16 @@ def test_delete_of_a_missing_or_deleted_behavior_is_404(service, repo, stored):
 
     assert (exc.value.status_code, exc.value.code) == (404, None)
     repo.delete_if_unused.assert_not_called()
+
+
+def test_delete_of_a_behavior_deleted_meanwhile_is_404(service, repo):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1)
+    repo.delete_if_unused.side_effect = BehaviorNotFoundError()
+
+    with pytest.raises(ApiError) as exc:
+        service.delete_behavior(user_id=1, behavior_id=5)
+
+    assert (exc.value.status_code, exc.value.code) == (404, None)
 
 
 def test_delete_of_another_users_behavior_is_403(service, repo):
