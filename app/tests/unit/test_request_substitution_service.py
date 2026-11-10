@@ -12,6 +12,15 @@ from app.services.substitution_service import SubstitutionService
 from app.simulation.match_rules import Phase
 
 
+def set_team(teams, starters, substitutes):
+    """El id de la fila de `team_members` de cada jugador es su `playerId` + 100."""
+
+    def member_id(match_id, league_id, user_id, player_id, *, substitute):
+        return player_id + 100 if player_id in (substitutes if substitute else starters) else None
+
+    teams.get_member_id.side_effect = member_id
+
+
 @pytest.fixture
 def setup():
     matches = create_autospec(AbstractMatchRepository, instance=True)
@@ -19,10 +28,7 @@ def setup():
         id=5, league_id=None, status=MatchStatus.started, user_1_id=7, user_2_id=8
     )
     teams = create_autospec(AbstractTeamRepository, instance=True)
-    teams.get_team_player_ids.side_effect = lambda _mid, _league, _uid, *, substitutes: (
-        {13, 14, 15} if substitutes else {10, 11, 12}
-    )
-    teams.get_member_id.side_effect = lambda mid, league, uid, pid: pid + 100
+    set_team(teams, starters={10, 11, 12}, substitutes={13, 14, 15})
     substitutions = create_autospec(AbstractSubstitutionRepository, instance=True)
     progress = create_autospec(MatchProgressReader, instance=True)
     progress.progress.return_value = MatchProgress(Phase.PLAYING, period=2, periods=4)
@@ -57,9 +63,7 @@ def test_field_validation(setup, body, expected):
 
 def test_both_team_membership_errors_are_reported(setup):
     matches, teams, repo, progress = setup
-    teams.get_team_player_ids.side_effect = lambda _mid, _league, _uid, *, substitutes: (
-        {14} if substitutes else {11}
-    )
+    set_team(teams, starters={11}, substitutes={14})
     with pytest.raises(ValidationApiError) as exc:
         SubstitutionService(matches, repo, progress, teams).request_substitution(
             7, 5, {"starterId": 10, "substituteId": 13}
@@ -77,7 +81,7 @@ def test_non_player_with_valid_body_is_forbidden(setup):
             9, 5, {"starterId": 10, "substituteId": 13}
         )
     assert (exc.value.status_code, exc.value.code) == (403, None)
-    teams.get_team_player_ids.assert_not_called()
+    teams.get_member_id.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -112,7 +116,6 @@ def test_match_not_started_has_precedence_over_progress_conflicts(setup):
 
 def test_valid_substitute_field_is_still_checked_when_starter_has_wrong_type(setup):
     matches, teams, repo, progress = setup
-    teams.get_team_player_ids.side_effect = [{13, 14, 15}]
     with pytest.raises(ValidationApiError) as exc:
         SubstitutionService(matches, repo, progress, teams).request_substitution(
             7, 5, {"starterId": "10", "substituteId": 999}
@@ -130,4 +133,4 @@ def test_non_player_with_invalid_body_gets_only_field_errors(setup):
             9, 5, {"starterId": "10", "substituteId": 13}
         )
     assert [(e["field"], e["reason"]) for e in exc.value.errors] == [("starterId", "invalidType")]
-    teams.get_team_player_ids.assert_not_called()
+    teams.get_member_id.assert_not_called()

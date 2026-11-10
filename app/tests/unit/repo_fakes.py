@@ -18,10 +18,7 @@ class FakeTeams(AbstractTeamRepository):
     def set_behavior(self, match_id, league_id, player_id, behavior_id):
         raise NotImplementedError
 
-    def get_team_player_ids(self, match_id, league_id, user_id, *, substitutes):
-        raise NotImplementedError
-
-    def get_member_id(self, match_id, league_id, user_id, player_id):
+    def get_member_id(self, match_id, league_id, user_id, player_id, *, substitute):
         raise NotImplementedError
 
 

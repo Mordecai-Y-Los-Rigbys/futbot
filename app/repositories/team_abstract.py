@@ -40,13 +40,15 @@ class AbstractTeamRepository(ABC):
         """Le asigna el comportamiento al jugador en su equipo: el de la liga o el del amistoso."""
 
     @abstractmethod
-    def get_team_player_ids(
-        self, match_id: int, league_id: int | None, user_id: int, *, substitutes: bool
-    ) -> set[int]:
-        """IDs de jugadores titulares o suplentes de la alineación efectiva actual."""
-
-    @abstractmethod
     def get_member_id(
-        self, match_id: int, league_id: int | None, user_id: int, player_id: int
+        self,
+        match_id: int,
+        league_id: int | None,
+        user_id: int,
+        player_id: int,
+        *,
+        substitute: bool,
     ) -> int | None:
-        """ID de la fila team_members que representa al jugador en el equipo."""
+        """Fila de `team_members` del jugador en el equipo del usuario, si es suplente
+        (`substitute=True`) o titular (`substitute=False`) en la alineación actual.
+        None si no está en el equipo con ese rol."""

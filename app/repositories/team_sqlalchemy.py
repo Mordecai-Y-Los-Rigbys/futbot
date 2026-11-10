@@ -22,37 +22,26 @@ class SqlAlchemyTeamRepository(AbstractTeamRepository):
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_team_player_ids(
-        self, match_id: int, league_id: int | None, user_id: int, *, substitutes: bool
-    ) -> set[int]:
-        owner = (
-            TeamMember.match_id == match_id
-            if league_id is None
-            else TeamMember.league_id == league_id
-        )
+    def get_member_id(
+        self,
+        match_id: int,
+        league_id: int | None,
+        user_id: int,
+        player_id: int,
+        *,
+        substitute: bool,
+    ) -> int | None:
         role_filter = (
             TeamMember.role == MemberRole.substitute
-            if substitutes
+            if substitute
             else TeamMember.role != MemberRole.substitute
-        )
-        rows = self.db.scalars(
-            select(TeamMember.player_id).where(owner, TeamMember.user_id == user_id, role_filter)
-        ).all()
-        return set(rows)
-
-    def get_member_id(
-        self, match_id: int, league_id: int | None, user_id: int, player_id: int
-    ) -> int | None:
-        owner = (
-            TeamMember.match_id == match_id
-            if league_id is None
-            else TeamMember.league_id == league_id
         )
         return self.db.scalar(
             select(TeamMember.id).where(
-                owner,
+                _team_owner(match_id, league_id),
                 TeamMember.user_id == user_id,
                 TeamMember.player_id == player_id,
+                role_filter,
             )
         )
 

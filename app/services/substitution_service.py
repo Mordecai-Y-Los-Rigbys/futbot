@@ -114,26 +114,18 @@ class SubstitutionService:
 
         if is_player:
             if request.starter_id is not None:
-                starters = self.teams.get_team_player_ids(
-                    match_id, match.league_id, user_id, substitutes=False
+                starter_member_id = self.teams.get_member_id(
+                    match_id, match.league_id, user_id, request.starter_id, substitute=False
                 )
-                if request.starter_id not in starters:
+                if starter_member_id is None:
                     errors.append({"field": "starterId", "reason": "notStarter"})
-                else:
-                    starter_member_id = self.teams.get_member_id(
-                        match_id, match.league_id, user_id, request.starter_id
-                    )
 
             if request.substitute_id is not None:
-                substitutes = self.teams.get_team_player_ids(
-                    match_id, match.league_id, user_id, substitutes=True
+                substitute_member_id = self.teams.get_member_id(
+                    match_id, match.league_id, user_id, request.substitute_id, substitute=True
                 )
-                if request.substitute_id not in substitutes:
+                if substitute_member_id is None:
                     errors.append({"field": "substituteId", "reason": "notSubstitute"})
-                else:
-                    substitute_member_id = self.teams.get_member_id(
-                        match_id, match.league_id, user_id, request.substitute_id
-                    )
 
         # El contrato exige el orden del schema: starterId, substituteId.
         field_order = {"starterId": 0, "substituteId": 1}
