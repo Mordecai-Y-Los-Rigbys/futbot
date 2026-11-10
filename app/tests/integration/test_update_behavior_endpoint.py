@@ -43,6 +43,7 @@ def test_the_owner_changes_name_and_code_and_keeps_the_type(login, db_session):
         "name": "DT 2",
         "type": "coachBehavior",
         "code": "x = 2",
+        "deletable": True,
     }
     assert stored(db_session, coach) == ("DT 2", "x = 2", BehaviorType.coach_behavior)
 

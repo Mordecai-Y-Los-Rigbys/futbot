@@ -356,3 +356,67 @@ def test_a_team_being_saved_waits_for_the_delete_and_does_not_see_it(db_session,
     saver.join(timeout=5)
 
     assert result["owned"] == set()
+
+
+# --- deletable en GET /behaviors/{id} -------------------------------------------
+
+
+def league_coach(db_session, coach):
+    """`coach` es el DT del equipo del usuario 1 en una liga en preparación."""
+    league = league_team(db_session, add_behavior(db_session, 1, "jugador"), "preparation")
+    db_session.get(LeagueParticipant, (league.id, 1)).coach_behavior_id = coach.id
+    db_session.commit()
+
+
+USES = {
+    "sin uso": (lambda db_session, behavior: None, True),
+    "liga en preparación": (
+        lambda db_session, behavior: league_team(db_session, behavior, "preparation"),
+        False,
+    ),
+    "liga en curso": (
+        lambda db_session, behavior: league_team(db_session, behavior, "started"),
+        False,
+    ),
+    "DT de una liga": (league_coach, False),
+    "amistoso esperando rival": (
+        lambda db_session, behavior: friendly_team(db_session, behavior, MatchStatus.scheduled),
+        False,
+    ),
+    "amistoso en juego": (
+        lambda db_session, behavior: friendly_team(db_session, behavior, MatchStatus.started, 2),
+        False,
+    ),
+    "liga cancelada": (
+        lambda db_session, behavior: league_team(db_session, behavior, "cancelled"),
+        True,
+    ),
+    "liga finalizada": (
+        lambda db_session, behavior: league_team(db_session, behavior, "finished"),
+        True,
+    ),
+    "amistoso terminado": (
+        lambda db_session, behavior: friendly_team(db_session, behavior, MatchStatus.finished, 2),
+        True,
+    ),
+    "amistoso cancelado": (
+        lambda db_session, behavior: friendly_team(db_session, behavior, MatchStatus.cancelled),
+        True,
+    ),
+}
+
+
+@pytest.mark.parametrize("use, deletable", USES.values(), ids=USES.keys())
+def test_deletable_is_false_exactly_when_delete_is_409(
+    login, db_session, make_user, use, deletable
+):
+    api = login(1)
+    make_user(2)
+    behavior = add_behavior(db_session, 1, "mio")
+    use(db_session, behavior)
+
+    detail = api.get(url(behavior.id))
+    response = api.delete(url(behavior.id))
+
+    assert detail.json()["deletable"] is deletable
+    assert response.status_code == (204 if deletable else 409)

@@ -22,6 +22,7 @@ def repo():
     mock.list_by_user.return_value = ([], 0)
     mock.get_by_id.return_value = None
     mock.name_taken.return_value = False
+    mock.usage.return_value = None
     return mock
 
 
@@ -133,7 +134,7 @@ def test_create_saves_the_behavior_of_the_user(service, repo):
     request_body = body(code="x = ball_position()", behavior_type="coachBehavior")
     result = service.create_behavior(user_id=1, body=request_body)
 
-    assert result is created
+    assert (result.id, result.name, result.deletable) == (9, "nuevo", True)
     repo.name_taken.assert_called_once_with(1, "nuevo")
     repo.create.assert_called_once_with(
         1,
@@ -360,3 +361,39 @@ def test_delete_of_a_behavior_in_use_is_409_with_the_reason(service, repo, usage
         service.delete_behavior(user_id=1, behavior_id=5)
 
     assert (exc.value.status_code, exc.value.code) == (409, code)
+
+
+# --- deletable ----------------------------------------------------------------
+
+
+def test_get_behavior_of_an_unused_behavior_is_deletable(service, repo):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1, name="mio")
+
+    detail = service.get_behavior(user_id=1, behavior_id=5)
+
+    assert (detail.id, detail.name, detail.deletable) == (5, "mio", True)
+    repo.usage.assert_called_once_with(5)
+
+
+@pytest.mark.parametrize("usage", [BehaviorUsage.league_team, BehaviorUsage.match])
+def test_get_behavior_of_a_behavior_in_use_is_not_deletable(service, repo, usage):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1)
+    repo.usage.return_value = usage
+
+    assert service.get_behavior(user_id=1, behavior_id=5).deletable is False
+
+
+def test_get_behavior_of_another_users_behavior_is_403(service, repo):
+    repo.get_by_id.return_value = behavior(user_id=2)
+
+    with pytest.raises(ApiError) as exc:
+        service.get_behavior(user_id=1, behavior_id=5)
+
+    assert exc.value.status_code == 403
+    repo.usage.assert_not_called()
+
+
+def test_update_returns_whether_it_is_deletable(service, owned):
+    owned.usage.return_value = BehaviorUsage.league_team
+
+    assert service.update_behavior(user_id=1, behavior_id=5, body=edit()).deletable is False

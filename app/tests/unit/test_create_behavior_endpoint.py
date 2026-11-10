@@ -7,7 +7,7 @@ from app.api.deps import get_behavior_service, get_session_service
 from app.domain.behavior import BehaviorType
 from app.errors import BehaviorConflictError
 from app.main import app
-from app.repositories.behavior_abstract import BehaviorData
+from app.schemas.behavior import BehaviorDetail
 from app.services.behavior_service import BehaviorService
 from app.services.field_validation import INVALID_JSON
 from app.services.session_service import SessionService
@@ -28,8 +28,8 @@ def session_service():
 @pytest.fixture
 def behavior_service():
     mock = create_autospec(BehaviorService, instance=True)
-    mock.create_behavior.return_value = BehaviorData(
-        id=9, user_id=7, name="nuevo", code="go_to(1, 2)", type=BehaviorType.coach_behavior
+    mock.create_behavior.return_value = BehaviorDetail(
+        id=9, name="nuevo", code="go_to(1, 2)", type=BehaviorType.coach_behavior, deletable=True
     )
     return mock
 
@@ -48,7 +48,13 @@ def test_created_returns_201_with_the_detail_in_camel_case(client, behavior_serv
     r = client.post(URL, json=BODY)
 
     assert r.status_code == 201
-    assert r.json() == {"id": 9, "name": "nuevo", "type": "coachBehavior", "code": "go_to(1, 2)"}
+    assert r.json() == {
+        "id": 9,
+        "name": "nuevo",
+        "type": "coachBehavior",
+        "code": "go_to(1, 2)",
+        "deletable": True,
+    }
     behavior_service.create_behavior.assert_called_once_with(7, BODY)
 
 

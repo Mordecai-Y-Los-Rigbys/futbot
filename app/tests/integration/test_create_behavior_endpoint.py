@@ -34,6 +34,7 @@ def test_creates_a_behavior_of_each_type(login, behavior_type):
         "name": "nuevo",
         "type": behavior_type,
         "code": "x = ball_position()",
+        "deletable": True,
     }
     assert api.get(f"{URL}/{created['id']}").json() == created
 

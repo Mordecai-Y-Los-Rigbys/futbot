@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import get_behavior_service, get_session_service
 from app.domain.behavior import BehaviorType
 from app.main import app
-from app.repositories.behavior_abstract import BehaviorData
+from app.schemas.behavior import BehaviorDetail
 from app.services.behavior_service import BehaviorService
 from app.services.session_service import SessionService
 
@@ -25,8 +25,12 @@ def session_service():
 @pytest.fixture
 def behavior_service():
     mock = create_autospec(BehaviorService, instance=True)
-    mock.update_behavior.return_value = BehaviorData(
-        id=5, user_id=7, name="nuevo", code="x = ball_position()", type=BehaviorType.coach_behavior
+    mock.update_behavior.return_value = BehaviorDetail(
+        id=5,
+        name="nuevo",
+        code="x = ball_position()",
+        type=BehaviorType.coach_behavior,
+        deletable=False,
     )
     return mock
 
@@ -50,6 +54,7 @@ def test_updated_returns_200_with_the_detail_in_camel_case(client, behavior_serv
         "name": "nuevo",
         "type": "coachBehavior",
         "code": "x = ball_position()",
+        "deletable": False,
     }
     behavior_service.update_behavior.assert_called_once_with(7, 5, BODY)
 
