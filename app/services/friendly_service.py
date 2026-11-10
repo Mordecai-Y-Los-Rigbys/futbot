@@ -62,14 +62,14 @@ class FriendlyService:
             body: JSON del request, todavía sin validar.
 
         Raises:
-            ApiError 400: el body no cumple el contrato (en el orden de la convención 6).
+            ValidationApiError 400: invalidFields (convención 6).
             ApiError 409: alreadyPlaying o playerOrBehaviorNotOwned.
 
         Returns:
             El amistoso creado, todavía sin rival.
         """
 
-        data = parse_create_friendly(body)  # todos los 400, en orden
+        data = parse_create_friendly(body)  # 400
 
         # 409: solo si no falló ningún 400
         if self.repo.user_is_playing(creator_id):
@@ -126,7 +126,7 @@ class FriendlyService:
 
         Raises:
             ApiError 404: el id no es válido o el amistoso no existe.
-            ApiError 400: el body no cumple el contrato (en el orden de la convención 6).
+            ValidationApiError 400: invalidFields (convención 6).
             ApiError 409: notJoinable, isOwnMatch, alreadyPlaying o playerOrBehaviorNotOwned.
 
         Returns:
@@ -137,7 +137,7 @@ class FriendlyService:
         state = self.repo.get_friendly_state(match_id)
         if state is None:
             raise _not_found()
-        data = parse_join_friendly(body)  # 400, en orden
+        data = parse_join_friendly(body)  # 400
 
         # 409: en el orden del enum del contrato
         if state.status != "scheduled" or state.rival_id is not None:

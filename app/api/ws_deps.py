@@ -1,7 +1,11 @@
 from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
-from app.api.ws_league_deps import get_league_fixture_manager, get_league_next_match_manager
+from app.api.ws_league_deps import (
+    get_league_fixture_manager,
+    get_league_next_match_manager,
+    get_league_ranking_manager,
+)
 from app.database import SessionLocal
 from app.repositories.league_sqlalchemy import SqlAlchemyLeagueRepository
 from app.repositories.team_sqlalchemy import SqlAlchemyTeamRepository
@@ -84,15 +88,27 @@ def _load_setup(match_id: int) -> MatchSetup:
 def _substitution_repo_scope() -> Iterator[SqlAlchemySubstitutionRepository]:
     with SessionLocal() as db:
         yield SqlAlchemySubstitutionRepository(db)
-        
 
-def _notify_league_channels(match_id: int) -> None:
-    """Avisa a los canales de la liga del partido. Un amistoso no tiene liga: no hace nada."""
+
+def _league_of(match_id: int) -> int | None:
+    """La liga del partido. None si es un amistoso."""
     with SessionLocal() as db:
         data = SqlAlchemyMatchRepository(db).get_setup_data(match_id)
-    if data is not None and data.league_id is not None:
-        get_league_fixture_manager().fixture_changed(data.league_id)
-        get_league_next_match_manager().next_match_changed(data.league_id)
+    return None if data is None else data.league_id
+
+
+def _notify_league_channels(match_id: int) -> None:
+    league_id = _league_of(match_id)
+    if league_id is not None:
+        get_league_fixture_manager().fixture_changed(league_id)
+        get_league_next_match_manager().next_match_changed(league_id)
+
+
+def _notify_league_ranking(match_id: int) -> None:
+    """Solo al terminar un partido: es lo único que cambia el ranking."""
+    league_id = _league_of(match_id)
+    if league_id is not None:
+        get_league_ranking_manager().ranking_changed(league_id)
 
 
 _match_runner = MatchRunner(
@@ -101,6 +117,7 @@ _match_runner = MatchRunner(
     _match_repo_scope,
     _substitution_repo_scope,
     on_match_change=_notify_league_channels,
+    on_match_finished=_notify_league_ranking,
 )
 
 

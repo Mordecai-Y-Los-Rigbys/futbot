@@ -20,6 +20,7 @@ Si el último tick de un período es un gol, el reacomodo del gol se aplica en
 el primer tick de la pausa: la pelota nunca queda dentro del arco en `paused`.
 """
 
+import copy
 import enum
 import math
 from collections.abc import Mapping, Sequence
@@ -35,6 +36,7 @@ from app.simulation.physics import (
     reset_positions,
     step,
 )
+from app.simulation.penalties import PenaltyKick, Shootout, ShootoutStatus
 from app.simulation.state import Goal, MatchState, PlayerKey, Team
 from app.domain.team_member import MemberRole
 
@@ -43,6 +45,7 @@ class Phase(str, enum.Enum):
     COUNTDOWN = "countdown"
     PLAYING = "playing"
     PAUSED = "paused"
+    PENALTIES = "penalties"
     FINISHED = "finished"
 
 
@@ -50,6 +53,8 @@ class Event(str, enum.Enum):
     PERIOD_START = "periodStart"
     GOAL = "goal"
     PAUSE = "pause"
+    PENALTIES_START = "penaltiesStart"
+    PENALTY_KICK = "penaltyKick"
     MATCH_END = "matchEnd"
 
 
@@ -81,6 +86,8 @@ class TickResult:
     pause_reason: PauseReason | None = None  # solo en ticks `paused`
     pause_remaining_seconds: int | None = None  # solo en ticks `paused`
     pause_duration_seconds: int | None = None  # solo en ticks `paused`
+    shootout: ShootoutStatus | None = None  # solo en la tanda y en su tick final
+    penalty_kick: PenaltyKick | None = None  # solo si event == PENALTY_KICK
 
 
 @dataclass(frozen=True)
@@ -108,8 +115,11 @@ class MatchSession:
         countdown_seconds: float = C.COUNTDOWN_SECONDS,
         periods: int = C.PERIODS,
         pause_seconds: float = C.PAUSE_SECONDS,
+        allow_draws: bool = True,
     ) -> None:
         self._state = state
+        self._allow_draws = allow_draws
+        self._shootout: Shootout | None = None
         self._behaviors = behaviors
         self._countdown_ticks = round(countdown_seconds * C.TICKS_PER_SECOND)
         self._pause_ticks = round(pause_seconds * C.TICKS_PER_SECOND)
@@ -148,6 +158,15 @@ class MatchSession:
         return self._finished
 
     @property
+    def periods(self) -> int:
+        return self._periods
+
+    @property
+    def state(self) -> MatchState:
+        """Estado actual. Cada tick lo reemplaza por uno nuevo: no se muta en el lugar."""
+        return self._state
+
+    @property
     def total_ticks(self) -> int:
         return sum(s.ticks for s in self._segments)
 
@@ -167,6 +186,10 @@ class MatchSession:
             raise RuntimeError("el partido ya terminó")
         seq = self._seq
         self._seq += 1
+
+        if self._shootout is not None:
+            return self._penalty_tick(seq)
+
         segment = self._segments[self._seg_index]
         offset = self._offset
         self._offset += 1
@@ -191,6 +214,47 @@ class MatchSession:
                 self._behaviors = {**self._behaviors, player.key: behavior}
                 return
         raise ValueError(f"no hay jugador con id {player_id}")
+
+    def substitute(
+        self,
+        team: Team,
+        out_player_id: int,
+        incoming: PlayerSetup,
+        behavior: CompiledBehavior,
+    ) -> None:
+        """Cambia en cancha al titular `out_player_id` por `incoming`, que toma su rol.
+
+        Se llama en la pausa (el estado está congelado). Conserva la posición y
+        reinicia los cooldowns del que entra; el saque posterior a la pausa lo
+        vuelve a ubicar en su posición inicial. El estado se reemplaza por una copia:
+        los ticks ya emitidos no cambian.
+
+        Raises:
+            ValueError: el titular no está en cancha o `incoming` no tiene su rol.
+        """
+        index = next(
+            (
+                i
+                for i, p in enumerate(self._state.players)
+                if p.team is team and p.player_id == out_player_id
+            ),
+            None,
+        )
+        if index is None:
+            raise ValueError(f"no hay jugador con id {out_player_id} en el equipo {team.value}")
+        if incoming.role.number != self._state.players[index].number:
+            raise ValueError("el suplente tiene que tomar el rol del titular que sale")
+
+        state = copy.deepcopy(self._state)
+        player = state.players[index]
+        player.player_id = incoming.player_id
+        player.stats = incoming.stats
+        player.name = incoming.name
+        player.move = None
+        player.next_kick_tick = C.NO_KICK_COOLDOWN
+        player.regain_blocked_until = C.NOT_REGAIN_BLOCKED
+        self._state = state
+        self._behaviors = {**self._behaviors, player.key: behavior}
 
     def _restart(self) -> None:
         """Saque normal: posiciones iniciales, pelota libre y quieta, sin
@@ -235,10 +299,48 @@ class MatchSession:
 
         phase = Phase.PLAYING
         if self._played == self._play_ticks:
-            # matchEnd tiene prioridad: si el último tick fue gol, igual suma al marcador.
+            if self._goes_to_penalties():
+                # Desde el tick siguiente se juega la tanda.
+                self._shootout = Shootout(
+                    self._state, self._behaviors, self._played / C.TICKS_PER_SECOND, segment.period
+                )
+            else:
+                # matchEnd tiene prioridad: si el último tick fue gol, igual suma al marcador.
+                phase, event = Phase.FINISHED, Event.MATCH_END
+                self._finished = True
+        return self._result(seq, segment, event, phase=phase, scorer=scorer)
+
+    def _goes_to_penalties(self) -> bool:
+        return not self._allow_draws and self._score_1 == self._score_2
+
+    def _penalty_tick(self, seq: int) -> TickResult:
+        penalty = self._shootout.advance()
+        self._state = penalty.state
+
+        if penalty.finished:
             phase, event = Phase.FINISHED, Event.MATCH_END
             self._finished = True
-        return self._result(seq, segment, event, phase=phase, scorer=scorer)
+        elif penalty.first:
+            phase, event = Phase.PENALTIES, Event.PENALTIES_START
+        else:
+            phase = Phase.PENALTIES
+            event = Event.PENALTY_KICK if penalty.kick is not None else None
+
+        elapsed = self._played / C.TICKS_PER_SECOND  # el reloj no avanza en la tanda
+
+        return TickResult(
+            tick=seq,
+            phase=phase,
+            event=event,
+            state=self._state,
+            score_1=self._score_1,
+            score_2=self._score_2,
+            elapsed=elapsed,
+            remaining=0.0,
+            period=self._periods,
+            shootout=penalty.status,
+            penalty_kick=penalty.kick if event is Event.PENALTY_KICK else None,
+        )
 
     def _reset_after_goal(self) -> None:
         """Tick siguiente al gol: todos en sus posiciones, pelota libre en el
@@ -316,6 +418,7 @@ def build_session(
     countdown_seconds: float = C.COUNTDOWN_SECONDS,
     periods: int = C.PERIODS,
     pause_seconds: float = C.PAUSE_SECONDS,
+    allow_draws: bool = True,
 ) -> MatchSession:
     """Crea el estado inicial (la semilla entra acá) y la sesión del partido."""
     state = create_initial_state(team_1.players, team_2.players, seed)
@@ -326,4 +429,6 @@ def build_session(
         countdown_seconds,
         periods,
         pause_seconds,
+        allow_draws,
     )
+

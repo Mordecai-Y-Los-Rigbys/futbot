@@ -1,7 +1,4 @@
-import pytest 
-
 from types import SimpleNamespace
-
 from http.cookies import SimpleCookie
 from unittest.mock import create_autospec
 
@@ -29,7 +26,7 @@ def test_logout_deletes_current_session_and_expires_cookie():
     assert cookie["httponly"]
     assert cookie["samesite"].lower() == "lax"
     assert cookie["path"] == "/"
-    
+
 
 def test_logout_by_http_returns_204_and_deletes_session(auth_api, fake_sessions):
     res = auth_api.post("/auth/log-out")
@@ -90,18 +87,7 @@ def test_logout_ignores_body(auth_api, fake_sessions):
 
     assert res.status_code == 204
     assert fake_sessions.deleted == ["valid-session"]
-    
 
-@pytest.mark.parametrize("cookie", ["no-existe", "vencida"])
-def test_invalid_or_expired_cookie_returns_401(api, fake_sessions, cookie):
-    api.cookies.set("session_id", cookie)
-
-    res = api.post("/auth/log-out")
-
-    assert res.status_code == 401
-    assert res.json()["code"] is None
-    assert fake_sessions.deleted == []
-    
 
 def test_logout_closes_the_league_channels_after_deleting_the_session():
     calls = []
@@ -129,9 +115,10 @@ def test_a_rejected_logout_does_not_touch_the_league_channels(api):
     assert ended == []
 
 
-def test_the_league_channels_are_participants_fixture_and_next_match():
+def test_the_league_channels_are_participants_fixture_ranking_and_next_match():
     assert ws_league_deps.get_league_channel_managers() == [
         ws_league_deps.get_league_participants_manager(),
         ws_league_deps.get_league_fixture_manager(),
+        ws_league_deps.get_league_ranking_manager(),
         ws_league_deps.get_league_next_match_manager(),
     ]

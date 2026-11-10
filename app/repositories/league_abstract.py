@@ -24,6 +24,7 @@ class LeagueListItemData(BaseModel):
     creator: LeagueCreatorData
     status: LeagueStatus
     participants_count: int
+    min_participants: int
     max_participants: int
     private: bool
     allow_draws: bool
@@ -37,7 +38,6 @@ class LeagueParticipantData(LeagueCreatorData):
 
 
 class LeagueDetailData(LeagueListItemData):
-    min_participants: int
     joined: bool
 
 
@@ -60,6 +60,7 @@ class CreateLeagueData(BaseModel):
     match_duration: int
     private: bool
     password: str | None  # None si la liga es pública
+    allow_draws: bool
     members: list[CreateLeagueMemberData]
 
 
@@ -229,6 +230,13 @@ class AbstractLeagueRepository(ABC):
         """Participantes actuales de la liga (creador incluido), por id de usuario ascendente.
 
         Lista vacía si la liga no existe: el 404 lo resuelve quien llama.
+        """
+
+    @abstractmethod
+    def get_fixture(self, league_id: int) -> LeagueFixtureData | None:
+        """Estado de la liga y sus partidos, por scheduled_at y después id.
+
+        Devuelve None si la liga no existe.
         """
 
     @abstractmethod

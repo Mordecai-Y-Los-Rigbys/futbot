@@ -1,6 +1,7 @@
 """Reglas de un solo período (sin pausas). Las pausas están en test_match_pauses.py."""
 
 import copy
+import functools
 import statistics
 import time
 
@@ -46,6 +47,23 @@ def new_session(countdown=0):
         seed=1,
         countdown_seconds=countdown,
         periods=1,
+    )
+
+
+@pytest.fixture
+def no_time_budget(monkeypatch):
+    """Vuelve inalcanzable el presupuesto de tiempo de reloj de los behaviors.
+
+    El motor le da a cada equipo un presupuesto por tick (C.TEAM_TIME_BUDGET): si
+    una pausa de CPU o del GC lo agota, el jugador no corre su behavior y repite
+    su último movimiento. Los tests que comparan dos simulaciones, o a los dos
+    equipos entre sí, prueban determinismo o simetría y no tienen que depender
+    del reloj de la máquina. C.TEAM_TIME_BUDGET no se toca.
+    """
+    monkeypatch.setattr(
+        match_rules,
+        "run_behaviors",
+        functools.partial(match_rules.run_behaviors, team_budget=3600.0),
     )
 
 
@@ -108,13 +126,13 @@ def test_goal_then_everyone_back_to_start_and_clock_keeps_running(monkeypatch):
     assert calls["n"] == 4  # 5 ticks, el del reacomodo no corre la física
 
 
-def test_same_seed_same_ticks():
+def test_same_seed_same_ticks(no_time_budget):
     a = simulate_match(make_team(), make_team(first_id=10), 5, seed=3, periods=1)
     b = simulate_match(make_team(), make_team(first_id=10), 5, seed=3, periods=1)
     assert a == b
 
 
-def test_identical_teams_play_mirrored_until_the_first_tiebreak():
+def test_identical_teams_play_mirrored_until_the_first_tiebreak(no_time_budget):
     ticks = simulate_match(
         make_team(), make_team(first_id=10), 3, seed=1, countdown_seconds=0.5, periods=1
     ).ticks

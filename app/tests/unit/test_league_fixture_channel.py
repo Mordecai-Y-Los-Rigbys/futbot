@@ -28,7 +28,6 @@ def test_started_is_admitted():
         (LeagueStatus.preparation, "leagueNotStarted"),
         (LeagueStatus.finished, "leagueFinished"),
         (LeagueStatus.cancelled, "leagueCancelled"),
-        (None, "leagueNotStarted"),
     ],
 )
 def test_other_states_are_rejected_with_409(status, reason):

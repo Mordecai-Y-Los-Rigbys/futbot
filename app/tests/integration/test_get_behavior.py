@@ -69,7 +69,13 @@ def test_returns_own_behavior(login, db_session):
     r = api.get(url(behavior.id))
 
     assert r.status_code == 200
-    assert r.json() == {"id": behavior.id, "name": "atacante", "code": "mover(1, 2)"}
+    assert r.json() == {
+        "id": behavior.id,
+        "name": "atacante",
+        "type": "playerBehavior",
+        "code": "mover(1, 2)",
+        "deletable": True,
+    }
 
 
 def test_returns_empty_code(login, db_session):
