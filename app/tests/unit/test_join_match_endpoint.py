@@ -14,7 +14,7 @@ from app.services.match_connection_service import MatchConnectionService
 @pytest.fixture()
 def repo():
     r = MagicMock(spec=AbstractMatchConnectionRepository)
-    r.get_access.return_value = MatchAccessData(id=5, status="scheduled")
+    r.get_access.return_value = MatchAccessData(id=5, status="scheduled", user_1_id=7)
     return r
 
 
@@ -30,10 +30,11 @@ def auth_conn_api(conn_api):
     return conn_api
 
 
-def test_success_returns_201_with_token(auth_conn_api, repo):
+def test_success_returns_201_with_token_and_role(auth_conn_api, repo):
     r = auth_conn_api.post("/matches/5/connections")
     assert r.status_code == 201
-    assert set(r.json()) == {"tokenWs"}
+    assert set(r.json()) == {"tokenWs", "role"}
+    assert r.json()["role"] == "player"  # el usuario de la sesión es el 7 = user_1_id
     assert repo.create_token.call_args.args[0].user_id == 7
 
 
@@ -72,6 +73,14 @@ def test_nonexistent_is_404(auth_conn_api, repo):
     "status, code", [("finished", "matchFinished"), ("cancelled", "matchCancelled")]
 )
 def test_409_codes(auth_conn_api, repo, status, code):
-    repo.get_access.return_value = MatchAccessData(id=5, status=status)
+    repo.get_access.return_value = MatchAccessData(id=5, status=status, user_1_id=1)
     r = auth_conn_api.post("/matches/5/connections")
     assert r.status_code == 409 and r.json()["code"] == code
+
+
+def test_spectator_role_in_response(auth_conn_api, repo):
+    repo.get_access.return_value = MatchAccessData(
+        id=5, status="started", user_1_id=1, user_2_id=2
+    )
+    r = auth_conn_api.post("/matches/5/connections")
+    assert r.status_code == 201 and r.json()["role"] == "spectator"
