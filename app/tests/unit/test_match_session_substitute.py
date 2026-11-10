@@ -117,4 +117,3 @@ def test_substitute_only_looks_in_the_given_team():
 
 def test_periods_property():
     assert session().periods == 4
-
