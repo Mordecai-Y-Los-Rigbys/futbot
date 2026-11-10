@@ -3,7 +3,7 @@ from typing import Any
 from app.domain.behavior import BehaviorType
 from app.errors import ValidationApiError
 from app.repositories.behavior_abstract import CreateBehaviorData, UpdateBehaviorData
-from app.services.field_validation import INVALID_JSON, field_error
+from app.services.field_validation import field_error
 
 CREATE_FIELDS = ("name", "code", "type")
 UPDATE_FIELDS = ("name", "code")  # el tipo no se puede cambiar
@@ -44,7 +44,7 @@ def parse_update_behavior(body: Any) -> UpdateBehaviorData:
 
 def _ensure_object(body: Any, fields: tuple[str, ...]) -> None:
     """Un body ilegible o que no es un objeto: todos los campos `required` (convención 9)."""
-    if body is INVALID_JSON or not isinstance(body, dict):
+    if not isinstance(body, dict):
         raise ValidationApiError([field_error(field, "required") for field in fields])
 
 

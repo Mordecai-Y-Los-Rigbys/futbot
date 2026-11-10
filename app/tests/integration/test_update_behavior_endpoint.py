@@ -113,6 +113,23 @@ def test_a_code_too_long_is_409(login, db_session):
 
     assert response.status_code == 409
     assert response.json()["code"] == "codeTooLong"
+    assert stored(db_session, behavior)[1] == "x = 1"
+
+
+def test_an_unreadable_body_is_400_and_does_not_change(login, db_session):
+    api = login(1)
+    behavior = add_behavior(db_session, 1, "mio")
+
+    response = api.put(
+        url(behavior.id), content="{roto", headers={"Content-Type": "application/json"}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["errors"] == [
+        {"field": "name", "reason": "required"},
+        {"field": "code", "reason": "required"},
+    ]
+    assert stored(db_session, behavior)[:2] == ("mio", "x = 1")
 
 
 def test_updating_a_deleted_behavior_returns_none(db_session, make_user):
