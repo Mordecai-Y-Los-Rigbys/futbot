@@ -27,6 +27,7 @@ class BehaviorDetail(CamelModel):
     name: str
     type: BehaviorType
     code: str
+    deletable: bool  # False si está en uso: exactamente cuando DELETE responde 409
 
 
 class BehaviorTestConnectionResponse(CamelModel):

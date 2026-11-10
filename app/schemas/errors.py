@@ -155,3 +155,11 @@ class CreateBehaviorConflict(CamelModel):
 class UpdateBehaviorNotFound(BaseModel):
     code: Literal["notFound", "deletedConcurrently"]
     message: str
+
+
+# --- DELETE /behaviors/{id} ---------------------------------------------------
+
+
+class DeleteBehaviorConflict(BaseModel):
+    code: Literal["behaviorInLeagueTeam", "behaviorInMatch"]
+    message: str

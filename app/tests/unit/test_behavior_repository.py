@@ -28,14 +28,13 @@ def test_get_by_id_returns_none_when_missing(repo, db):
 
 def test_get_by_id_maps_record_to_data(repo, db):
     coach = BehaviorType.coach_behavior
-    db.get.return_value = Behavior(id=5, user_id=2, name="a", code="x", type=coach)
-
+    db.get.return_value = Behavior(id=5, user_id=2, name="a", code="x", type=coach, deleted=False)
     assert repo.get_by_id(5) == BehaviorData(id=5, user_id=2, name="a", code="x", type=coach)
 
 
 def test_get_by_id_does_not_write(repo, db):
     db.get.return_value = Behavior(
-        id=5, user_id=2, name="a", code="x", type=BehaviorType.player_behavior
+        id=5, user_id=2, name="a", code="x", type=BehaviorType.player_behavior, deleted=False
     )
 
     repo.get_by_id(5)

@@ -1,13 +1,15 @@
 from typing import Any
 
-from app.domain.behavior import BehaviorType
+from app.domain.behavior import BehaviorType, BehaviorUsage
 from app.errors import ApiError, BehaviorConflictError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    BehaviorNotFoundError,
     CreateBehaviorData,
     DuplicateBehaviorNameError,
 )
+from app.schemas.behavior import BehaviorDetail
 from app.services.behavior_validation import parse_create_behavior, parse_update_behavior
 from app.simulation.behaviors.default_behaviors import DEFAULT_BEHAVIORS
 from app.simulation.behaviors.validation import (
@@ -19,6 +21,11 @@ from app.simulation.behaviors.validation import (
 
 PAGE_SIZE = 50
 BEHAVIOR_NOT_FOUND_MESSAGE = "Comportamiento no encontrado."
+NOT_OWNER_MESSAGE = "El comportamiento no pertenece al usuario."
+IN_USE_MESSAGES = {
+    BehaviorUsage.league_team: "El comportamiento está asignado a un equipo inscripto en una liga.",
+    BehaviorUsage.match: "El comportamiento está en uso en un amistoso que no terminó.",
+}
 
 
 class BehaviorService:
@@ -40,13 +47,17 @@ class BehaviorService:
         )
 
     def get_owned_behavior(self, user_id: int, behavior_id: int) -> BehaviorData:
-        """404 si no existe, 403 si es de otro usuario. Solo lectura."""
+        """404 si no existe o está eliminado, 403 si es de otro usuario. Solo lectura."""
         behavior = self.repository.get_by_id(behavior_id)
-        if behavior is None:
+        if behavior is None or behavior.deleted:
             raise ApiError(404, None, BEHAVIOR_NOT_FOUND_MESSAGE)
         if behavior.user_id != user_id:
-            raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
+            raise ApiError(403, None, NOT_OWNER_MESSAGE)
         return behavior
+
+    def get_behavior(self, user_id: int, behavior_id: int) -> BehaviorDetail:
+        """Detalle de un behavior del usuario, con `deletable`. Mismos 404 y 403."""
+        return self._detail(self.get_owned_behavior(user_id, behavior_id))
 
     def create_default_behaviors(self, user_id: int) -> list[BehaviorData]:
         """Crea para el usuario una copia propia de los behaviors iniciales."""
@@ -54,7 +65,7 @@ class BehaviorService:
             user_id, [CreateBehaviorData(**b) for b in DEFAULT_BEHAVIORS]
         )
 
-    def create_behavior(self, user_id: int, body: Any) -> BehaviorData:
+    def create_behavior(self, user_id: int, body: Any) -> BehaviorDetail:
         """Crea un behavior del usuario.
 
         Raises:
@@ -67,11 +78,12 @@ class BehaviorService:
             raise _duplicate_name()
         _ensure_valid_code(data.code, data.type)
         try:
-            return self.repository.create(user_id, data)
+            created = self.repository.create(user_id, data)
         except DuplicateBehaviorNameError:
             raise _duplicate_name()
+        return self._detail(created)
 
-    def update_behavior(self, user_id: int, behavior_id: int, body: Any) -> BehaviorData:
+    def update_behavior(self, user_id: int, behavior_id: int, body: Any) -> BehaviorDetail:
         """Cambia nombre y código de un behavior del usuario. El tipo no cambia.
 
         Raises:
@@ -85,9 +97,11 @@ class BehaviorService:
         behavior = self.repository.get_by_id(behavior_id)
         if behavior is None:
             raise ApiError(404, "notFound", BEHAVIOR_NOT_FOUND_MESSAGE)
+        if behavior.deleted:
+            raise _deleted_concurrently()
         data = parse_update_behavior(body)
         if behavior.user_id != user_id:
-            raise ApiError(403, None, "El comportamiento no pertenece al usuario.")
+            raise ApiError(403, None, NOT_OWNER_MESSAGE)
         if self.repository.name_taken(user_id, data.name, except_id=behavior_id):
             raise _duplicate_name()
         _ensure_valid_code(data.code, behavior.type)
@@ -96,8 +110,39 @@ class BehaviorService:
         except DuplicateBehaviorNameError:
             raise _duplicate_name()
         if updated is None:
-            raise ApiError(404, "deletedConcurrently", "El comportamiento se eliminó.")
-        return updated
+            raise _deleted_concurrently()
+        return self._detail(updated)
+
+    def delete_behavior(self, user_id: int, behavior_id: int) -> None:
+        """Elimina (borrado lógico) un behavior del usuario que no está en uso.
+
+        Raises:
+            ApiError 404: no existe o ya está eliminado.
+            ApiError 403: es de otro usuario.
+            ApiError 409: behaviorInLeagueTeam o behaviorInMatch, si está en uso.
+        """
+        self.get_owned_behavior(user_id, behavior_id)
+        try:
+            usage = self.repository.delete_if_unused(behavior_id)
+        except BehaviorNotFoundError:
+            # Otro DELETE lo eliminó después de que lo leímos.
+            raise ApiError(404, None, BEHAVIOR_NOT_FOUND_MESSAGE)
+        if usage is not None:
+            raise ApiError(409, usage.value, IN_USE_MESSAGES[usage])
+
+    def _detail(self, behavior: BehaviorData) -> BehaviorDetail:
+        # Misma regla que el 409 de DELETE: los dos usan repository.usage.
+        return BehaviorDetail(
+            id=behavior.id,
+            name=behavior.name,
+            type=behavior.type,
+            code=behavior.code,
+            deletable=self.repository.usage(behavior.id) is None,
+        )
+
+
+def _deleted_concurrently() -> ApiError:
+    return ApiError(404, "deletedConcurrently", "El comportamiento se eliminó.")
 
 
 def _duplicate_name() -> BehaviorConflictError:

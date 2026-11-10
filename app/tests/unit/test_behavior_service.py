@@ -2,11 +2,12 @@ from unittest.mock import create_autospec
 
 import pytest
 
-from app.domain.behavior import BehaviorType
+from app.domain.behavior import BehaviorType, BehaviorUsage
 from app.errors import ApiError, BehaviorConflictError, ValidationApiError
 from app.repositories.behavior_abstract import (
     AbstractBehaviorRepository,
     BehaviorData,
+    BehaviorNotFoundError,
     CreateBehaviorData,
     DuplicateBehaviorNameError,
     UpdateBehaviorData,
@@ -21,6 +22,7 @@ def repo():
     mock.list_by_user.return_value = ([], 0)
     mock.get_by_id.return_value = None
     mock.name_taken.return_value = False
+    mock.usage.return_value = None
     return mock
 
 
@@ -29,8 +31,12 @@ def service(repo):
     return BehaviorService(repo)
 
 
-def behavior(id=5, user_id=1, name="a", code="x", behavior_type=BehaviorType.player_behavior):
-    return BehaviorData(id=id, user_id=user_id, name=name, code=code, type=behavior_type)
+def behavior(
+    id=5, user_id=1, name="a", code="x", behavior_type=BehaviorType.player_behavior, deleted=False
+):
+    return BehaviorData(
+        id=id, user_id=user_id, name=name, code=code, type=behavior_type, deleted=deleted
+    )
 
 
 # --- list_behaviors -----------------------------------------------------------
@@ -128,7 +134,7 @@ def test_create_saves_the_behavior_of_the_user(service, repo):
     request_body = body(code="x = ball_position()", behavior_type="coachBehavior")
     result = service.create_behavior(user_id=1, body=request_body)
 
-    assert result is created
+    assert (result.id, result.name, result.deletable) == (9, "nuevo", True)
     repo.name_taken.assert_called_once_with(1, "nuevo")
     repo.create.assert_called_once_with(
         1,
@@ -276,3 +282,118 @@ def test_a_name_taken_while_updating_is_duplicate_name(service, owned):
     owned.update.side_effect = DuplicateBehaviorNameError()
 
     assert update_conflict_of(service, edit()).code == "duplicateName"
+
+
+def test_update_of_a_deleted_behavior_is_deleted_concurrently_before_the_body(service, repo):
+    repo.get_by_id.return_value = behavior(deleted=True)
+
+    with pytest.raises(ApiError) as exc:
+        service.update_behavior(user_id=1, behavior_id=5, body={})
+
+    assert (exc.value.status_code, exc.value.code) == (404, "deletedConcurrently")
+    repo.update.assert_not_called()
+
+
+# --- delete_behavior ----------------------------------------------------------
+
+
+def test_get_of_a_deleted_behavior_is_404(service, repo):
+    repo.get_by_id.return_value = behavior(deleted=True)
+
+    with pytest.raises(ApiError) as exc:
+        service.get_owned_behavior(user_id=1, behavior_id=5)
+
+    assert (exc.value.status_code, exc.value.code) == (404, None)
+
+
+def test_delete_of_an_unused_behavior_deletes_it(service, repo):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1)
+    repo.delete_if_unused.return_value = None
+
+    service.delete_behavior(user_id=1, behavior_id=5)
+
+    repo.delete_if_unused.assert_called_once_with(5)
+
+
+@pytest.mark.parametrize("stored", [None, behavior(deleted=True)])
+def test_delete_of_a_missing_or_deleted_behavior_is_404(service, repo, stored):
+    repo.get_by_id.return_value = stored
+
+    with pytest.raises(ApiError) as exc:
+        service.delete_behavior(user_id=1, behavior_id=5)
+
+    assert (exc.value.status_code, exc.value.code) == (404, None)
+    repo.delete_if_unused.assert_not_called()
+
+
+def test_delete_of_a_behavior_deleted_meanwhile_is_404(service, repo):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1)
+    repo.delete_if_unused.side_effect = BehaviorNotFoundError()
+
+    with pytest.raises(ApiError) as exc:
+        service.delete_behavior(user_id=1, behavior_id=5)
+
+    assert (exc.value.status_code, exc.value.code) == (404, None)
+
+
+def test_delete_of_another_users_behavior_is_403(service, repo):
+    repo.get_by_id.return_value = behavior(user_id=2)
+
+    with pytest.raises(ApiError) as exc:
+        service.delete_behavior(user_id=1, behavior_id=5)
+
+    assert (exc.value.status_code, exc.value.code) == (403, None)
+    repo.delete_if_unused.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "usage, code",
+    [
+        (BehaviorUsage.league_team, "behaviorInLeagueTeam"),
+        (BehaviorUsage.match, "behaviorInMatch"),
+    ],
+)
+def test_delete_of_a_behavior_in_use_is_409_with_the_reason(service, repo, usage, code):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1)
+    repo.delete_if_unused.return_value = usage
+
+    with pytest.raises(ApiError) as exc:
+        service.delete_behavior(user_id=1, behavior_id=5)
+
+    assert (exc.value.status_code, exc.value.code) == (409, code)
+
+
+# --- deletable ----------------------------------------------------------------
+
+
+def test_get_behavior_of_an_unused_behavior_is_deletable(service, repo):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1, name="mio")
+
+    detail = service.get_behavior(user_id=1, behavior_id=5)
+
+    assert (detail.id, detail.name, detail.deletable) == (5, "mio", True)
+    repo.usage.assert_called_once_with(5)
+
+
+@pytest.mark.parametrize("usage", [BehaviorUsage.league_team, BehaviorUsage.match])
+def test_get_behavior_of_a_behavior_in_use_is_not_deletable(service, repo, usage):
+    repo.get_by_id.return_value = behavior(id=5, user_id=1)
+    repo.usage.return_value = usage
+
+    assert service.get_behavior(user_id=1, behavior_id=5).deletable is False
+
+
+def test_get_behavior_of_another_users_behavior_is_403(service, repo):
+    repo.get_by_id.return_value = behavior(user_id=2)
+
+    with pytest.raises(ApiError) as exc:
+        service.get_behavior(user_id=1, behavior_id=5)
+
+    assert exc.value.status_code == 403
+    repo.usage.assert_not_called()
+
+
+def test_update_returns_whether_it_is_deletable(service, owned):
+    owned.usage.return_value = BehaviorUsage.league_team
+
+    assert service.update_behavior(user_id=1, behavior_id=5, body=edit()).deletable is False

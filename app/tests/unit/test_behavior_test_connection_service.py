@@ -120,6 +120,12 @@ def test_unknown_behavior_is_404(tokens):
     assert tokens.created == []
 
 
+def test_deleted_behavior_is_404(tokens):
+    deleted = BehaviorData(id=ROUTE, user_id=USER, name="b", code="pass", deleted=True)
+    assert error_of(make_service(tokens, deleted), body()) == (404, None)
+    assert tokens.created == []
+
+
 def test_invalid_body_is_400(tokens):
     assert error_of(make_service(tokens, behavior()), {"members": []}) == (400, "invalidFields")
     assert tokens.created == []

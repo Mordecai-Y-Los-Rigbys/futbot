@@ -8,6 +8,13 @@ class BehaviorType(str, enum.Enum):
     coach_behavior = "coachBehavior"
 
 
+class BehaviorUsage(str, enum.Enum):
+    """Por qué un behavior está en uso y no se puede eliminar (code del 409 de DELETE)."""
+
+    league_team = "behaviorInLeagueTeam"
+    match = "behaviorInMatch"
+
+
 class CodeRule(str, enum.Enum):
     """Regla de validez que incumple el código de un behavior (`rule` de CodeError)."""
 

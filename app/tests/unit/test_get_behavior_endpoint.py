@@ -5,15 +5,18 @@ from fastapi.testclient import TestClient
 
 from app.helpers.ids import MAX_ID, parse_path_id
 from app.api.deps import get_behavior_service, get_session_service
+from app.domain.behavior import BehaviorType
 from app.errors import ApiError
 from app.main import app
-from app.repositories.behavior_abstract import BehaviorData
+from app.schemas.behavior import BehaviorDetail
 from app.services.behavior_service import BehaviorService
 from app.services.session_service import SessionService
 
 
-def behavior(id=5, user_id=1, name="mi-b", code="print(1)"):
-    return BehaviorData(id=id, user_id=user_id, name=name, code=code)
+def behavior(id=5, name="mi-b", code="print(1)"):
+    return BehaviorDetail(
+        id=id, name=name, type=BehaviorType.player_behavior, code=code, deletable=True
+    )
 
 
 @pytest.fixture
@@ -28,7 +31,7 @@ def session_service():
 @pytest.fixture
 def behavior_service():
     mock = create_autospec(BehaviorService, instance=True)
-    mock.get_owned_behavior.return_value = behavior()
+    mock.get_behavior.return_value = behavior()
     return mock
 
 
@@ -56,7 +59,7 @@ def as_user(client):
 
 
 def test_success_calls_service_with_user_and_id(as_user, behavior_service):
-    behavior_service.get_owned_behavior.return_value = behavior(id=5, user_id=7)
+    behavior_service.get_behavior.return_value = behavior(id=5)
 
     r = as_user(7).get("/behaviors/5")
 
@@ -66,8 +69,9 @@ def test_success_calls_service_with_user_and_id(as_user, behavior_service):
         "name": "mi-b",
         "type": "playerBehavior",
         "code": "print(1)",
+        "deletable": True,
     }  # sin user_id
-    behavior_service.get_owned_behavior.assert_called_once_with(7, 5)
+    behavior_service.get_behavior.assert_called_once_with(7, 5)
 
 
 # --- 401 ----------------------------------------------------------------------
@@ -78,7 +82,7 @@ def test_no_cookie_returns_401_without_calling_service(client, behavior_service)
 
     assert r.status_code == 401
     assert r.json() == {"code": None, "message": "Sin sesión válida."}
-    behavior_service.get_owned_behavior.assert_not_called()
+    behavior_service.get_behavior.assert_not_called()
 
 
 def test_unknown_session_returns_401(client, behavior_service):
@@ -87,14 +91,14 @@ def test_unknown_session_returns_401(client, behavior_service):
     r = client.get("/behaviors/5")
 
     assert r.status_code == 401
-    behavior_service.get_owned_behavior.assert_not_called()
+    behavior_service.get_behavior.assert_not_called()
 
 
 # --- 404 ----------------------------------------------------------------------
 
 
 def test_nonexistent_returns_404_with_null_code(as_user, behavior_service):
-    behavior_service.get_owned_behavior.side_effect = ApiError(404, None, "no existe")
+    behavior_service.get_behavior.side_effect = ApiError(404, None, "no existe")
 
     r = as_user(1).get("/behaviors/5")
 
@@ -110,7 +114,7 @@ def test_invalid_id_returns_404_not_400_or_422(as_user, behavior_service, bad_id
 
     assert r.status_code == 404
     assert r.json()["code"] is None
-    behavior_service.get_owned_behavior.assert_not_called()
+    behavior_service.get_behavior.assert_not_called()
 
 
 def test_empty_id_is_404():
@@ -126,26 +130,26 @@ def test_empty_id_is_404():
 
 @pytest.mark.parametrize("valid_id", [1, MAX_ID])
 def test_boundary_ids_are_looked_up(as_user, behavior_service, valid_id):
-    behavior_service.get_owned_behavior.return_value = behavior(id=valid_id)
+    behavior_service.get_behavior.return_value = behavior(id=valid_id)
 
     r = as_user(1).get(f"/behaviors/{valid_id}")
 
     assert r.status_code == 200
-    behavior_service.get_owned_behavior.assert_called_once_with(1, valid_id)
+    behavior_service.get_behavior.assert_called_once_with(1, valid_id)
 
 
 def test_above_max_is_404_without_lookup(as_user, behavior_service):
     r = as_user(1).get(f"/behaviors/{MAX_ID + 1}")
 
     assert r.status_code == 404
-    behavior_service.get_owned_behavior.assert_not_called()
+    behavior_service.get_behavior.assert_not_called()
 
 
 # --- 403 ----------------------------------------------------------------------
 
 
 def test_other_users_behavior_returns_403_without_leaking(as_user, behavior_service):
-    behavior_service.get_owned_behavior.side_effect = ApiError(403, None, "no es tuyo")
+    behavior_service.get_behavior.side_effect = ApiError(403, None, "no es tuyo")
 
     r = as_user(1).get("/behaviors/5")
 
@@ -160,7 +164,7 @@ def test_invalid_id_without_session_is_401(client, behavior_service):
     r = client.get("/behaviors/abc")
 
     assert r.status_code == 401
-    behavior_service.get_owned_behavior.assert_not_called()
+    behavior_service.get_behavior.assert_not_called()
 
 
 def test_invalid_id_with_session_is_404(as_user):
@@ -173,4 +177,4 @@ def test_me_is_not_shadowed_by_id_route(as_user, behavior_service):
     r = as_user(1).get("/behaviors/me")
 
     assert r.status_code == 200
-    behavior_service.get_owned_behavior.assert_not_called()
+    behavior_service.get_behavior.assert_not_called()
