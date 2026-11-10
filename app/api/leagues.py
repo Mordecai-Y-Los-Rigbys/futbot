@@ -3,7 +3,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Response
 from starlette.concurrency import run_in_threadpool
 
-
 from app.api.deps import (
     CurrentSession,
     get_current_session,
@@ -18,14 +17,12 @@ from app.api.pagination import parse_page
 from app.api.ws_deps import get_league_match_start
 from app.helpers.ids import parse_path_id
 from app.schemas.errors import (
-    CreateLeagueBadRequest,
     CreateLeagueConflict,
     Error,
     JoinLeagueConflict,
     JoinLeagueForbidden,
     LeagueDataConflict,
     LeaveLeagueConflict,
-    ListPageBadRequest,
     StartLeagueConflict,
     ValidationBadRequest,
 )
@@ -47,7 +44,7 @@ router = APIRouter(prefix="/leagues", tags=["leagues"])
     operation_id="listLeagues",
     summary="Listar ligas",
     responses={
-        400: {"model": ListPageBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )
@@ -88,7 +85,7 @@ def get_league(
     operation_id="createLeague",
     summary="Crear una liga",
     responses={
-        400: {"model": CreateLeagueBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         409: {"model": CreateLeagueConflict},
     },
@@ -169,29 +166,27 @@ def list_league_participants(
     return service.list_participants(league.id)
 
 
-@router.post(
-    "/{id}/start",
-    status_code=204,
-    response_class=Response,
-    operation_id="startLeague",
-    summary="Iniciar una liga",
+@router.get(
+    "/{id}/ranking",
+    response_model=list[LeagueRankingEntry],
+    operation_id="getLeagueRanking",
+    summary="Obtener el ranking de una liga",
     responses={
         401: {"model": Error},
-        403: {"model": Error},
+        403: {"model": LeagueAccessForbidden},
         404: {"model": Error},
-        409: {"model": StartLeagueConflict},
+        409: {"model": LeagueDataConflict},
     },
 )
-async def start_league(
+def get_league_ranking(
     id: str,
-    user_id: int = Depends(get_current_user_id),
-    service: LeagueService = Depends(get_league_service),
-    match_start: LeagueMatchStartService = Depends(get_league_match_start),
-) -> Response:
-    parsed_id = parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE)
-    await run_in_threadpool(service.start_league, parsed_id, user_id)
-    await match_start.schedule_league(parsed_id)
-    return Response(status_code=204)
+    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
+    access: LeagueAccessService = Depends(get_league_access_service),
+    service: RankingService = Depends(get_ranking_service),
+) -> list[LeagueRankingEntry]:
+    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
+    access.require_access(session.id, session.user_id, league)  # 403
+    return service.get_league_ranking(league.id)
 
 
 @router.get(
@@ -217,27 +212,29 @@ def get_league_fixture(
     return service.get_fixture(league.id)  # 409
 
 
-@router.get(
-    "/{id}/ranking",
-    response_model=list[LeagueRankingEntry],
-    operation_id="getLeagueRanking",
-    summary="Obtener el ranking de una liga",
+@router.post(
+    "/{id}/start",
+    status_code=204,
+    response_class=Response,
+    operation_id="startLeague",
+    summary="Iniciar una liga",
     responses={
         401: {"model": Error},
-        403: {"model": LeagueAccessForbidden},
+        403: {"model": Error},
         404: {"model": Error},
-        409: {"model": LeagueDataConflict},
+        409: {"model": StartLeagueConflict},
     },
 )
-def get_league_ranking(
+async def start_league(
     id: str,
-    session: CurrentSession = Depends(get_current_session),  # 401 antes que todo
-    access: LeagueAccessService = Depends(get_league_access_service),
-    service: RankingService = Depends(get_ranking_service),
-) -> list[LeagueRankingEntry]:
-    league = access.get_league(parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE))  # 404
-    access.require_access(session.id, session.user_id, league)  # 403
-    return service.get_league_ranking(league.id)  # 409
+    user_id: int = Depends(get_current_user_id),
+    service: LeagueService = Depends(get_league_service),
+    match_start: LeagueMatchStartService = Depends(get_league_match_start),
+) -> Response:
+    parsed_id = parse_path_id(id, LEAGUE_NOT_FOUND_MESSAGE)
+    await run_in_threadpool(service.start_league, parsed_id, user_id)
+    await match_start.schedule_league(parsed_id)
+    return Response(status_code=204)
 
 
 router.include_router(league_access_router)

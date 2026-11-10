@@ -37,7 +37,7 @@ def build_fixture_payload(state: LeagueFixtureState) -> dict:
 
 
 FIXTURE_CHANNEL = LeagueChannelSpec(
-    build_payload=build_fixture_payload,
+    build_payload=lambda state, _user_id: build_fixture_payload(state),
     close_reasons={
         LeagueStatus.finished: "leagueFinished",
         LeagueStatus.cancelled: "leagueCancelled",
@@ -54,7 +54,7 @@ _NOT_STARTED_REASONS = {
 def reject_unless_started(status: LeagueStatus | None) -> ApiError | None:
     if status == LeagueStatus.started:
         return None
-    reason = _NOT_STARTED_REASONS.get(status, "leagueNotStarted")
+    reason = _NOT_STARTED_REASONS[status]
     return ApiError(409, reason, "La liga no está en curso.")
 
 

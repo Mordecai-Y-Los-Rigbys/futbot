@@ -35,7 +35,7 @@ def build_ranking_payload(state: LeagueRankingState) -> dict:
 
 
 RANKING_CHANNEL = LeagueChannelSpec(
-    build_payload=build_ranking_payload,
+    build_payload=lambda state, _user_id: build_ranking_payload(state),
     close_reasons={
         LeagueStatus.finished: "leagueFinished",
         LeagueStatus.cancelled: "leagueCancelled",
@@ -63,5 +63,5 @@ class LeagueRankingManager(LeagueChannelManager):
         super().__init__(load_state, RANKING_CHANNEL)
 
     def ranking_changed(self, league_id: int) -> None:
-        """Terminó un partido de la liga o la liga se canceló. Llamar después del commit."""
+        """Terminó un partido de la liga. Llamar después del commit."""
         self.notify(league_id)

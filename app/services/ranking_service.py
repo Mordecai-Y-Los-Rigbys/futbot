@@ -9,29 +9,31 @@ POINTS_WIN_PENALTIES = 2
 POINTS_DRAW = 1
 
 
-def _score(c: ClubRankingData) -> int:
+def _score(club: ClubRankingData) -> int:
     return (
-        POINTS_WIN * c.won_regular + POINTS_WIN_PENALTIES * c.won_penalties + POINTS_DRAW * c.drawn
+        POINTS_WIN * club.won_regular
+        + POINTS_WIN_PENALTIES * club.won_penalties
+        + POINTS_DRAW * club.drawn
     )
 
 
-def _criteria(c: ClubRankingData) -> tuple[int, int, int, int, int, int]:
+def _criteria(club: ClubRankingData) -> tuple[int, int, int, int, int, int]:
     """Los seis criterios, en orden de prioridad. Dos clubes con la misma tupla
     están empatados (comparten puesto)."""
     return (
-        -_score(c),
-        -(c.goals_for - c.goals_against),
-        -c.goals_for,
-        -c.won_regular,
-        -c.won_penalties,
-        c.lost,  # ascendente: el que perdió menos va más arriba
+        -_score(club),
+        -(club.goals_for - club.goals_against),
+        -club.goals_for,
+        -club.won_regular,
+        -club.won_penalties,
+        club.lost,  # ascendente: el que perdió menos va más arriba
     )
-    
+
 
 def _rank(clubs: list[ClubRankingData]) -> list[tuple[int, ClubRankingData]]:
     """Ordena por los seis criterios y devuelve (position, club). Los empatados
     en todo comparten puesto (1, 2, 2, 4) y se ordenan por id de club."""
-    ordered = sorted(clubs, key=lambda c: (*_criteria(c), c.club_id))
+    ordered = sorted(clubs, key=lambda club: (*_criteria(club), club.club_id))
     ranked: list[tuple[int, ClubRankingData]] = []
     position = 0
     previous: tuple | None = None
@@ -61,7 +63,7 @@ def to_league_ranking(clubs: list[ClubRankingData]) -> list[LeagueRankingEntry]:
         )
         for position, club in _rank(clubs)
     ]
-    
+
 
 class RankingService:
     """Ranking global y ranking de liga."""
@@ -92,7 +94,7 @@ class RankingService:
 
         if name:  # "" se trata como ausente
             needle = name.lower()
-            entries = [e for e in entries if needle in e.name.lower()]
+            entries = [entry for entry in entries if needle in entry.name.lower()]
 
         offset = (page - 1) * PAGE_SIZE
         return GlobalRankingPage(

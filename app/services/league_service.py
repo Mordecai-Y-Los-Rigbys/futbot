@@ -46,6 +46,12 @@ _JOIN_CONFLICT_MESSAGES: dict[str, str] = {
     "alreadyParticipating": "Ya participás en esta liga.",
 }
 
+_FIXTURE_CONFLICTS: dict[LeagueStatus, tuple[str, str]] = {
+    LeagueStatus.preparation: ("leagueNotStarted", "La liga todavía no fue iniciada."),
+    LeagueStatus.cancelled: ("leagueCancelled", "La liga fue cancelada y no tiene fixture."),
+}
+
+
 _START_CONFLICT_MESSAGES: dict[str, str] = {
     "notInPreparation": "La liga ya no está en preparación.",
     "notEnoughParticipants": "La liga todavía no alcanzó el mínimo de participantes.",
@@ -126,6 +132,28 @@ def _to_participant(data: LeagueParticipantData) -> LeagueParticipant:
     )
 
 
+def _to_match_club(data: LeagueFixtureClubData) -> MatchClub:
+    return MatchClub(id=data.id, username=data.username, name=data.club_name, avatar=data.avatar)
+
+
+def _to_fixture_match(league_id: int, match: LeagueFixtureMatchData) -> MatchResponse:
+    result = None
+    if match.status == MatchStatus.finished:
+        # Todavía no se persisten penales
+        result = {"score1": match.score_1, "score2": match.score_2, "penalties": None}
+    return MatchResponse(
+        id=match.id,
+        league_id=league_id,
+        name=None,
+        status=match.status.value,
+        club1=_to_match_club(match.club_1),
+        club2=_to_match_club(match.club_2),
+        scheduled_at=match.scheduled_at,
+        created_at=match.created_at,
+        result=result,
+    )
+
+
 class LeagueService:
     """Casos de uso de las ligas: listar, crear y obtener una."""
 
@@ -142,7 +170,6 @@ class LeagueService:
         self.players = players
         self.behaviors = behaviors
         self.notifier = notifier
-        self.rng = rng or random.Random()
         self.rng = rng or random.Random()
         self.fixture_notifier = fixture_notifier
 
@@ -176,13 +203,13 @@ class LeagueService:
             body: JSON del request, todavía sin validar.
 
         Raises:
-            ApiError 400: el body no cumple el contrato (ver parse_create_league).
+            ValidationApiError 400: invalidFields (ver parse_create_league).
             ApiError 409: playerOrBehaviorNotOwned.
 
         Returns:
             La liga creada.
         """
-        data = parse_create_league(body)  # todos los 400, en orden
+        data = parse_create_league(body)  # 400
 
         # 409: solo si no falló ningún 400
         ensure_owned_team(self.players, self.behaviors, creator_id, data.members)
@@ -196,6 +223,7 @@ class LeagueService:
                 match_duration=data.match_duration,
                 private=data.private,
                 password=data.password,  # None si es pública
+                allow_draws=data.allow_draws,
                 members=[
                     CreateLeagueMemberData(
                         player_id=m.player_id,
@@ -324,6 +352,25 @@ class LeagueService:
         # Solo ante una inscripción exitosa; un intento fallido no emite nada
         if self.notifier is not None:
             self.notifier.participants_changed(league_id)
+
+    def get_fixture(self, league_id: int) -> list[MatchResponse]:
+        """Partidos de la liga en cualquier estado, ordenados por fecha.
+
+        El 404 y el acceso a ligas privadas se resuelven antes de llamarlo.
+
+        Raises:
+            ApiError 404: la liga no existe.
+            ApiError 409: leagueNotStarted o leagueCancelled.
+        """
+        data = self.repo.get_fixture(league_id)
+        if data is None:
+            raise ApiError(404, None, LEAGUE_NOT_FOUND_MESSAGE)
+
+        conflict = _FIXTURE_CONFLICTS.get(data.status)
+        if conflict is not None:
+            raise ApiError(409, *conflict)
+
+        return [_to_fixture_match(league_id, m) for m in data.matches]
 
     def start_league(self, league_id: int, user_id: int) -> None:
         """Inicia la liga y genera su fixture (POST /leagues/{id}/start)

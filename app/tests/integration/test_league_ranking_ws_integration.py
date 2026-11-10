@@ -23,7 +23,14 @@ from app.repositories.match_sqlalchemy import SqlAlchemyMatchRepository
 from app.services.league_fixture_channel import LeagueFixtureManager
 from app.services.league_participants_manager import LeagueParticipantsManager
 from app.services.league_ranking_channel import LeagueRankingManager
-from app.tests.league_ws_helpers import ORIGIN, closing, connect, rejection, stays_silent, wait_until
+from app.tests.league_ws_helpers import (
+    ORIGIN,
+    closing,
+    connect,
+    rejection,
+    stays_silent,
+    wait_until,
+)
 
 pytestmark = pytest.mark.integration
 

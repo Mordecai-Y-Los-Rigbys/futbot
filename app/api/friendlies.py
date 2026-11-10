@@ -7,18 +7,15 @@ from app.api.deps import get_current_user_id, get_friendly_service, get_json_bod
 from app.api.pagination import parse_page
 from app.api.ws_deps import get_friendly_expiry, get_friendly_start
 from app.schemas.errors import (
-    CreateFriendlyMatchBadRequest,
     CreateFriendlyMatchConflict,
     Error,
-    JoinFriendlyMatchBadRequest,
     JoinFriendlyMatchConflict,
-    ListPageBadRequest,
+    ValidationBadRequest
 )
 from app.schemas.friendly import MatchPage, MatchResponse
 from app.services.friendly_expiry import FriendlyExpiryService
 from app.services.friendly_service import FriendlyService
 from app.services.friendly_start import FriendlyStartService
-
 
 router = APIRouter(prefix="/friendlies", tags=["friendlies"])
 
@@ -29,7 +26,7 @@ router = APIRouter(prefix="/friendlies", tags=["friendlies"])
     operation_id="listFriendlyMatches",
     summary="Listar partidos amistosos que esperan rival",
     responses={
-        400: {"model": ListPageBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
     },
 )
@@ -49,7 +46,7 @@ def list_friendlies(
     operation_id="createFriendlyMatch",
     summary="Crear un partido amistoso",
     responses={
-        400: {"model": CreateFriendlyMatchBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         409: {"model": CreateFriendlyMatchConflict},
     },
@@ -73,7 +70,7 @@ async def create_friendly(
     operation_id="joinFriendlyMatch",
     summary="Unirse a un partido amistoso que espera rival",
     responses={
-        400: {"model": JoinFriendlyMatchBadRequest},
+        400: {"model": ValidationBadRequest},
         401: {"model": Error},
         404: {"model": Error},
         409: {"model": JoinFriendlyMatchConflict},

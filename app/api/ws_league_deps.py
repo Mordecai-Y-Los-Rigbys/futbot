@@ -19,6 +19,10 @@ from app.services.league_fixture_channel import (
 from app.services.league_fixture_notifier import LeagueFixtureNotifier
 from app.services.league_participants_handshake import LeagueParticipantsHandshakeService
 from app.services.league_participants_manager import LeagueParticipantsManager
+from app.services.league_next_match_channel import (
+    LeagueNextMatchHandshakeService,
+    LeagueNextMatchManager,
+)
 from app.services.league_participants_notifier import LeagueParticipantsNotifier
 from app.services.league_ranking_channel import (
     LeagueRankingHandshakeService,
@@ -91,10 +95,33 @@ def _fixture_handshake_scope() -> Iterator[LeagueFixtureHandshakeService]:
         )
 
 
-def get_fixture_handshake_scope() -> (
-    Callable[[], ContextManager[LeagueFixtureHandshakeService]]
-):
+def get_fixture_handshake_scope() -> Callable[[], ContextManager[LeagueFixtureHandshakeService]]:
     return _fixture_handshake_scope
+
+
+# Mismo estado que el fixture: el partido siguiente se elige al armar el mensaje.
+_next_match_manager = LeagueNextMatchManager(_load_fixture_state)
+
+
+def get_league_next_match_manager() -> LeagueNextMatchManager:
+    return _next_match_manager
+
+
+@contextmanager
+def _next_match_handshake_scope() -> Iterator[LeagueNextMatchHandshakeService]:
+    with SessionLocal() as db:
+        yield LeagueNextMatchHandshakeService(
+            allowed_origins(),
+            SessionService(SqlAlchemySessionRepository(db)),
+            SqlAlchemyLeagueAccessRepository(db),
+            SqlAlchemyLeagueParticipantsRepository(db),  # solo se usa get_status
+        )
+
+
+def get_next_match_handshake_scope() -> (
+    Callable[[], ContextManager[LeagueNextMatchHandshakeService]]
+):
+    return _next_match_handshake_scope
 
 
 def _load_ranking_state(league_id: int) -> LeagueRankingState | None:
@@ -124,13 +151,17 @@ def _ranking_handshake_scope() -> Iterator[LeagueRankingHandshakeService]:
         )
 
 
-def get_ranking_handshake_scope() -> (
-    Callable[[], ContextManager[LeagueRankingHandshakeService]]
-):
+def get_ranking_handshake_scope() -> Callable[[], ContextManager[LeagueRankingHandshakeService]]:
     return _ranking_handshake_scope
 
 
 def get_league_channel_managers() -> list[LeagueChannelManager]:
     """Managers de los canales que se autentican con la cookie (los de liga y el de
     notificaciones). El log-out cierra en cada uno las conexiones de la sesión."""
-    return [_participants_manager, _fixture_manager, _ranking_manager, get_notifications_manager()]
+    return [
+        _participants_manager,
+        _fixture_manager,
+        _ranking_manager,
+        _next_match_manager,
+        get_notifications_manager(),
+    ]

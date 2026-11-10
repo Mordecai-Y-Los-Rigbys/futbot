@@ -12,7 +12,16 @@ class FakeTeams(AbstractTeamRepository):
         self.calls.append((match_id, league_id, user_id))
         return self.starters.get(user_id, [])
 
+    def get_lineup(self, match_id, league_id, user_id):
+        raise NotImplementedError
+
     def set_behavior(self, match_id, league_id, player_id, behavior_id):
+        raise NotImplementedError
+
+    def get_member_id(self, match_id, league_id, user_id, player_id, *, substitute):
+        raise NotImplementedError
+
+    def get_match_team(self, match_id, league_id, user_id):
         raise NotImplementedError
 
 
@@ -43,6 +52,7 @@ def ranking_club(id, name=None, wr=0, wp=0, d=0, l=0, gf=0, ga=0, avatar=1):
         goals_for=gf,
         goals_against=ga,
     )
+
 
 class FakePlayers:
     """Por defecto, todo id pertenece al usuario. `owned` lo restringe."""

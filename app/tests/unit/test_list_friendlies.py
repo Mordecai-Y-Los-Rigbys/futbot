@@ -11,7 +11,7 @@ from app.repositories.friendly_abstract import (
     FriendlyMatchData,
     FriendlyPageData,
 )
-from app.schemas.errors import Error, ListPageBadRequest
+from app.schemas.errors import Error, ValidationBadRequest
 from app.schemas.friendly import MatchPage
 from app.services.friendly_service import PAGE_SIZE, FriendlyService
 from app.tests.unit.repo_fakes import FakeBehaviors, FakePlayers
@@ -72,7 +72,12 @@ def test_service_items_follow_the_match_schema(repo):
     repo.list_waiting_page.return_value = FriendlyPageData(items=[match_data()], total=1)
     out = svc(repo).list_waiting_friendlies(USER_ID, None, 1)
     dumped = out.model_dump(by_alias=True)["items"][0]
-    assert dumped["club1"] == {"id": 1, "username": "usuario1", "name": "Club Atletico", "avatar": 3}
+    assert dumped["club1"] == {
+        "id": 1,
+        "username": "usuario1",
+        "name": "Club Atletico",
+        "avatar": 3,
+    }
     for k in ("leagueId", "club2", "scheduledAt", "result"):
         assert dumped[k] is None
     assert "2026-10-03T18:00:00Z" in out.model_dump_json(by_alias=True)
@@ -235,20 +240,21 @@ def test_401_has_priority_over_invalid_page(friendlies_api, repo, query):
 
 
 @pytest.mark.parametrize(
-    "query, code",
+    "query, reason",
     [
-        ("page=abc", "pageNotAnInteger"),
-        ("page=1.5", "pageNotAnInteger"),
-        ("page=", "pageNotAnInteger"),
-        ("page=0", "pageBelowMinimum"),
-        ("page=-1", "pageBelowMinimum"),
-        ("page=2147483648", "pageTooLarge"),
+        ("page=abc", "invalidType"),
+        ("page=1.5", "invalidType"),
+        ("page=", "invalidType"),
+        ("page=0", "outOfRange"),
+        ("page=-1", "outOfRange"),
+        ("page=2147483648", "outOfRange"),
     ],
 )
-def test_invalid_page_returns_400_never_422(auth_friendlies_api, repo, query, code):
+def test_invalid_page_returns_400_never_422(auth_friendlies_api, repo, query, reason):
     resp = auth_friendlies_api.get(f"/friendlies?{query}")
     assert resp.status_code == 400
-    assert resp.json()["code"] == code
+    assert resp.json()["code"] == "invalidFields"
+    assert resp.json()["errors"] == [{"field": "page", "reason": reason}]
     assert resp.json()["message"]
-    ListPageBadRequest.model_validate(resp.json())
+    ValidationBadRequest.model_validate(resp.json())
     repo.list_waiting_page.assert_not_called()

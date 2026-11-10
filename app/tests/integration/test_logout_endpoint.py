@@ -4,14 +4,11 @@ import pytest
 
 from app.models.session import UserSession
 
-
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.parametrize("body_kind", ["sin-body", "otra-sesion", "json-malformado"])
-def test_logout_only_invalidates_cookie_session(
-    body_kind, create_user, login_as, db_session
-):
+def test_logout_only_invalidates_cookie_session(body_kind, create_user, login_as, db_session):
     user = create_user("reader")
     api = login_as(user)
     other = login_as(user)
@@ -30,6 +27,9 @@ def test_logout_only_invalidates_cookie_session(
 
     assert response.status_code == 204
     assert response.content == b""
+    set_cookie = response.headers["set-cookie"]
+    assert set_cookie.startswith('session_id="";')
+    assert "Max-Age=0" in set_cookie
     assert db_session.get(UserSession, sid) is None
 
     replay = api.get("/users/me", headers={"Cookie": f"session_id={sid}"})
